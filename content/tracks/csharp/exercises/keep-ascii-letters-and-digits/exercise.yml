@@ -1,0 +1,9 @@
+id: keep-ascii-letters-and-digits
+title: KeepAsciiLettersAndDigits
+kind: focused
+workspace:
+  starter: tracks/csharp/exercises/_shared/WordFrequencyAnalyzer.cs
+  visibleTest: |
+    Assert.Equal("abc 123 ", WordFrequencyAnalyzer.KeepAsciiLettersAndDigits("abc!123?"));
+  hiddenTest: |
+    Assert.Equal("a b 9", WordFrequencyAnalyzer.KeepAsciiLettersAndDigits("a-b_9"));

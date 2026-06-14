@@ -1,0 +1,22 @@
+books:
+  - id: csharp-12-in-a-nutshell
+    title: C# 12 in a Nutshell
+    author: Joseph Albahari
+    edition: "12"
+    publisher: O'Reilly
+    ownership: Owned
+  - id: programming-csharp-12
+    title: Programming C# 12
+    author: Ian Griffiths
+    publisher: O'Reilly
+    ownership: Owned
+  - id: csharp-players-guide-5
+    title: The C# Player's Guide
+    author: RB Whitaker
+    edition: "5"
+    ownership: Owned
+  - id: code-that-fits-in-your-head
+    title: Code That Fits in Your Head
+    author: Mark Seemann
+    publisher: Pearson
+    ownership: Owned

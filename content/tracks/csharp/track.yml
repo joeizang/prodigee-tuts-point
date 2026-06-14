@@ -1,0 +1,215 @@
+id: csharp
+title: C# Language
+slug: csharp
+description: Project-backed mastery of modern C# through CLI, testing, data structures, APIs, persistence, concurrency, and production design.
+language: CSharp
+contentVersion: 2026.06.13
+concepts:
+  - id: csharp-strings
+    title: Text as Data
+    description: Understanding strings, chars, immutability, indexing, and practical text boundaries in C#.
+  - id: csharp-tokenization
+    title: Normalization and Tokenization
+    description: Turning raw text into stable tokens with explicit rules and documented limitations.
+  - id: csharp-dictionaries
+    title: Dictionaries and Frequency Maps
+    description: Using hash maps to model counts, lookups, and updates clearly.
+  - id: csharp-ordering
+    title: Deterministic Ordering
+    description: Producing stable sorted output that is easy to test and reason about.
+  - id: csharp-xunit
+    title: Testing Pure Functions
+    description: Designing small tests around deterministic behavior and edge cases.
+  - id: csharp-api-design
+    title: Small Core API Design
+    description: Naming and shaping a small reusable core before adding CLI or file I/O.
+modules:
+  - id: csharp-wordfreq-core
+    title: Word Frequency Core
+    description: Build the pure text-analysis core for the wordfreq-csharp project.
+    order: 1
+lessons:
+  - id: text-as-data-csharp
+    moduleId: csharp-wordfreq-core
+    title: Text as Data in C#
+    summary: Learn the practical model of string, char, immutability, indexing, and why Unicode is a deliberate later extension.
+    markdown: tracks/csharp/lessons/text-as-data-csharp.md
+    order: 1
+    concepts:
+      - csharp-strings
+    sourceReferences:
+      - book: csharp-12-in-a-nutshell
+        chapter: Strings and Characters
+        topic: string, char, immutability, indexing
+        usage: QualityAnchor
+  - id: normalization-and-tokenization
+    moduleId: csharp-wordfreq-core
+    title: Normalization and Tokenization
+    summary: Define the ASCII-first rule that turns raw input into stable words.
+    markdown: tracks/csharp/lessons/normalization-and-tokenization.md
+    order: 2
+    concepts:
+      - csharp-strings
+      - csharp-tokenization
+    sourceReferences:
+      - book: programming-csharp-12
+        chapter: Text Processing
+        topic: normalization, character classification, explicit parsing rules
+        usage: QualityAnchor
+  - id: dictionaries-as-frequency-maps
+    moduleId: csharp-wordfreq-core
+    title: Dictionaries as Frequency Maps
+    summary: Use Dictionary<string, int> as the core model for word frequency counting.
+    markdown: tracks/csharp/lessons/dictionaries-as-frequency-maps.md
+    order: 3
+    concepts:
+      - csharp-dictionaries
+    sourceReferences:
+      - book: csharp-12-in-a-nutshell
+        chapter: Collections
+        topic: Dictionary<TKey,TValue>, lookup and update patterns
+        usage: QualityAnchor
+  - id: deterministic-ordering
+    moduleId: csharp-wordfreq-core
+    title: Deterministic Ordering
+    summary: Sort frequency results by count descending and word ascending so output is stable and testable.
+    markdown: tracks/csharp/lessons/deterministic-ordering.md
+    order: 4
+    concepts:
+      - csharp-ordering
+    sourceReferences:
+      - book: programming-csharp-12
+        chapter: LINQ and Ordering
+        topic: ordering, tie-breakers, deterministic output
+        usage: QualityAnchor
+  - id: testing-pure-functions-xunit
+    moduleId: csharp-wordfreq-core
+    title: Testing Pure Functions with xUnit
+    summary: Build confidence with focused tests before the CLI and file-system concerns arrive.
+    markdown: tracks/csharp/lessons/testing-pure-functions-xunit.md
+    order: 5
+    concepts:
+      - csharp-xunit
+    sourceReferences:
+      - book: code-that-fits-in-your-head
+        chapter: Checklists and Testing
+        topic: small tests, readable feedback, maintainable code
+        usage: QualityAnchor
+  - id: designing-small-core-api
+    moduleId: csharp-wordfreq-core
+    title: Designing a Small Core API
+    summary: Shape the WordFrequencyAnalyzer API so later CLI, file, and streaming milestones can build on it.
+    markdown: tracks/csharp/lessons/designing-small-core-api.md
+    order: 6
+    concepts:
+      - csharp-api-design
+    sourceReferences:
+      - book: code-that-fits-in-your-head
+        chapter: API Design
+        topic: small surface area, names, maintainability
+        usage: QualityAnchor
+exercises:
+  - id: normalize-to-lowercase
+    title: NormalizeToLowercase
+    summary: Convert ASCII words to lowercase with null and whitespace behavior made explicit.
+    directory: tracks/csharp/exercises/normalize-to-lowercase
+    order: 1
+    concepts:
+      - csharp-strings
+  - id: keep-ascii-letters-and-digits
+    title: KeepAsciiLettersAndDigits
+    summary: Preserve ASCII letters and digits while treating other characters as separators.
+    directory: tracks/csharp/exercises/keep-ascii-letters-and-digits
+    order: 2
+    concepts:
+      - csharp-tokenization
+  - id: split-words-on-separators
+    title: SplitWordsOnSeparators
+    summary: Split normalized text into candidate words without producing empty tokens.
+    directory: tracks/csharp/exercises/split-words-on-separators
+    order: 3
+    concepts:
+      - csharp-tokenization
+  - id: tokenize-simple-sentence
+    title: TokenizeSimpleSentence
+    summary: Tokenize a simple sentence using the milestone ASCII-first rule.
+    directory: tracks/csharp/exercises/tokenize-simple-sentence
+    order: 4
+    concepts:
+      - csharp-tokenization
+  - id: tokenize-with-punctuation
+    title: TokenizeWithPunctuation
+    summary: Tokenize text where punctuation and repeated separators appear between words.
+    directory: tracks/csharp/exercises/tokenize-with-punctuation
+    order: 5
+    concepts:
+      - csharp-tokenization
+  - id: count-words-with-dictionary
+    title: CountWordsWithDictionary
+    summary: Count token frequencies with Dictionary<string, int>.
+    directory: tracks/csharp/exercises/count-words-with-dictionary
+    order: 6
+    concepts:
+      - csharp-dictionaries
+  - id: update-frequency-map-safely
+    title: UpdateFrequencyMapSafely
+    summary: Update counts without double lookup bugs or hard-coded assumptions.
+    directory: tracks/csharp/exercises/update-frequency-map-safely
+    order: 7
+    concepts:
+      - csharp-dictionaries
+  - id: sort-frequencies-deterministically
+    title: SortFrequenciesDeterministically
+    summary: Sort by count descending and then word ascending.
+    directory: tracks/csharp/exercises/sort-frequencies-deterministically
+    order: 8
+    concepts:
+      - csharp-ordering
+  - id: handle-empty-and-whitespace-input
+    title: HandleEmptyAndWhitespaceInput
+    summary: Return empty results for empty, whitespace, and separator-only input.
+    directory: tracks/csharp/exercises/handle-empty-and-whitespace-input
+    order: 9
+    concepts:
+      - csharp-xunit
+  - id: build-word-frequency-analyzer
+    title: BuildWordFrequencyAnalyzer
+    summary: Combine normalization, tokenization, counting, and sorting into the reusable analyzer core.
+    directory: tracks/csharp/exercises/build-word-frequency-analyzer
+    order: 10
+    concepts:
+      - csharp-api-design
+projects:
+  - id: wordfreq-csharp
+    title: wordfreq-csharp
+    slug: wordfreq-csharp
+    description: Build a C# word frequency tool through a hybrid ramp from pure functions to CLI, file I/O, output formats, and streaming.
+    milestones:
+      - id: pure-word-counting-core
+        title: Pure Word Counting Core
+        summary: Implement the reusable analyzer core before adding CLI or file-system behavior.
+        markdown: tracks/csharp/projects/wordfreq/milestones/pure-word-counting-core.md
+        order: 1
+        lessons:
+          - text-as-data-csharp
+          - normalization-and-tokenization
+          - dictionaries-as-frequency-maps
+          - deterministic-ordering
+          - testing-pure-functions-xunit
+          - designing-small-core-api
+        exercises:
+          - normalize-to-lowercase
+          - keep-ascii-letters-and-digits
+          - split-words-on-separators
+          - tokenize-simple-sentence
+          - tokenize-with-punctuation
+          - count-words-with-dictionary
+          - update-frequency-map-safely
+          - sort-frequencies-deterministically
+          - handle-empty-and-whitespace-input
+          - build-word-frequency-analyzer
+        sourceReferences:
+          - book: csharp-players-guide-5
+            chapter: Methods and Collections
+            topic: small methods, collection practice, exercise-driven learning
+            usage: QualityAnchor

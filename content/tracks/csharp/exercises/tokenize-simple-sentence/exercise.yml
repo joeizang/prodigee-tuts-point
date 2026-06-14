@@ -1,0 +1,9 @@
+id: tokenize-simple-sentence
+title: TokenizeSimpleSentence
+kind: focused
+workspace:
+  starter: tracks/csharp/exercises/_shared/WordFrequencyAnalyzer.cs
+  visibleTest: |
+    Assert.Equal(["hello", "world"], WordFrequencyAnalyzer.Tokenize("Hello world"));
+  hiddenTest: |
+    Assert.Equal(["csharp", "12"], WordFrequencyAnalyzer.Tokenize("CSharp 12"));

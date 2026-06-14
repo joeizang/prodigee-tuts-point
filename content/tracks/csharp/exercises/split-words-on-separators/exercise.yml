@@ -1,0 +1,9 @@
+id: split-words-on-separators
+title: SplitWordsOnSeparators
+kind: focused
+workspace:
+  starter: tracks/csharp/exercises/_shared/WordFrequencyAnalyzer.cs
+  visibleTest: |
+    Assert.Equal(["alpha", "beta"], WordFrequencyAnalyzer.SplitWordsOnSeparators("alpha  beta"));
+  hiddenTest: |
+    Assert.Empty(WordFrequencyAnalyzer.SplitWordsOnSeparators("    "));

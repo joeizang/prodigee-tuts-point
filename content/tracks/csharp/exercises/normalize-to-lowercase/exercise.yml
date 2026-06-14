@@ -1,0 +1,45 @@
+id: normalize-to-lowercase
+title: NormalizeToLowercase
+kind: focused
+workspace:
+  starter: tracks/csharp/exercises/_shared/WordFrequencyAnalyzer.cs
+  visibleTest: |
+    Assert.Equal("hello world", WordFrequencyAnalyzer.NormalizeToLowercase("HELLO World"));
+  hiddenTest: |
+    Assert.Equal(string.Empty, WordFrequencyAnalyzer.NormalizeToLowercase(null));
+hints:
+  - id: conceptual
+    level: conceptual
+    title: Separate input policy from transformation
+    body: Null handling is part of the method contract. Decide what the method should return for null before thinking about lowercase conversion.
+  - id: api-approach
+    level: api-approach
+    title: Use the invariant casing API
+    body: For deterministic programming exercises, prefer ToLowerInvariant over culture-sensitive casing.
+  - id: structural
+    level: structural
+    title: Keep the branch small
+    body: The entire method can be expressed as a null-coalescing expression that returns an empty string for null and lowercases otherwise.
+solution:
+  title: Model solution
+  body: The model solution keeps the method pure, explicit about null, and deterministic across cultures.
+  code: |
+    namespace Exercise;
+
+    public sealed record WordFrequency(string Word, int Count);
+
+    public static class WordFrequencyAnalyzer
+    {
+        public static string NormalizeToLowercase(string? text)
+        {
+            return text?.ToLowerInvariant() ?? string.Empty;
+        }
+
+        public static string KeepAsciiLettersAndDigits(string? text) => throw new NotImplementedException();
+        public static IReadOnlyList<string> SplitWordsOnSeparators(string? text) => throw new NotImplementedException();
+        public static IReadOnlyList<string> Tokenize(string? text) => throw new NotImplementedException();
+        public static Dictionary<string, int> CountWords(IEnumerable<string> words) => throw new NotImplementedException();
+        public static void UpdateFrequencyMap(Dictionary<string, int> map, string word) => throw new NotImplementedException();
+        public static IReadOnlyList<WordFrequency> SortFrequencies(Dictionary<string, int> frequencies) => throw new NotImplementedException();
+        public static IReadOnlyList<WordFrequency> Analyze(string? text) => throw new NotImplementedException();
+    }

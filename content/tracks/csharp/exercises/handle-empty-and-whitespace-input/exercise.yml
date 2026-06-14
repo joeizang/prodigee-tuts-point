@@ -1,0 +1,9 @@
+id: handle-empty-and-whitespace-input
+title: HandleEmptyAndWhitespaceInput
+kind: focused
+workspace:
+  starter: tracks/csharp/exercises/_shared/WordFrequencyAnalyzer.cs
+  visibleTest: |
+    Assert.Empty(WordFrequencyAnalyzer.Analyze("   !!!   "));
+  hiddenTest: |
+    Assert.Empty(WordFrequencyAnalyzer.Analyze(string.Empty));

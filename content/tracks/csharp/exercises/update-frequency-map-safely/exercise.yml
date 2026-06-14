@@ -1,0 +1,14 @@
+id: update-frequency-map-safely
+title: UpdateFrequencyMapSafely
+kind: focused
+workspace:
+  starter: tracks/csharp/exercises/_shared/WordFrequencyAnalyzer.cs
+  visibleTest: |
+    var map = new Dictionary<string, int>();
+    WordFrequencyAnalyzer.UpdateFrequencyMap(map, "go");
+    WordFrequencyAnalyzer.UpdateFrequencyMap(map, "go");
+    Assert.Equal(2, map["go"]);
+  hiddenTest: |
+    var map = new Dictionary<string, int> { ["go"] = 9 };
+    WordFrequencyAnalyzer.UpdateFrequencyMap(map, "go");
+    Assert.Equal(10, map["go"]);

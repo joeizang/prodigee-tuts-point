@@ -1,0 +1,9 @@
+id: build-word-frequency-analyzer
+title: BuildWordFrequencyAnalyzer
+kind: milestone-integration
+workspace:
+  starter: tracks/csharp/exercises/_shared/WordFrequencyAnalyzer.cs
+  visibleTest: |
+    Assert.Equal(new WordFrequency("go", 2), WordFrequencyAnalyzer.Analyze("Go go stop").First());
+  hiddenTest: |
+    Assert.Equal(new WordFrequency("alpha", 2), WordFrequencyAnalyzer.Analyze("Beta alpha beta alpha").First());

@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/ProdigeeTutsPoint.Api/ProdigeeTutsPoint.Api.csproj" />
+    <Project Path="src/ProdigeeTutsPoint.Domain/ProdigeeTutsPoint.Domain.csproj" />
+    <Project Path="src/ProdigeeTutsPoint.Infrastructure/ProdigeeTutsPoint.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/ProdigeeTutsPoint.Api.Tests/ProdigeeTutsPoint.Api.Tests.csproj" />
+    <Project Path="tests/ProdigeeTutsPoint.Domain.Tests/ProdigeeTutsPoint.Domain.Tests.csproj" />
+  </Folder>
+</Solution>

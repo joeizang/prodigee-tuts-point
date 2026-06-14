@@ -1,0 +1,9 @@
+id: count-words-with-dictionary
+title: CountWordsWithDictionary
+kind: focused
+workspace:
+  starter: tracks/csharp/exercises/_shared/WordFrequencyAnalyzer.cs
+  visibleTest: |
+    Assert.Equal(2, WordFrequencyAnalyzer.CountWords(["go", "go", "stop"])["go"]);
+  hiddenTest: |
+    Assert.False(WordFrequencyAnalyzer.CountWords([]).ContainsKey("missing"));

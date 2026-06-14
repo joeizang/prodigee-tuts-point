@@ -1,0 +1,9 @@
+id: tokenize-with-punctuation
+title: TokenizeWithPunctuation
+kind: focused
+workspace:
+  starter: tracks/csharp/exercises/_shared/WordFrequencyAnalyzer.cs
+  visibleTest: |
+    Assert.Equal(["hello", "world", "again"], WordFrequencyAnalyzer.Tokenize("Hello, world... again!"));
+  hiddenTest: |
+    Assert.Empty(WordFrequencyAnalyzer.Tokenize("...!!!"));
