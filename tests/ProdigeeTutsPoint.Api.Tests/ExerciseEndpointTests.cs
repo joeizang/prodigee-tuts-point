@@ -35,6 +35,42 @@ public sealed class ExerciseEndpointTests
     }
 
     [Fact]
+    public async Task WorkspaceEndpointGeneratesStreamingAndLogqueryWorkspaces()
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+
+        var streaming = await client.GetFromJsonAsync<ExerciseWorkspaceTestResponse>(
+            $"/api/exercises/run-streaming-wordfreq/workspace?profileId=streaming-{Guid.NewGuid():n}",
+            TestContext.Current.CancellationToken);
+        var logquery = await client.GetFromJsonAsync<ExerciseWorkspaceTestResponse>(
+            $"/api/exercises/run-logquery-summary/workspace?profileId=logquery-{Guid.NewGuid():n}",
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(streaming);
+        Assert.Contains(streaming.Files, file =>
+            file.Path == "src/Exercise/WordFrequencyAnalyzer.cs"
+            && file.Editable
+            && file.Content is not null
+            && file.Content.Contains("WordFrequencyStreaming", StringComparison.Ordinal));
+        Assert.Contains(streaming.Files, file =>
+            file.Role == "visible-test"
+            && file.Content is not null
+            && file.Content.Contains("WordFrequencyStreaming.Run", StringComparison.Ordinal));
+
+        Assert.NotNull(logquery);
+        Assert.Contains(logquery.Files, file =>
+            file.Path == "src/Exercise/WordFrequencyAnalyzer.cs"
+            && file.Editable
+            && file.Content is not null
+            && file.Content.Contains("LogQuery", StringComparison.Ordinal));
+        Assert.Contains(logquery.Files, file =>
+            file.Role == "visible-test"
+            && file.Content is not null
+            && file.Content.Contains("LogQuery.Run", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task RunEndpointExecutesVisibleAndHiddenTests()
     {
         await using var factory = new WebApplicationFactory<Program>();
@@ -90,6 +126,237 @@ public sealed class ExerciseEndpointTests
         Assert.True(assistance.SolutionAvailable);
         Assert.NotNull(assistance.Solution);
         Assert.Contains("ToLowerInvariant", assistance.Solution.Code);
+    }
+
+    [Fact]
+    public async Task RunEndpointExecutesLogqueryCapstoneVisibleAndHiddenTests()
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+        var profileId = $"logquery-capstone-test-{Guid.NewGuid():n}";
+
+        var response = await client.PostAsJsonAsync(
+            "/api/exercises/run-logquery-summary/run",
+            new ExerciseRunTestRequest(
+                profileId,
+                [
+                    new(
+                        "src/Exercise/WordFrequencyAnalyzer.cs",
+                        """
+                        namespace Exercise;
+
+                        public sealed record LogEvent(DateTimeOffset Timestamp, string Level, string Message);
+
+                        public sealed record LogQueryOptions(string? Level, string? Contains);
+
+                        public sealed record LogQueryResult(int ExitCode, string Output, string Error);
+
+                        public static class LogQuery
+                        {
+                            public static bool TryParseLine(string line, out LogEvent? logEvent)
+                            {
+                                logEvent = null;
+                                var parts = line.Split(' ', 3, StringSplitOptions.RemoveEmptyEntries);
+                                if (parts.Length < 3 || !DateTimeOffset.TryParse(parts[0], out var timestamp))
+                                {
+                                    return false;
+                                }
+
+                                logEvent = new LogEvent(timestamp, parts[1].ToUpperInvariant(), parts[2]);
+                                return true;
+                            }
+
+                            public static IReadOnlyList<LogEvent> ParseMany(IEnumerable<string> lines, out int malformedCount)
+                            {
+                                malformedCount = 0;
+                                var events = new List<LogEvent>();
+
+                                foreach (var line in lines)
+                                {
+                                    if (TryParseLine(line, out var logEvent) && logEvent is not null)
+                                    {
+                                        events.Add(logEvent);
+                                    }
+                                    else
+                                    {
+                                        malformedCount++;
+                                    }
+                                }
+
+                                return events;
+                            }
+
+                            public static IEnumerable<LogEvent> Filter(IEnumerable<LogEvent> events, LogQueryOptions options)
+                            {
+                                var query = events;
+                                if (!string.IsNullOrWhiteSpace(options.Level))
+                                {
+                                    var level = options.Level.ToUpperInvariant();
+                                    query = query.Where(item => item.Level == level);
+                                }
+
+                                if (!string.IsNullOrWhiteSpace(options.Contains))
+                                {
+                                    query = query.Where(item => item.Message.Contains(options.Contains, StringComparison.OrdinalIgnoreCase));
+                                }
+
+                                return query;
+                            }
+
+                            public static IReadOnlyList<KeyValuePair<string, int>> CountByLevel(IEnumerable<LogEvent> events)
+                            {
+                                return events
+                                    .GroupBy(item => item.Level)
+                                    .Select(group => new KeyValuePair<string, int>(group.Key, group.Count()))
+                                    .OrderBy(item => item.Key, StringComparer.Ordinal)
+                                    .ToList();
+                            }
+
+                            public static LogQueryResult Run(IEnumerable<string> lines, LogQueryOptions options)
+                            {
+                                var events = ParseMany(lines, out var malformedCount);
+                                if (malformedCount > 0)
+                                {
+                                    return new LogQueryResult(2, string.Empty, $"Input contains {malformedCount} malformed log line(s).");
+                                }
+
+                                var filtered = Filter(events, options);
+                                var summary = CountByLevel(filtered);
+                                var output = string.Join("\n", summary.Select(item => $"{item.Key}\t{item.Value}"));
+                                return new LogQueryResult(0, output, string.Empty);
+                            }
+                        }
+                        """)
+                ]),
+            TestContext.Current.CancellationToken);
+
+        var result = await response.Content.ReadFromJsonAsync<ExerciseRunTestResponse>(
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(result);
+        Assert.Equal("Passed", result.Status);
+        Assert.True(result.VisiblePassed);
+        Assert.True(result.HiddenPassed);
+    }
+
+    [Fact]
+    public async Task RunEndpointExecutesWordfreqCliCapstoneVisibleAndHiddenTests()
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+        var profileId = $"wordfreq-cli-capstone-test-{Guid.NewGuid():n}";
+
+        var response = await client.PostAsJsonAsync(
+            "/api/exercises/run-wordfreq-cli-request/run",
+            new ExerciseRunTestRequest(
+                profileId,
+                [
+                    new(
+                        "src/Exercise/WordFrequencyAnalyzer.cs",
+                        """
+                        namespace Exercise;
+
+                        public enum CliInputMode
+                        {
+                            Stdin,
+                            Text,
+                            File,
+                        }
+
+                        public sealed record CliOptions(CliInputMode Mode, string? Value);
+
+                        public sealed record CliResult(int ExitCode, string Output, string Error);
+
+                        public sealed record WordFrequency(string Word, int Count);
+
+                        public static class WordFrequencyCli
+                        {
+                            public static CliOptions ParseOptions(string[] args)
+                            {
+                                return args switch
+                                {
+                                    [] => new CliOptions(CliInputMode.Stdin, null),
+                                    ["--text", var value] when !string.IsNullOrWhiteSpace(value) => new CliOptions(CliInputMode.Text, value),
+                                    ["--file", var path] when !string.IsNullOrWhiteSpace(path) => new CliOptions(CliInputMode.File, path),
+                                    _ => throw new ArgumentException("Usage: wordfreq [--text VALUE|--file PATH]"),
+                                };
+                            }
+
+                            public static string ReadInputFile(string path)
+                            {
+                                return File.ReadAllText(path);
+                            }
+
+                            public static CliResult TryReadInputFile(string path)
+                            {
+                                if (!File.Exists(path))
+                                {
+                                    return new CliResult(2, string.Empty, $"Input file not found: {path}");
+                                }
+
+                                return new CliResult(0, File.ReadAllText(path), string.Empty);
+                            }
+
+                            public static string FormatTable(IEnumerable<WordFrequency> frequencies)
+                            {
+                                return string.Join(
+                                    Environment.NewLine,
+                                    frequencies.Select(item => $"{item.Word}\t{item.Count}"));
+                            }
+
+                            public static CliResult Run(string[] args, Func<string> readStdin, Func<string, string> readFile)
+                            {
+                                try
+                                {
+                                    var options = ParseOptions(args);
+                                    var text = options.Mode switch
+                                    {
+                                        CliInputMode.Stdin => readStdin(),
+                                        CliInputMode.Text => options.Value ?? string.Empty,
+                                        CliInputMode.File => readFile(options.Value ?? string.Empty),
+                                        _ => string.Empty,
+                                    };
+
+                                    var output = FormatTable(Analyze(text));
+                                    return new CliResult(0, output, string.Empty);
+                                }
+                                catch (ArgumentException exception)
+                                {
+                                    return new CliResult(2, string.Empty, exception.Message);
+                                }
+                                catch (FileNotFoundException exception)
+                                {
+                                    return new CliResult(2, string.Empty, exception.Message);
+                                }
+                            }
+
+                            public static IReadOnlyList<WordFrequency> Analyze(string? text)
+                            {
+                                var words = (text ?? string.Empty)
+                                    .ToLowerInvariant()
+                                    .Split(' ', StringSplitOptions.RemoveEmptyEntries)
+                                    .Select(word => new string(word.Where(char.IsLetterOrDigit).ToArray()))
+                                    .Where(word => !string.IsNullOrWhiteSpace(word));
+
+                                return words
+                                    .GroupBy(word => word)
+                                    .Select(group => new WordFrequency(group.Key, group.Count()))
+                                    .OrderByDescending(item => item.Count)
+                                    .ThenBy(item => item.Word, StringComparer.Ordinal)
+                                    .ToList();
+                            }
+                        }
+                        """)
+                ]),
+            TestContext.Current.CancellationToken);
+
+        var result = await response.Content.ReadFromJsonAsync<ExerciseRunTestResponse>(
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(result);
+        Assert.Equal("Passed", result.Status);
+        Assert.True(result.VisiblePassed);
+        Assert.True(result.HiddenPassed);
     }
 
     [Fact]

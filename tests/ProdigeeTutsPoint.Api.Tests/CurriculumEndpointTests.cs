@@ -109,8 +109,87 @@ public sealed class CurriculumEndpointTests
             TestContext.Current.CancellationToken);
 
         Assert.NotNull(project);
-        Assert.Equal(2, project.Milestones.Count);
+        Assert.Equal(3, project.Milestones.Count);
         Assert.Contains(project.Milestones, milestone => milestone.Id == "cli-and-file-io");
+        Assert.Contains(project.Milestones, milestone => milestone.Id == "streaming-and-scale");
+    }
+
+    [Fact]
+    public async Task StreamingMilestoneEndpointReturnsLessonsExercisesAndSources()
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+
+        var milestone = await client.GetFromJsonAsync<MilestoneDetailTestResponse>(
+            "/api/curriculum/projects/wordfreq-csharp/milestones/streaming-and-scale",
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(milestone);
+        Assert.Equal("Streaming and Scale", milestone.Title);
+        Assert.Equal(3, milestone.Lessons.Count);
+        Assert.Equal(4, milestone.Exercises.Count);
+        Assert.Contains(milestone.Lessons, lesson => lesson.Id == "streaming-large-text-input");
+        Assert.Contains(milestone.Exercises, exercise => exercise.Id == "run-streaming-wordfreq");
+        Assert.NotEmpty(milestone.Sources);
+        Assert.Contains("top-N", milestone.Markdown, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task LogqueryProjectEndpointReturnsFirstProjectMilestone()
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+
+        var project = await client.GetFromJsonAsync<ProjectDetailTestResponse>(
+            "/api/curriculum/projects/logquery-csharp",
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(project);
+        Assert.Equal("logquery-csharp", project.Id);
+        var milestone = Assert.Single(project.Milestones);
+        Assert.Equal("parse-filter-summarize", milestone.Id);
+    }
+
+    [Fact]
+    public async Task LogqueryMilestoneEndpointReturnsLessonsExercisesAndSources()
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+
+        var milestone = await client.GetFromJsonAsync<MilestoneDetailTestResponse>(
+            "/api/curriculum/projects/logquery-csharp/milestones/parse-filter-summarize",
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(milestone);
+        Assert.Equal("Parse, Filter, Summarize", milestone.Title);
+        Assert.Equal(2, milestone.Lessons.Count);
+        Assert.Equal(5, milestone.Exercises.Count);
+        Assert.Contains(milestone.Lessons, lesson => lesson.Id == "log-lines-as-records");
+        Assert.Contains(milestone.Exercises, exercise => exercise.Id == "parse-many-log-lines");
+        Assert.Contains(milestone.Exercises, exercise => exercise.Id == "run-logquery-summary");
+        Assert.NotEmpty(milestone.Sources);
+        Assert.Contains("malformed input", milestone.Markdown, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task TheoryClusterEndpointReturnsStreamingAndLogqueryStudyLinks()
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+
+        var streaming = await client.GetFromJsonAsync<TheoryClusterTestResponse>(
+            "/api/curriculum/projects/wordfreq-csharp/milestones/streaming-and-scale/theory-cluster",
+            TestContext.Current.CancellationToken);
+        var logquery = await client.GetFromJsonAsync<TheoryClusterTestResponse>(
+            "/api/curriculum/projects/logquery-csharp/milestones/parse-filter-summarize/theory-cluster",
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(streaming);
+        Assert.Equal(3, streaming.Items.Count);
+        Assert.All(streaming.Items, item => Assert.NotEmpty(item.Sources));
+        Assert.NotNull(logquery);
+        Assert.Equal(2, logquery.Items.Count);
+        Assert.All(logquery.Items, item => Assert.NotEmpty(item.Sources));
     }
 
     [Fact]
@@ -238,8 +317,10 @@ public sealed class CurriculumEndpointTests
         Assert.NotNull(items);
         Assert.Contains(items, item => item.Kind == "Track" && item.Path == "/tracks/csharp");
         Assert.Contains(items, item => item.Kind == "Project" && item.Path == "/projects/wordfreq-csharp");
+        Assert.Contains(items, item => item.Kind == "Project" && item.Path == "/projects/logquery-csharp");
         Assert.Contains(items, item => item.Kind == "Lesson" && item.Path == "/lessons/text-as-data-csharp");
         Assert.Contains(items, item => item.Kind == "Exercise" && item.Path == "/exercises/normalize-to-lowercase");
+        Assert.Contains(items, item => item.Kind == "Exercise" && item.Path == "/exercises/run-logquery-summary");
         Assert.Contains(items, item => item.Kind == "Concept" && item.Path == "/concepts/csharp-dictionaries");
     }
 

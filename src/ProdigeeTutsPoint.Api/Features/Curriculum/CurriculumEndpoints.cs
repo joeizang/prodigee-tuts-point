@@ -56,6 +56,7 @@ public static class CurriculumEndpoints
         group.MapGet("/sources", async (AppDbContext db, CancellationToken ct) =>
         {
             var books = await db.SourceBooks
+                .Where(book => book.OwnershipStatus == "Owned")
                 .OrderBy(book => book.Title)
                 .Select(book => new SourceBookResponse(
                     book.Id,

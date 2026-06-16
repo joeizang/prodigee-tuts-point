@@ -122,12 +122,19 @@ function codeTokenClass(token: string) {
 }
 
 function enrichTermDefinitions(html: string) {
+  let termIndex = 0
+
   return html.replace(
-    /<span class="term-keyword" data-term="([^"]+)" tabindex="0">([^<]+)<\/span>\s+means\s+([\s\S]*?)(?=(?:\s*<span class="term-keyword")|$)/g,
-    (_match, dataTerm: string, label: string, definition: string) => {
+    /<span class="term-keyword" data-term="([^"]+)" tabindex="0">([^<]+)<\/span>\s+means\s+([\s\S]*?)(?=(?:[.!?](?:\s|$))|(?:\s*<span class="term-keyword")|$)([.!?]?)/g,
+    (_match, dataTerm: string, label: string, definition: string, terminator: string) => {
       const cleanDefinition = definition.trim()
+      if (!cleanDefinition) {
+        return `<span class="term-keyword" data-term="${dataTerm}" tabindex="0">${label}</span>`
+      }
+
       const term = escapeHtml(unescapeHtml(dataTerm))
-      return `<span class="term-bubble"><span class="term-keyword" data-term="${term}" tabindex="0" role="button" aria-label="Key term: ${term}">${label}</span><span class="term-popover" role="tooltip"><strong>${term}</strong> <span>${cleanDefinition}</span></span></span> means ${cleanDefinition}`
+      const tooltipId = `term-tooltip-${termIndex++}`
+      return `<span class="term-bubble"><span class="term-keyword" data-term="${term}" tabindex="0" role="button" aria-label="Key term: ${term}" aria-describedby="${tooltipId}">${label}</span><span class="term-popover" id="${tooltipId}" role="tooltip"><strong>${term}</strong> <span>${cleanDefinition}</span></span></span> means ${cleanDefinition}${terminator}`
     },
   )
 }

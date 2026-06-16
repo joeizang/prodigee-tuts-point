@@ -1,0 +1,62 @@
+id: filter-log-events
+title: FilterLogEvents
+kind: focused
+workspace:
+  starter: tracks/csharp/exercises/_shared/LogQuery.cs
+  visibleTest: |
+    var events = new[]
+    {
+        new LogEvent(DateTimeOffset.UnixEpoch, "ERROR", "payment failed"),
+        new LogEvent(DateTimeOffset.UnixEpoch, "INFO", "payment retried"),
+        new LogEvent(DateTimeOffset.UnixEpoch, "ERROR", "cache failed"),
+    };
+    var filtered = LogQuery.Filter(events, new LogQueryOptions("error", "payment")).ToList();
+    Assert.Single(filtered);
+    Assert.Equal("payment failed", filtered[0].Message);
+  hiddenTest: |
+    var events = new[]
+    {
+        new LogEvent(DateTimeOffset.UnixEpoch, "WARN", "Disk Almost Full"),
+        new LogEvent(DateTimeOffset.UnixEpoch, "INFO", "disk ok"),
+    };
+    var filtered = LogQuery.Filter(events, new LogQueryOptions(null, "disk")).ToList();
+    Assert.Equal(2, filtered.Count);
+hints:
+  - id: conceptual
+    level: conceptual
+    title: Filter records
+    body: Filtering should operate on LogEvent records that have already passed the parse boundary.
+  - id: api-approach
+    level: api-approach
+    title: Apply optional filters
+    body: Only apply the level or contains filter when the option has a meaningful value.
+  - id: structural
+    level: structural
+    title: Normalize comparisons
+    body: Compare levels with uppercase normalization and message text with ordinal ignore-case containment.
+solution:
+  title: Model solution
+  body: The solution composes optional filters over parsed events without reparsing raw lines.
+  code: |
+    public static IEnumerable<LogEvent> Filter(IEnumerable<LogEvent> events, LogQueryOptions options)
+    {
+        var query = events;
+        if (!string.IsNullOrWhiteSpace(options.Level))
+        {
+            var level = options.Level.ToUpperInvariant();
+            query = query.Where(item => item.Level == level);
+        }
+
+        if (!string.IsNullOrWhiteSpace(options.Contains))
+        {
+            query = query.Where(item => item.Message.Contains(options.Contains, StringComparison.OrdinalIgnoreCase));
+        }
+
+        return query;
+    }
+commonWrongApproaches:
+  - Re-splitting raw log lines inside the filter method.
+  - Performing case-sensitive comparisons for levels or message text.
+expectedSolutionCharacteristics:
+  - Applies level and message filters independently when provided.
+  - Returns an enumerable of original LogEvent values that match the query.

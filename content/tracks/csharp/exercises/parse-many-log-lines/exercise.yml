@@ -1,0 +1,73 @@
+id: parse-many-log-lines
+title: ParseManyLogLines
+kind: focused
+workspace:
+  starter: tracks/csharp/exercises/_shared/LogQuery.cs
+  visibleTest: |
+    var events = LogQuery.ParseMany([
+        "2026-06-16T09:15:00Z ERROR payment failed",
+        "not valid",
+        "2026-06-16T09:16:00Z info payment retried"
+    ], out var malformedCount);
+    Assert.Equal(2, events.Count);
+    Assert.Equal(1, malformedCount);
+    Assert.Equal("INFO", events[1].Level);
+  hiddenTest: |
+    var events = LogQuery.ParseMany(["bad", "also bad"], out var malformedCount);
+    Assert.Empty(events);
+    Assert.Equal(2, malformedCount);
+hints:
+  - id: conceptual
+    level: conceptual
+    title: Count failures deliberately
+    body: Parsing many lines should keep valid events and count malformed lines so the caller can make a user-facing decision.
+  - id: api-approach
+    level: api-approach
+    title: Reuse the single-line parser
+    body: Call TryParseLine for each input line and add only successful LogEvent values to the result list.
+  - id: structural
+    level: structural
+    title: Increment malformed count
+    body: Initialize malformedCount to zero before the loop and increment it whenever TryParseLine returns false.
+solution:
+  title: Model solution
+  body: The solution reuses the parse boundary and returns both valid events and a precise malformed-line count.
+  code: |
+    public static bool TryParseLine(string line, out LogEvent? logEvent)
+    {
+        logEvent = null;
+        var parts = line.Split(' ', 3, StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length < 3 || !DateTimeOffset.TryParse(parts[0], out var timestamp))
+        {
+            return false;
+        }
+
+        logEvent = new LogEvent(timestamp, parts[1].ToUpperInvariant(), parts[2]);
+        return true;
+    }
+
+    public static IReadOnlyList<LogEvent> ParseMany(IEnumerable<string> lines, out int malformedCount)
+    {
+        malformedCount = 0;
+        var events = new List<LogEvent>();
+
+        foreach (var line in lines)
+        {
+            if (TryParseLine(line, out var logEvent) && logEvent is not null)
+            {
+                events.Add(logEvent);
+            }
+            else
+            {
+                malformedCount++;
+            }
+        }
+
+        return events;
+    }
+commonWrongApproaches:
+  - Silently ignoring malformed lines and returning a success-looking result.
+  - Reimplementing different parsing rules instead of reusing TryParseLine.
+expectedSolutionCharacteristics:
+  - Counts malformed lines without fabricating partial LogEvent records.
+  - Returns only successfully parsed events while preserving input order.

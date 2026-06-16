@@ -1,0 +1,45 @@
+id: limit-top-results
+title: LimitTopResults
+kind: focused
+workspace:
+  starter: tracks/csharp/exercises/_shared/WordFrequencyStreaming.cs
+  visibleTest: |
+    var top = WordFrequencyStreaming.Top(new Dictionary<string, int> { ["beta"] = 2, ["alpha"] = 2, ["gamma"] = 1 }, 2);
+    Assert.Equal(["alpha", "beta"], top.Select(item => item.Word));
+  hiddenTest: |
+    var none = WordFrequencyStreaming.Top(new Dictionary<string, int> { ["alpha"] = 1 }, 0);
+    Assert.Empty(none);
+    var all = WordFrequencyStreaming.Top(new Dictionary<string, int> { ["b"] = 1, ["a"] = 3 }, 10);
+    Assert.Equal(["a", "b"], all.Select(item => item.Word));
+hints:
+  - id: conceptual
+    level: conceptual
+    title: Limit after ranking
+    body: Top-N is meaningful only after all rows have been sorted by the milestone ranking rule.
+  - id: api-approach
+    level: api-approach
+    title: Project to records
+    body: Turn dictionary entries into WordFrequency records before sorting and taking the requested limit.
+  - id: structural
+    level: structural
+    title: Clamp the limit
+    body: Use Math.Max to treat zero or negative limits as an empty result instead of throwing.
+solution:
+  title: Model solution
+  body: The solution sorts deterministically, applies a non-negative limit, and returns materialized records.
+  code: |
+    public static IReadOnlyList<WordFrequency> Top(IReadOnlyDictionary<string, int> counts, int limit)
+    {
+        return counts
+            .Select(item => new WordFrequency(item.Key, item.Value))
+            .OrderByDescending(item => item.Count)
+            .ThenBy(item => item.Word, StringComparer.Ordinal)
+            .Take(Math.Max(0, limit))
+            .ToList();
+    }
+commonWrongApproaches:
+  - Calling Take before sorting and returning arbitrary dictionary order.
+  - Throwing for a zero limit instead of returning an empty list.
+expectedSolutionCharacteristics:
+  - Orders by count descending and word ascending before limiting.
+  - Handles limits larger than the result count and limits less than one.

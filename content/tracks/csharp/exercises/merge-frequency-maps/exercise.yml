@@ -1,0 +1,46 @@
+id: merge-frequency-maps
+title: MergeFrequencyMaps
+kind: focused
+workspace:
+  starter: tracks/csharp/exercises/_shared/WordFrequencyStreaming.cs
+  visibleTest: |
+    var destination = new Dictionary<string, int> { ["alpha"] = 2 };
+    WordFrequencyStreaming.MergeInto(destination, new Dictionary<string, int> { ["alpha"] = 3, ["beta"] = 1 });
+    Assert.Equal(5, destination["alpha"]);
+    Assert.Equal(1, destination["beta"]);
+  hiddenTest: |
+    var destination = new Dictionary<string, int>();
+    var source = new Dictionary<string, int> { ["zeta"] = 4 };
+    WordFrequencyStreaming.MergeInto(destination, source);
+    Assert.Equal(4, destination["zeta"]);
+    Assert.Equal(4, source["zeta"]);
+hints:
+  - id: conceptual
+    level: conceptual
+    title: Mutate only destination
+    body: The method contract is clear when the destination receives all updates and the source remains unchanged.
+  - id: api-approach
+    level: api-approach
+    title: Add duplicate counts
+    body: When a key already exists, add the source count to the existing destination count instead of replacing it.
+  - id: structural
+    level: structural
+    title: Loop source entries
+    body: Iterate over source key-value pairs and update destination with TryGetValue or GetValueOrDefault.
+solution:
+  title: Model solution
+  body: The solution makes ownership explicit and treats duplicate keys as additive counts.
+  code: |
+    public static void MergeInto(Dictionary<string, int> destination, IReadOnlyDictionary<string, int> source)
+    {
+        foreach (var (word, count) in source)
+        {
+            destination[word] = destination.TryGetValue(word, out var current) ? current + count : count;
+        }
+    }
+commonWrongApproaches:
+  - Assigning source counts directly and overwriting existing destination totals.
+  - Clearing or mutating the source dictionary while merging.
+expectedSolutionCharacteristics:
+  - Adds duplicate counts rather than replacing them.
+  - Leaves source data unchanged while mutating the destination.

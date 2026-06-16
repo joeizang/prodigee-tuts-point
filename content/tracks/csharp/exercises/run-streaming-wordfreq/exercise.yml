@@ -1,0 +1,40 @@
+id: run-streaming-wordfreq
+title: RunStreamingWordfreq
+kind: milestone-integration
+workspace:
+  starter: tracks/csharp/exercises/_shared/WordFrequencyStreaming.cs
+  visibleTest: |
+    var output = WordFrequencyStreaming.Run(["Alpha beta", "beta alpha beta"], 2);
+    Assert.Equal("beta\t3\nalpha\t2", output);
+  hiddenTest: |
+    var output = WordFrequencyStreaming.Run(["", "Gamma alpha", "gamma beta alpha"], 1);
+    Assert.Equal("alpha\t2", output);
+hints:
+  - id: conceptual
+    level: conceptual
+    title: Compose values
+    body: The integration method should compose counting, top-N selection, and formatting without opening files or writing to the console.
+  - id: api-approach
+    level: api-approach
+    title: Use existing methods
+    body: Run should be short if CountLines and Top are already correct; build the output from the resulting records.
+  - id: structural
+    level: structural
+    title: Join formatted rows
+    body: Format each frequency as word, tab, count and join rows with newline characters.
+solution:
+  title: Model solution
+  body: The solution keeps the full pipeline testable by returning text instead of printing it.
+  code: |
+    public static string Run(IEnumerable<string> lines, int limit)
+    {
+        var counts = CountLines(lines);
+        var top = Top(counts, limit);
+        return string.Join("\n", top.Select(item => $"{item.Word}\t{item.Count}"));
+    }
+commonWrongApproaches:
+  - Reading a real file inside Run instead of accepting the provided lines.
+  - Formatting before applying the top-N limit.
+expectedSolutionCharacteristics:
+  - Composes streaming count, deterministic limiting, and table formatting.
+  - Keeps all behavior testable without console or file-system dependencies.

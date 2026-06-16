@@ -24,6 +24,8 @@ Turn authored `**Term: ...** means ...` lesson markers into visible, accessible 
 
 - Implemented in the shared `MarkdownText` renderer so all learning markdown benefits automatically.
 - The first version extracts the definition from the sentence following `**Term: name** means ...`.
+- Review remediation: bounded definition extraction at sentence terminators so later mentions do not bleed into the previous tooltip.
+- Review remediation: added `aria-describedby` from focusable term buttons to their tooltip and covered multi-term boundary behavior in frontend tests.
 
 ## Full implementation note
 

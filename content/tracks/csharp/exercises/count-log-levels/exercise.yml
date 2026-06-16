@@ -1,0 +1,50 @@
+id: count-log-levels
+title: CountLogLevels
+kind: focused
+workspace:
+  starter: tracks/csharp/exercises/_shared/LogQuery.cs
+  visibleTest: |
+    var summary = LogQuery.CountByLevel([
+        new LogEvent(DateTimeOffset.UnixEpoch, "ERROR", "a"),
+        new LogEvent(DateTimeOffset.UnixEpoch, "INFO", "b"),
+        new LogEvent(DateTimeOffset.UnixEpoch, "ERROR", "c")
+    ]);
+    Assert.Equal("ERROR", summary[0].Key);
+    Assert.Equal(2, summary[0].Value);
+  hiddenTest: |
+    var summary = LogQuery.CountByLevel([
+        new LogEvent(DateTimeOffset.UnixEpoch, "WARN", "a"),
+        new LogEvent(DateTimeOffset.UnixEpoch, "ERROR", "b")
+    ]);
+    Assert.Equal(["ERROR", "WARN"], summary.Select(item => item.Key));
+hints:
+  - id: conceptual
+    level: conceptual
+    title: Summarize records
+    body: A level summary is a grouped count over parsed events, not a string search over raw lines.
+  - id: api-approach
+    level: api-approach
+    title: Group by level
+    body: Group events by Level and project each group into a key-value pair containing level and count.
+  - id: structural
+    level: structural
+    title: Sort summary rows
+    body: Order the level rows by key so the CLI output is deterministic and testable.
+solution:
+  title: Model solution
+  body: The solution groups parsed records and materializes summary rows in stable order.
+  code: |
+    public static IReadOnlyList<KeyValuePair<string, int>> CountByLevel(IEnumerable<LogEvent> events)
+    {
+        return events
+            .GroupBy(item => item.Level)
+            .Select(group => new KeyValuePair<string, int>(group.Key, group.Count()))
+            .OrderBy(item => item.Key, StringComparer.Ordinal)
+            .ToList();
+    }
+commonWrongApproaches:
+  - Returning dictionary iteration order as if it were stable output.
+  - Counting levels by searching raw line strings instead of using parsed records.
+expectedSolutionCharacteristics:
+  - Groups by normalized event level.
+  - Returns materialized rows sorted by level name.

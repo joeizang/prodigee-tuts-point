@@ -63,6 +63,7 @@ public sealed class ContentQualityValidator
         foreach (var project in track.Projects)
         {
             RequireText(project.Description, trackFile, $"project {project.Id} description", diagnostics, minWords: 12);
+            ValidateProjectMilestoneStructure(project, trackFile, diagnostics);
             foreach (var milestone in project.Milestones)
             {
                 ValidateSourceReferences(milestone.SourceReferences, sourceIds, milestone.Id, diagnostics);
@@ -156,6 +157,43 @@ public sealed class ContentQualityValidator
         }
 
         ValidateMarkdownLinks(rootPath, path, markdown, diagnostics);
+    }
+
+    private static void ValidateProjectMilestoneStructure(
+        ProjectDocument project,
+        string trackFile,
+        List<ContentQualityDiagnostic> diagnostics)
+    {
+        var expectedOrder = 1;
+        foreach (var milestone in project.Milestones.OrderBy(milestone => milestone.Order))
+        {
+            if (milestone.Order != expectedOrder)
+            {
+                diagnostics.Add(new ContentQualityDiagnostic(
+                    "MilestoneOrdering",
+                    project.Id,
+                    $"Milestones must use contiguous order values starting at 1; expected {expectedOrder} but found {milestone.Order} for {milestone.Id} in {trackFile}."));
+            }
+
+            expectedOrder++;
+            RequireNonEmptyItems(milestone.Lessons, trackFile, $"milestone {milestone.Id}.lessons", diagnostics, minItems: 1);
+            RequireNonEmptyItems(milestone.Exercises, trackFile, $"milestone {milestone.Id}.exercises", diagnostics, minItems: 1);
+            RequireNonEmptyItems(milestone.SourceReferences.Select(reference => reference.Book).ToArray(), trackFile, $"milestone {milestone.Id}.sourceReferences", diagnostics, minItems: 1);
+        }
+
+        var duplicateExercises = project.Milestones
+            .SelectMany(milestone => milestone.Exercises.Select(exerciseId => (milestone.Id, ExerciseId: exerciseId)))
+            .GroupBy(item => item.ExerciseId, StringComparer.OrdinalIgnoreCase)
+            .Where(group => group.Count() > 1)
+            .ToList();
+
+        foreach (var duplicate in duplicateExercises)
+        {
+            diagnostics.Add(new ContentQualityDiagnostic(
+                "MilestoneExerciseCoverage",
+                project.Id,
+                $"Exercise {duplicate.Key} appears in multiple milestones: {string.Join(", ", duplicate.Select(item => item.Id))}."));
+        }
     }
 
     private T? ReadYaml<T>(string path, List<ContentQualityDiagnostic> diagnostics)
@@ -274,6 +312,25 @@ public sealed class ContentQualityValidator
         }
     }
 
+    private static void RequireNonEmptyItems(
+        IReadOnlyCollection<string> values,
+        string path,
+        string field,
+        List<ContentQualityDiagnostic> diagnostics,
+        int minItems)
+    {
+        if (values.Count < minItems)
+        {
+            diagnostics.Add(new ContentQualityDiagnostic("MissingContentReference", path, $"{field} needs at least {minItems} item(s)."));
+            return;
+        }
+
+        foreach (var value in values)
+        {
+            RequireText(value, path, field, diagnostics);
+        }
+    }
+
     private static void RequireText(
         string? value,
         string path,
@@ -363,6 +420,12 @@ public sealed class ContentQualityValidator
         public string Id { get; set; } = string.Empty;
 
         public string Markdown { get; set; } = string.Empty;
+
+        public int Order { get; set; }
+
+        public List<string> Lessons { get; set; } = [];
+
+        public List<string> Exercises { get; set; } = [];
 
         public List<SourceReferenceDocument> SourceReferences { get; set; } = [];
     }

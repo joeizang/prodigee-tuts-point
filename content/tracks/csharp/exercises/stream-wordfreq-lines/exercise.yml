@@ -1,0 +1,52 @@
+id: stream-wordfreq-lines
+title: StreamWordfreqLines
+kind: focused
+workspace:
+  starter: tracks/csharp/exercises/_shared/WordFrequencyStreaming.cs
+  visibleTest: |
+    var counts = WordFrequencyStreaming.CountLines(["Alpha beta", "beta gamma"]);
+    Assert.Equal(1, counts["alpha"]);
+    Assert.Equal(2, counts["beta"]);
+    Assert.Equal(1, counts["gamma"]);
+  hiddenTest: |
+    var counts = WordFrequencyStreaming.CountLines(["One, two!", "", "two? THREE"]);
+    Assert.Equal(3, counts.Count);
+    Assert.Equal(2, counts["two"]);
+    Assert.Equal(1, counts["three"]);
+hints:
+  - id: conceptual
+    level: conceptual
+    title: Own one accumulator
+    body: Streaming still needs state. The counting method should own one dictionary and update it as each line arrives.
+  - id: api-approach
+    level: api-approach
+    title: Reuse tokenization
+    body: Count every token returned from the starter Tokenize helper for each line instead of joining all lines first.
+  - id: structural
+    level: structural
+    title: Iterate lines then tokens
+    body: |
+      Use a nested loop: outer loop over lines, inner loop over tokens, and update the dictionary with TryGetValue.
+solution:
+  title: Model solution
+  body: The solution keeps memory stable by iterating through lines and updating one dictionary.
+  code: |
+    public static Dictionary<string, int> CountLines(IEnumerable<string> lines)
+    {
+        var counts = new Dictionary<string, int>(StringComparer.Ordinal);
+        foreach (var line in lines)
+        {
+            foreach (var word in Tokenize(line))
+            {
+                counts[word] = counts.TryGetValue(word, out var current) ? current + 1 : 1;
+            }
+        }
+
+        return counts;
+    }
+commonWrongApproaches:
+  - Joining all lines into one giant string before counting.
+  - Replacing the dictionary on every line and losing previous counts.
+expectedSolutionCharacteristics:
+  - Iterates input lines without materializing a whole-file string.
+  - Uses one aggregate dictionary with deterministic string comparison.

@@ -29,6 +29,8 @@ Add the next `wordfreq-csharp` project milestone: turn the pure analyzer core in
 - Added `cli-and-file-io` with three lessons and five exercises: option parsing, file reading, missing-file handling, table formatting, and an integration runner.
 - Added a shared `WordFrequencyCli.cs` starter surface with explicit CLI models and testable I/O delegates.
 - Added backend tests for the new milestone endpoint, theory cluster endpoint, and project milestone list.
+- Review remediation: added real content-quality validation for contiguous milestone ordering, milestone source anchors, and milestone exercise coverage.
+- Review remediation: added `RunEndpointExecutesWordfreqCliCapstoneVisibleAndHiddenTests` so the CLI integration exercise is executed through the real runner path.
 
 ## Full implementation note
 

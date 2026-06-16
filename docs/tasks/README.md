@@ -31,3 +31,8 @@ They are ordered roughly by dependency. Each task should leave the app in a more
 20. [0020 Add wordfreq-csharp CLI and file I/O milestone](./0020-add-wordfreq-cli-file-io.md) - Completed
 21. [0021 Render key-term bubbles](./0021-render-key-term-bubbles.md) - Completed
 22. [0022 Harden C# language-service parity and caching](./0022-harden-csharp-language-service-parity.md) - Completed
+23. [0023 Add wordfreq-csharp streaming and scale milestone](./0023-add-wordfreq-streaming-scale.md) - Completed
+24. [0024 Add logquery-csharp project](./0024-add-logquery-csharp-project.md) - Completed
+25. [0025 Render milestone theory study links](./0025-render-milestone-theory-study-links.md) - Completed
+26. [0026 Add exercise-first loop panel](./0026-add-exercise-first-loop-panel.md) - Completed
+27. [0027 Add source reference draft management](./0027-add-source-reference-draft-management.md) - Completed

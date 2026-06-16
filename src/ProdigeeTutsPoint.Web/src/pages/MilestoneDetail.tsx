@@ -1,13 +1,14 @@
 import { useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { postJson } from '../api'
-import type { AiProvider, AiReview, MilestoneDetail as MilestoneDetailModel } from '../api'
+import type { AiProvider, AiReview, MilestoneDetail as MilestoneDetailModel, TheoryCluster } from '../api'
 import { AsyncState } from '../components/AsyncState'
 import { MarkdownText } from '../components/MarkdownText'
 import { NotesPanel } from '../components/NotesPanel'
 import { Page, Panel } from '../components/Page'
 import { LinkedList, SourceList } from '../components/PrimitiveLists'
 import { SoftLockNotice } from '../components/SoftLockNotice'
+import { ExerciseFirstLoopPanel, TheoryClusterPanel } from '../components/TheoryClusterPanel'
 import { useApi } from '../hooks/useApi'
 import { useStudyTime } from '../hooks/useStudyTime'
 import type { LocalProfile } from '../types'
@@ -17,6 +18,9 @@ export function MilestoneDetail({ profile }: { profile: LocalProfile }) {
   useStudyTime({ profileId: profile.id, targetType: 'milestone', targetId: milestoneId })
   const { data: milestone, error, isLoading } = useApi<MilestoneDetailModel>(
     `/api/curriculum/projects/${projectId}/milestones/${milestoneId}`,
+  )
+  const { data: theoryCluster } = useApi<TheoryCluster>(
+    `/api/curriculum/projects/${projectId}/milestones/${milestoneId}/theory-cluster`,
   )
   const { data: providers } = useApi<AiProvider[]>('/api/ai/providers')
   const { data: initialReviews } = useApi<AiReview[]>(
@@ -30,6 +34,8 @@ export function MilestoneDetail({ profile }: { profile: LocalProfile }) {
         <div className="content-stack">
           <SoftLockNotice locks={milestone.softLocks} title="Recommended before completion" />
           <MarkdownText markdown={milestone.markdown} omitFirstHeading />
+          {theoryCluster && <TheoryClusterPanel cluster={theoryCluster} />}
+          <ExerciseFirstLoopPanel exercises={milestone.exercises} lessons={milestone.lessons} />
           <Panel title="Required Lessons">
             <LinkedList items={milestone.lessons} pathPrefix="/lessons" />
           </Panel>

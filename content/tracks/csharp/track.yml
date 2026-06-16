@@ -32,6 +32,21 @@ concepts:
   - id: csharp-error-handling
     title: User-Facing Error Handling
     description: Returning meaningful failures, deterministic messages, and useful exit codes without hiding defects.
+  - id: csharp-streaming
+    title: Streaming and Incremental Processing
+    description: Processing large inputs line by line without loading the whole dataset into memory.
+  - id: csharp-performance
+    title: Performance Boundaries
+    description: Measuring allocation, memory, and algorithmic pressure before changing design.
+  - id: csharp-log-parsing
+    title: Log Parsing
+    description: Turning semi-structured log lines into explicit records with predictable failure behavior.
+  - id: csharp-query-pipeline
+    title: Query Pipelines
+    description: Filtering, projecting, grouping, and summarizing records with readable pipeline stages.
+  - id: csharp-observability
+    title: Operational Diagnostics
+    description: Modeling errors and summaries so tools help engineers investigate systems quickly.
 modules:
   - id: csharp-wordfreq-core
     title: Word Frequency Core
@@ -41,6 +56,14 @@ modules:
     title: Word Frequency CLI
     description: Wrap the pure analyzer with command-line input, file I/O, formatted output, and error handling.
     order: 2
+  - id: csharp-wordfreq-streaming
+    title: Word Frequency Streaming
+    description: Make the analyzer scale to larger files through line streaming, map merging, and top-N output.
+    order: 3
+  - id: csharp-logquery-core
+    title: Log Query Core
+    description: Build the core parser and query engine for a production-style log investigation CLI.
+    order: 4
 lessons:
   - id: text-as-data-csharp
     moduleId: csharp-wordfreq-core
@@ -163,6 +186,76 @@ lessons:
         chapter: Formatting and Text
         topic: string formatting, joining lines, deterministic text output
         usage: QualityAnchor
+  - id: streaming-large-text-input
+    moduleId: csharp-wordfreq-streaming
+    title: Streaming Large Text Input
+    summary: Process text as an enumerable of lines so large inputs do not force whole-file reads.
+    markdown: tracks/csharp/lessons/streaming-large-text-input.md
+    order: 10
+    concepts:
+      - csharp-streaming
+      - csharp-file-io
+    sourceReferences:
+      - book: programming-csharp-12
+        chapter: Streams and Files
+        topic: streaming reads, iterators, resource boundaries
+        usage: QualityAnchor
+  - id: merging-frequency-maps
+    moduleId: csharp-wordfreq-streaming
+    title: Merging Frequency Maps
+    summary: Accumulate partial counts safely without losing deterministic behavior or clear ownership.
+    markdown: tracks/csharp/lessons/merging-frequency-maps.md
+    order: 11
+    concepts:
+      - csharp-dictionaries
+      - csharp-streaming
+    sourceReferences:
+      - book: csharp-12-in-a-nutshell
+        chapter: Collections
+        topic: dictionary mutation, aggregation, collection design
+        usage: QualityAnchor
+  - id: performance-bounds-and-top-n
+    moduleId: csharp-wordfreq-streaming
+    title: Performance Bounds and Top-N Output
+    summary: Decide where to limit output and how to reason about memory, sorting, and user-facing scale.
+    markdown: tracks/csharp/lessons/performance-bounds-and-top-n.md
+    order: 12
+    concepts:
+      - csharp-performance
+      - csharp-ordering
+    sourceReferences:
+      - book: code-that-fits-in-your-head
+        chapter: Performance and Maintainability
+        topic: explicit constraints, small measurable decisions, complexity boundaries
+        usage: QualityAnchor
+  - id: log-lines-as-records
+    moduleId: csharp-logquery-core
+    title: Log Lines as Records
+    summary: Parse timestamped log lines into explicit records with precise malformed-line behavior.
+    markdown: tracks/csharp/lessons/log-lines-as-records.md
+    order: 13
+    concepts:
+      - csharp-log-parsing
+      - csharp-error-handling
+    sourceReferences:
+      - book: programming-csharp-12
+        chapter: Text Processing
+        topic: parsing structured text and explicit failures
+        usage: QualityAnchor
+  - id: filtering-and-grouping-log-events
+    moduleId: csharp-logquery-core
+    title: Filtering and Grouping Log Events
+    summary: Build a small query pipeline for levels, terms, counts, and deterministic summaries.
+    markdown: tracks/csharp/lessons/filtering-and-grouping-log-events.md
+    order: 14
+    concepts:
+      - csharp-query-pipeline
+      - csharp-observability
+    sourceReferences:
+      - book: csharp-12-in-a-nutshell
+        chapter: LINQ Queries
+        topic: filtering, grouping, projection, deterministic summaries
+        usage: QualityAnchor
 exercises:
   - id: normalize-to-lowercase
     title: NormalizeToLowercase
@@ -274,6 +367,79 @@ exercises:
       - csharp-cli-contracts
       - csharp-file-io
       - csharp-error-handling
+  - id: stream-wordfreq-lines
+    title: StreamWordfreqLines
+    summary: Analyze an enumerable of text lines without requiring a single whole-file string.
+    directory: tracks/csharp/exercises/stream-wordfreq-lines
+    order: 16
+    concepts:
+      - csharp-streaming
+      - csharp-file-io
+  - id: merge-frequency-maps
+    title: MergeFrequencyMaps
+    summary: Merge partial word count dictionaries into one aggregate map.
+    directory: tracks/csharp/exercises/merge-frequency-maps
+    order: 17
+    concepts:
+      - csharp-dictionaries
+      - csharp-streaming
+  - id: limit-top-results
+    title: LimitTopResults
+    summary: Return deterministic top-N frequencies after sorting by count and word.
+    directory: tracks/csharp/exercises/limit-top-results
+    order: 18
+    concepts:
+      - csharp-performance
+      - csharp-ordering
+  - id: run-streaming-wordfreq
+    title: RunStreamingWordfreq
+    summary: Compose streamed input, counting, top-N limiting, and formatted output.
+    directory: tracks/csharp/exercises/run-streaming-wordfreq
+    order: 19
+    concepts:
+      - csharp-streaming
+      - csharp-performance
+      - csharp-cli-contracts
+  - id: parse-log-line
+    title: ParseLogLine
+    summary: Parse one timestamped log line into a structured record.
+    directory: tracks/csharp/exercises/parse-log-line
+    order: 20
+    concepts:
+      - csharp-log-parsing
+      - csharp-error-handling
+  - id: filter-log-events
+    title: FilterLogEvents
+    summary: Filter parsed log events by level and message text.
+    directory: tracks/csharp/exercises/filter-log-events
+    order: 21
+    concepts:
+      - csharp-query-pipeline
+      - csharp-observability
+  - id: parse-many-log-lines
+    title: ParseManyLogLines
+    summary: Parse many log lines while preserving a malformed-line count for user-facing failures.
+    directory: tracks/csharp/exercises/parse-many-log-lines
+    order: 22
+    concepts:
+      - csharp-log-parsing
+      - csharp-error-handling
+  - id: count-log-levels
+    title: CountLogLevels
+    summary: Count events by log level with deterministic summary ordering.
+    directory: tracks/csharp/exercises/count-log-levels
+    order: 23
+    concepts:
+      - csharp-query-pipeline
+  - id: run-logquery-summary
+    title: RunLogquerySummary
+    summary: Compose parsing, filtering, counting, and user-facing summary output.
+    directory: tracks/csharp/exercises/run-logquery-summary
+    order: 24
+    concepts:
+      - csharp-log-parsing
+      - csharp-query-pipeline
+      - csharp-observability
 projects:
   - id: wordfreq-csharp
     title: wordfreq-csharp
@@ -327,4 +493,47 @@ projects:
           - book: code-that-fits-in-your-head
             chapter: Boundaries and Errors
             topic: CLI contract, side-effect boundaries, failure messages
+            usage: QualityAnchor
+      - id: streaming-and-scale
+        title: Streaming and Scale
+        summary: Make the word-frequency tool handle larger inputs with line streaming, explicit aggregation, and top-N output.
+        markdown: tracks/csharp/projects/wordfreq/milestones/streaming-and-scale.md
+        order: 3
+        lessons:
+          - streaming-large-text-input
+          - merging-frequency-maps
+          - performance-bounds-and-top-n
+        exercises:
+          - stream-wordfreq-lines
+          - merge-frequency-maps
+          - limit-top-results
+          - run-streaming-wordfreq
+        sourceReferences:
+          - book: programming-csharp-12
+            chapter: Streams and Iterators
+            topic: streaming input, iterator boundaries, memory-aware processing
+            usage: QualityAnchor
+  - id: logquery-csharp
+    title: logquery-csharp
+    slug: logquery-csharp
+    description: Build a C# log investigation CLI that parses structured log lines, filters events, groups summaries, and reports malformed input deliberately.
+    milestones:
+      - id: parse-filter-summarize
+        title: Parse, Filter, Summarize
+        summary: Build the parser and query core for a log analysis command-line tool.
+        markdown: tracks/csharp/projects/logquery/milestones/parse-filter-summarize.md
+        order: 1
+        lessons:
+          - log-lines-as-records
+          - filtering-and-grouping-log-events
+        exercises:
+          - parse-log-line
+          - filter-log-events
+          - parse-many-log-lines
+          - count-log-levels
+          - run-logquery-summary
+        sourceReferences:
+          - book: csharp-12-in-a-nutshell
+            chapter: LINQ Queries
+            topic: parsing records, filtering, grouping, deterministic summaries
             usage: QualityAnchor

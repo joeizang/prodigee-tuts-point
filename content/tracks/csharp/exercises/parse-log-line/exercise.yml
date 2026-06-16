@@ -1,0 +1,49 @@
+id: parse-log-line
+title: ParseLogLine
+kind: focused
+workspace:
+  starter: tracks/csharp/exercises/_shared/LogQuery.cs
+  visibleTest: |
+    var parsed = LogQuery.TryParseLine("2026-06-16T09:15:00Z error payment failed", out var logEvent);
+    Assert.True(parsed);
+    Assert.NotNull(logEvent);
+    Assert.Equal("ERROR", logEvent.Level);
+    Assert.Equal("payment failed", logEvent.Message);
+  hiddenTest: |
+    Assert.False(LogQuery.TryParseLine("not a valid line", out var malformed));
+    Assert.Null(malformed);
+hints:
+  - id: conceptual
+    level: conceptual
+    title: Parse boundary
+    body: The parser should either produce a trustworthy LogEvent or return false without fabricating partial data.
+  - id: api-approach
+    level: api-approach
+    title: Split into three parts
+    body: Split the line into timestamp, level, and the remaining message so spaces inside the message are preserved.
+  - id: structural
+    level: structural
+    title: Normalize level
+    body: Use DateTimeOffset.TryParse for the timestamp and ToUpperInvariant for the level value.
+solution:
+  title: Model solution
+  body: The solution preserves the message text and returns false for malformed input.
+  code: |
+    public static bool TryParseLine(string line, out LogEvent? logEvent)
+    {
+        logEvent = null;
+        var parts = line.Split(' ', 3, StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length < 3 || !DateTimeOffset.TryParse(parts[0], out var timestamp))
+        {
+            return false;
+        }
+
+        logEvent = new LogEvent(timestamp, parts[1].ToUpperInvariant(), parts[2]);
+        return true;
+    }
+commonWrongApproaches:
+  - Splitting on every space and losing most of the message.
+  - Returning a LogEvent with default timestamp values for malformed lines.
+expectedSolutionCharacteristics:
+  - Returns false and a null event for malformed lines.
+  - Preserves the original message text after timestamp and level extraction.

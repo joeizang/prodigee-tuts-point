@@ -2,6 +2,7 @@ import type { SourceBook } from '../api'
 import { AsyncState } from '../components/AsyncState'
 import { NotesPanel } from '../components/NotesPanel'
 import { Page, Panel } from '../components/Page'
+import { SourceReferenceDraftPanel } from '../components/SourceReferenceDraftPanel'
 import { useApi } from '../hooks/useApi'
 import type { LocalProfile } from '../types'
 
@@ -12,6 +13,7 @@ export function Sources({ profile }: { profile: LocalProfile }) {
     <Page title="Sources">
       <AsyncState error={error} isLoading={isLoading} />
       <div className="content-stack">
+        {books && <SourceReferenceDraftPanel books={books} />}
         {(books ?? []).map((book) => (
           <Panel key={book.id} title={book.title}>
             <p className="body-copy">

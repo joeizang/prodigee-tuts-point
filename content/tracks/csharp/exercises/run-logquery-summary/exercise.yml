@@ -1,0 +1,112 @@
+id: run-logquery-summary
+title: RunLogquerySummary
+kind: milestone-integration
+workspace:
+  starter: tracks/csharp/exercises/_shared/LogQuery.cs
+  visibleTest: |
+    var result = LogQuery.Run([
+        "2026-06-16T09:15:00Z ERROR payment failed",
+        "2026-06-16T09:16:00Z INFO payment retried",
+        "2026-06-16T09:17:00Z ERROR cache failed"
+    ], new LogQueryOptions("error", null));
+    Assert.Equal(0, result.ExitCode);
+    Assert.Equal("ERROR\t2", result.Output);
+  hiddenTest: |
+    var result = LogQuery.Run(["not valid"], new LogQueryOptions(null, null));
+    Assert.Equal(2, result.ExitCode);
+    Assert.Contains("malformed", result.Error, StringComparison.OrdinalIgnoreCase);
+hints:
+  - id: conceptual
+    level: conceptual
+    title: Keep pipeline stages visible
+    body: Run should compose parse, filter, count, and format stages while preserving malformed-line failures.
+  - id: api-approach
+    level: api-approach
+    title: Parse first
+    body: Use ParseMany before filtering so the query pipeline receives LogEvent records.
+  - id: structural
+    level: structural
+    title: Format summaries
+    body: Return non-zero when malformedCount is positive; otherwise join summary rows as level, tab, count.
+solution:
+  title: Model solution
+  body: The solution replaces the parser, parser loop, filter, summary, and runner methods so the capstone demonstrates the full query pipeline.
+  code: |
+    public static bool TryParseLine(string line, out LogEvent? logEvent)
+    {
+        logEvent = null;
+        var parts = line.Split(' ', 3, StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length < 3 || !DateTimeOffset.TryParse(parts[0], out var timestamp))
+        {
+            return false;
+        }
+
+        logEvent = new LogEvent(timestamp, parts[1].ToUpperInvariant(), parts[2]);
+        return true;
+    }
+
+    public static IReadOnlyList<LogEvent> ParseMany(IEnumerable<string> lines, out int malformedCount)
+    {
+        malformedCount = 0;
+        var events = new List<LogEvent>();
+
+        foreach (var line in lines)
+        {
+            if (TryParseLine(line, out var logEvent) && logEvent is not null)
+            {
+                events.Add(logEvent);
+            }
+            else
+            {
+                malformedCount++;
+            }
+        }
+
+        return events;
+    }
+
+    public static IEnumerable<LogEvent> Filter(IEnumerable<LogEvent> events, LogQueryOptions options)
+    {
+        var query = events;
+        if (!string.IsNullOrWhiteSpace(options.Level))
+        {
+            var level = options.Level.ToUpperInvariant();
+            query = query.Where(item => item.Level == level);
+        }
+
+        if (!string.IsNullOrWhiteSpace(options.Contains))
+        {
+            query = query.Where(item => item.Message.Contains(options.Contains, StringComparison.OrdinalIgnoreCase));
+        }
+
+        return query;
+    }
+
+    public static IReadOnlyList<KeyValuePair<string, int>> CountByLevel(IEnumerable<LogEvent> events)
+    {
+        return events
+            .GroupBy(item => item.Level)
+            .Select(group => new KeyValuePair<string, int>(group.Key, group.Count()))
+            .OrderBy(item => item.Key, StringComparer.Ordinal)
+            .ToList();
+    }
+
+    public static LogQueryResult Run(IEnumerable<string> lines, LogQueryOptions options)
+    {
+        var events = ParseMany(lines, out var malformedCount);
+        if (malformedCount > 0)
+        {
+            return new LogQueryResult(2, string.Empty, $"Input contains {malformedCount} malformed log line(s).");
+        }
+
+        var filtered = Filter(events, options);
+        var summary = CountByLevel(filtered);
+        var output = string.Join("\n", summary.Select(item => $"{item.Key}\t{item.Value}"));
+        return new LogQueryResult(0, output, string.Empty);
+    }
+commonWrongApproaches:
+  - Silently dropping malformed lines and returning a successful empty summary.
+  - Combining parsing, filtering, grouping, and formatting into one untestable loop.
+expectedSolutionCharacteristics:
+  - Reports malformed input with a non-zero result.
+  - Composes parser, filter, summary, and formatter methods.
