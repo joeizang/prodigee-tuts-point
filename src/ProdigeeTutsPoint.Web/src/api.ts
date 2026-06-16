@@ -58,6 +58,21 @@ export type LessonDetail = LessonSummary & {
   softLocks: SoftLock[]
 }
 
+export type TheoryCluster = {
+  projectId: string
+  milestoneId: string
+  title: string
+  summary: string
+  items: TheoryClusterItem[]
+}
+
+export type TheoryClusterItem = {
+  lessonId: string
+  title: string
+  summary: string
+  sources: SourceReference[]
+}
+
 export type ExerciseSummary = {
   id: string
   title: string
@@ -163,9 +178,78 @@ export type DiagnosticAttempt = {
 
 export type ConceptMasterySummary = {
   conceptId: string
+  title: string
   score: number
   maxScore: number
   evidenceCount: number
+  status: string
+  lastActivityAt?: string | null
+}
+
+export type LearnerSummary = {
+  reviewDueCount: number
+  studyStreakDays: number
+  totalStudySeconds: number
+  milestonesCompleted: number
+  milestoneCount: number
+  exercisesPassed: number
+  exerciseCount: number
+  reliableConcepts: number
+  conceptCount: number
+  gamificationPolicy: string
+}
+
+export type ReviewCard = {
+  id: string
+  conceptId: string
+  prompt: string
+  answer: string
+  sourceType: string
+  sourceId: string
+  lastReviewedAt?: string | null
+  dueAt: string
+  isDue: boolean
+}
+
+export type PortableStateExport = {
+  formatVersion: number
+  appId: string
+  profileId: string
+  exportedAt: string
+  providerSettings: PortableProviderSetting[]
+}
+
+export type PortableProviderSetting = {
+  id: string
+  displayName: string
+  preset: string
+  endpoint: string
+  model: string
+  secretName?: string | null
+  isEnabled: boolean
+  secretValuePresent: boolean
+}
+
+export type ImportResult = {
+  success: boolean
+  conflicts: ImportConflict[]
+  importedRowCount: number
+}
+
+export type ImportConflict = {
+  code: string
+  message: string
+}
+
+export type SetupDiagnostics = {
+  isReady: boolean
+  checks: SetupCheck[]
+}
+
+export type SetupCheck = {
+  id: string
+  status: string
+  message: string
 }
 
 export type ExerciseWorkspace = {

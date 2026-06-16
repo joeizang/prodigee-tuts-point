@@ -1,0 +1,39 @@
+id: format-wordfreq-table
+title: FormatWordfreqTable
+kind: focused
+workspace:
+  starter: tracks/csharp/exercises/_shared/WordFrequencyCli.cs
+  visibleTest: |
+    var output = WordFrequencyCli.FormatTable([new WordFrequency("go", 2), new WordFrequency("stop", 1)]);
+    Assert.Equal($"go\t2{Environment.NewLine}stop\t1", output);
+  hiddenTest: |
+    Assert.Equal(string.Empty, WordFrequencyCli.FormatTable([]));
+hints:
+  - id: conceptual
+    level: conceptual
+    title: Preserve structured order
+    body: The formatter should turn records into text. It should not change the analyzer's ordering contract.
+  - id: api-approach
+    level: api-approach
+    title: Join projected lines
+    body: Select each record into a tab-separated line, then join the lines with Environment.NewLine.
+  - id: structural
+    level: structural
+    title: Avoid trailing whitespace
+    body: Joining lines is cleaner than appending a newline after every row because tests can compare the exact string.
+solution:
+  title: Model solution
+  body: The solution formats one deterministic line per result and returns an empty string for empty input.
+  code: |
+    public static string FormatTable(IEnumerable<WordFrequency> frequencies)
+    {
+        return string.Join(
+            Environment.NewLine,
+            frequencies.Select(item => $"{item.Word}\t{item.Count}"));
+    }
+commonWrongApproaches:
+  - Writing directly to Console from the formatter.
+  - Adding extra trailing newlines or spaces that make output unstable.
+expectedSolutionCharacteristics:
+  - Returns a deterministic string without side effects.
+  - Uses one tab-separated line per WordFrequency record.

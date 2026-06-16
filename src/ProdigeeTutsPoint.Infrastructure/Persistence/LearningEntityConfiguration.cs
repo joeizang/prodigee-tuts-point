@@ -164,3 +164,47 @@ public sealed class AiReviewResultConfiguration : IEntityTypeConfiguration<AiRev
         builder.HasIndex(review => new { review.ProfileId, review.ProjectId, review.MilestoneId, review.CreatedAt });
     }
 }
+
+public sealed class ReviewCardConfiguration : IEntityTypeConfiguration<ReviewCard>
+{
+    public void Configure(EntityTypeBuilder<ReviewCard> builder)
+    {
+        builder.HasKey(card => card.Id);
+        builder.Property(card => card.Id).HasMaxLength(120);
+        builder.Property(card => card.ConceptId).HasMaxLength(120);
+        builder.Property(card => card.Prompt).HasMaxLength(1200);
+        builder.Property(card => card.Answer).HasMaxLength(2400);
+        builder.Property(card => card.SourceType).HasMaxLength(80);
+        builder.Property(card => card.SourceId).HasMaxLength(120);
+        builder.HasIndex(card => new { card.ConceptId, card.Order });
+    }
+}
+
+public sealed class ReviewCardAttemptConfiguration : IEntityTypeConfiguration<ReviewCardAttempt>
+{
+    public void Configure(EntityTypeBuilder<ReviewCardAttempt> builder)
+    {
+        builder.HasKey(attempt => attempt.Id);
+        builder.Property(attempt => attempt.Id).HasMaxLength(80);
+        builder.Property(attempt => attempt.ProfileId).HasMaxLength(120);
+        builder.Property(attempt => attempt.ReviewCardId).HasMaxLength(120);
+        builder.Property(attempt => attempt.ConceptId).HasMaxLength(120);
+        builder.Property(attempt => attempt.Rating).HasMaxLength(40);
+        builder.HasIndex(attempt => new { attempt.ProfileId, attempt.ReviewCardId, attempt.ReviewedAt });
+        builder.HasIndex(attempt => new { attempt.ProfileId, attempt.ConceptId, attempt.ReviewedAt });
+    }
+}
+
+public sealed class StudyTimeEntryConfiguration : IEntityTypeConfiguration<StudyTimeEntry>
+{
+    public void Configure(EntityTypeBuilder<StudyTimeEntry> builder)
+    {
+        builder.HasKey(entry => entry.Id);
+        builder.Property(entry => entry.Id).HasMaxLength(80);
+        builder.Property(entry => entry.ProfileId).HasMaxLength(120);
+        builder.Property(entry => entry.TargetType).HasMaxLength(40);
+        builder.Property(entry => entry.TargetId).HasMaxLength(180);
+        builder.HasIndex(entry => new { entry.ProfileId, entry.TargetType, entry.TargetId, entry.StartedAt });
+        builder.HasIndex(entry => new { entry.ProfileId, entry.StartedAt });
+    }
+}

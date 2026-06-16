@@ -15,11 +15,11 @@ hints:
   - id: api-approach
     level: api-approach
     title: Use the invariant casing API
-    body: For deterministic programming exercises, prefer ToLowerInvariant over culture-sensitive casing.
+    body: For deterministic programming exercises, prefer ToLowerInvariant over culture-sensitive casing so tests behave consistently everywhere.
   - id: structural
     level: structural
     title: Keep the branch small
-    body: The entire method can be expressed as a null-coalescing expression that returns an empty string for null and lowercases otherwise.
+    body: The entire method can be expressed as a null-coalescing expression that returns an empty string for null and lowercases all non-null input otherwise.
 solution:
   title: Model solution
   body: The model solution keeps the method pure, explicit about null, and deterministic across cultures.
@@ -43,3 +43,9 @@ solution:
         public static IReadOnlyList<WordFrequency> SortFrequencies(Dictionary<string, int> frequencies) => throw new NotImplementedException();
         public static IReadOnlyList<WordFrequency> Analyze(string? text) => throw new NotImplementedException();
     }
+commonWrongApproaches:
+  - Calling ToLower without handling null first.
+  - Using culture-sensitive casing when the exercise requires deterministic invariant behavior.
+expectedSolutionCharacteristics:
+  - Returns an empty string for null input.
+  - Uses invariant casing and keeps the method pure.

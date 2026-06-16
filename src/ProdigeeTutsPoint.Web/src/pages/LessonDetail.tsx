@@ -7,6 +7,7 @@ import { Page } from '../components/Page'
 import { SourceList } from '../components/PrimitiveLists'
 import { SoftLockNotice } from '../components/SoftLockNotice'
 import { useApi } from '../hooks/useApi'
+import { useStudyTime } from '../hooks/useStudyTime'
 import type { LocalProfile } from '../types'
 
 export function LessonDetail({ profile }: { profile: LocalProfile }) {
@@ -14,6 +15,7 @@ export function LessonDetail({ profile }: { profile: LocalProfile }) {
   const { data: lesson, error, isLoading } = useApi<LessonDetailModel>(
     `/api/curriculum/lessons/${lessonId}`,
   )
+  useStudyTime({ profileId: profile.id, targetType: 'lesson', targetId: lessonId })
 
   return (
     <Page title={lesson?.title ?? 'Lesson'}>

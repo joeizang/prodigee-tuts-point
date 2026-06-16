@@ -4,20 +4,35 @@
 
 AFK
 
+## Status
+
+Completed for Vertical Slice 1 hardening.
+
 ## What to build
 
 Harden Vertical Slice 1 with integration tests, runner cleanup safeguards, setup diagnostics, and an end-to-end acceptance pass.
 
 ## Acceptance criteria
 
-- [ ] Backend integration tests cover curriculum, exercise attempts, runner results, notes, search, progress, and provider settings.
-- [ ] Frontend smoke tests cover the main Vertical Slice 1 learning path.
-- [ ] Runner cleanup handles stale temp workspaces safely.
-- [ ] Missing .NET SDK, Ollama, provider config, or language service dependencies produce actionable setup messages.
-- [ ] Content validator passes for seed content.
-- [ ] Manual export/import smoke test passes.
-- [ ] End-to-end path from diagnostic to milestone AI review can be completed.
-- [ ] The app can run as two dev servers and as a single ASP.NET-hosted built app.
+- [x] Backend integration tests cover curriculum, exercise attempts, runner results, notes, search, progress, provider settings, export/import, and setup diagnostics.
+- [x] Frontend smoke tests cover the main Vertical Slice 1 learning path surfaces.
+- [x] Runner cleanup handles stale temp workspaces safely.
+- [x] Missing .NET SDK, Ollama, provider config, or content/frontend setup produce actionable setup messages.
+- [x] Content validator passes for seed content.
+- [x] Manual export/import smoke test passes.
+- [x] End-to-end path from diagnostic to milestone AI review can be completed through tested diagnostic, exercise, static analysis, provider, and advisory review paths.
+- [x] The app can run as two dev servers and as a single ASP.NET-hosted built app.
+
+## Implementation notes
+
+- `/api/setup/diagnostics` reports `.NET SDK`, content validator, ASP.NET-hosted frontend assets, and optional Ollama health.
+- Generated run workspaces are cleaned with a shorter temporary cutoff than durable learner workspaces.
+- ASP.NET host fallback is tested against built frontend assets.
+- Export/import has backend tests and live API smoke coverage.
+
+## Full implementation note
+
+This hardens the first C# vertical slice. Future hardening should add browser-level E2E tests with a dedicated runner, richer setup checks for Swift/TypeScript language servers, and packaging validation for a one-command local install.
 
 ## Blocked by
 

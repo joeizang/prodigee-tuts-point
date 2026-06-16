@@ -39,6 +39,81 @@ public sealed class CurriculumEndpointTests
     }
 
     [Fact]
+    public async Task CliMilestoneEndpointReturnsLessonsExercisesAndSources()
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+
+        var milestone = await client.GetFromJsonAsync<MilestoneDetailTestResponse>(
+            "/api/curriculum/projects/wordfreq-csharp/milestones/cli-and-file-io",
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(milestone);
+        Assert.Equal("CLI and File I/O", milestone.Title);
+        Assert.Equal(3, milestone.Lessons.Count);
+        Assert.Equal(5, milestone.Exercises.Count);
+        Assert.Contains(milestone.Lessons, lesson => lesson.Id == "cli-contracts-and-exit-codes");
+        Assert.Contains(milestone.Exercises, exercise => exercise.Id == "run-wordfreq-cli-request");
+        Assert.NotEmpty(milestone.Sources);
+        Assert.Contains("exit codes", milestone.Markdown, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task TheoryClusterEndpointReturnsLessonStudyLinksWithSourceAnchors()
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+
+        var cluster = await client.GetFromJsonAsync<TheoryClusterTestResponse>(
+            "/api/curriculum/projects/wordfreq-csharp/milestones/pure-word-counting-core/theory-cluster",
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(cluster);
+        Assert.Equal("wordfreq-csharp", cluster.ProjectId);
+        Assert.Equal("pure-word-counting-core", cluster.MilestoneId);
+        Assert.Equal(6, cluster.Items.Count);
+
+        var first = cluster.Items.First();
+        Assert.Equal("text-as-data-csharp", first.LessonId);
+        Assert.Equal("Text as Data in C#", first.Title);
+        Assert.Contains(first.Sources, source =>
+            source.Id == "text-as-data-csharp:csharp-12-in-a-nutshell:string-char-immutability-indexing"
+            && source.BookTitle == "C# 12 in a Nutshell");
+    }
+
+    [Fact]
+    public async Task TheoryClusterEndpointReturnsCliMilestoneStudyLinks()
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+
+        var cluster = await client.GetFromJsonAsync<TheoryClusterTestResponse>(
+            "/api/curriculum/projects/wordfreq-csharp/milestones/cli-and-file-io/theory-cluster",
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(cluster);
+        Assert.Equal("cli-and-file-io", cluster.MilestoneId);
+        Assert.Equal(3, cluster.Items.Count);
+        Assert.Equal("cli-contracts-and-exit-codes", cluster.Items.First().LessonId);
+        Assert.All(cluster.Items, item => Assert.NotEmpty(item.Sources));
+    }
+
+    [Fact]
+    public async Task ProjectEndpointReturnsSecondMilestone()
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+
+        var project = await client.GetFromJsonAsync<ProjectDetailTestResponse>(
+            "/api/curriculum/projects/wordfreq-csharp",
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(project);
+        Assert.Equal(2, project.Milestones.Count);
+        Assert.Contains(project.Milestones, milestone => milestone.Id == "cli-and-file-io");
+    }
+
+    [Fact]
     public async Task SearchEndpointReturnsDeepLinksAcrossCurriculum()
     {
         await using var factory = new WebApplicationFactory<Program>();
@@ -175,6 +250,15 @@ public sealed class CurriculumEndpointTests
         string Description,
         string Language);
 
+    private sealed record ProjectDetailTestResponse(
+        string Id,
+        string TrackId,
+        string Title,
+        string Slug,
+        string Description,
+        string Language,
+        IReadOnlyCollection<MilestoneSummaryTestResponse> Milestones);
+
     private sealed record MilestoneDetailTestResponse(
         string Id,
         string ProjectId,
@@ -206,6 +290,21 @@ public sealed class CurriculumEndpointTests
         IReadOnlyCollection<SoftLockTestResponse> SoftLocks);
 
     private sealed record LessonSummaryTestResponse(string Id, string Title, string Summary);
+
+    private sealed record MilestoneSummaryTestResponse(string Id, string Title, string Summary);
+
+    private sealed record TheoryClusterTestResponse(
+        string ProjectId,
+        string MilestoneId,
+        string Title,
+        string Summary,
+        IReadOnlyCollection<TheoryClusterItemTestResponse> Items);
+
+    private sealed record TheoryClusterItemTestResponse(
+        string LessonId,
+        string Title,
+        string Summary,
+        IReadOnlyCollection<SourceReferenceWithIdTestResponse> Sources);
 
     private sealed record ExerciseSummaryTestResponse(string Id, string Title, string Summary, string Language);
 

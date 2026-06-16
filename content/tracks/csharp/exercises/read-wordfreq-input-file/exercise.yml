@@ -1,0 +1,54 @@
+id: read-wordfreq-input-file
+title: ReadWordfreqInputFile
+kind: focused
+workspace:
+  starter: tracks/csharp/exercises/_shared/WordFrequencyCli.cs
+  visibleTest: |
+    var path = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():n}.txt");
+    File.WriteAllText(path, "alpha beta");
+    try
+    {
+        Assert.Equal("alpha beta", WordFrequencyCli.ReadInputFile(path));
+    }
+    finally
+    {
+        File.Delete(path);
+    }
+  hiddenTest: |
+    var path = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():n}.txt");
+    File.WriteAllText(path, "line 1\nline 2");
+    try
+    {
+        Assert.Contains("line 2", WordFrequencyCli.ReadInputFile(path));
+    }
+    finally
+    {
+        File.Delete(path);
+    }
+hints:
+  - id: conceptual
+    level: conceptual
+    title: Keep I/O narrow
+    body: This method should read a path into text. Do not analyze, tokenize, or format anything here.
+  - id: api-approach
+    level: api-approach
+    title: Use File.ReadAllText
+    body: The focused milestone accepts a full-file read. Streaming is a later milestone, so keep this boundary intentionally small.
+  - id: structural
+    level: structural
+    title: Return the text directly
+    body: Let higher-level methods decide how to handle exceptions or convert them to CLI result objects.
+solution:
+  title: Model solution
+  body: The solution leaves file reading as a tiny adapter around the framework API.
+  code: |
+    public static string ReadInputFile(string path)
+    {
+        return File.ReadAllText(path);
+    }
+commonWrongApproaches:
+  - Calling Analyze inside the file reader.
+  - Returning an empty string for every exception and hiding real failures.
+expectedSolutionCharacteristics:
+  - Reads and returns the complete file text.
+  - Keeps the method focused on the I/O boundary only.

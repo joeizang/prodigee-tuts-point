@@ -2,7 +2,9 @@ using Microsoft.Extensions.FileProviders;
 using ProdigeeTutsPoint.Api.Features.AiReview;
 using ProdigeeTutsPoint.Api.Features.Curriculum;
 using ProdigeeTutsPoint.Api.Features.Exercises;
+using ProdigeeTutsPoint.Api.Features.ExportImport;
 using ProdigeeTutsPoint.Api.Features.Learning;
+using ProdigeeTutsPoint.Api.Features.Setup;
 using ProdigeeTutsPoint.Infrastructure;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -12,6 +14,7 @@ builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddScoped<IExerciseRunner, DotnetExerciseRunner>();
 builder.Services.AddScoped<ExerciseWorkspaceService>();
 builder.Services.AddScoped<ExerciseLanguageService>();
+builder.Services.AddScoped<ExportImportService>();
 builder.Services.AddHostedService<ExerciseLanguageServiceWarmupHostedService>();
 builder.Services.AddHttpClient<AiReviewService>(client =>
 {
@@ -42,6 +45,8 @@ app.MapCurriculumEndpoints();
 app.MapExerciseEndpoints();
 app.MapLearningEndpoints();
 app.MapAiReviewEndpoints();
+app.MapExportImportEndpoints();
+app.MapSetupDiagnosticsEndpoints();
 
 app.MapFallback(async context =>
 {

@@ -23,11 +23,24 @@ concepts:
   - id: csharp-api-design
     title: Small Core API Design
     description: Naming and shaping a small reusable core before adding CLI or file I/O.
+  - id: csharp-cli-contracts
+    title: CLI Contracts
+    description: Designing command-line behavior with explicit arguments, stdin, output, and exit-code rules.
+  - id: csharp-file-io
+    title: File Input and I/O Boundaries
+    description: Reading text from files and stdin while keeping side effects outside the analyzer core.
+  - id: csharp-error-handling
+    title: User-Facing Error Handling
+    description: Returning meaningful failures, deterministic messages, and useful exit codes without hiding defects.
 modules:
   - id: csharp-wordfreq-core
     title: Word Frequency Core
     description: Build the pure text-analysis core for the wordfreq-csharp project.
     order: 1
+  - id: csharp-wordfreq-cli
+    title: Word Frequency CLI
+    description: Wrap the pure analyzer with command-line input, file I/O, formatted output, and error handling.
+    order: 2
 lessons:
   - id: text-as-data-csharp
     moduleId: csharp-wordfreq-core
@@ -108,6 +121,48 @@ lessons:
         chapter: API Design
         topic: small surface area, names, maintainability
         usage: QualityAnchor
+  - id: cli-contracts-and-exit-codes
+    moduleId: csharp-wordfreq-cli
+    title: CLI Contracts and Exit Codes
+    summary: Define how a command-line tool receives input, reports success, and communicates failure.
+    markdown: tracks/csharp/lessons/cli-contracts-and-exit-codes.md
+    order: 7
+    concepts:
+      - csharp-cli-contracts
+      - csharp-error-handling
+    sourceReferences:
+      - book: code-that-fits-in-your-head
+        chapter: Error Handling and Contracts
+        topic: command boundaries, clear failures, maintainable interfaces
+        usage: QualityAnchor
+  - id: file-input-boundaries
+    moduleId: csharp-wordfreq-cli
+    title: File Input Boundaries
+    summary: Read text from files and stdin without contaminating the pure analyzer core.
+    markdown: tracks/csharp/lessons/file-input-boundaries.md
+    order: 8
+    concepts:
+      - csharp-file-io
+      - csharp-api-design
+    sourceReferences:
+      - book: programming-csharp-12
+        chapter: Streams and Files
+        topic: file reads, stdin, I/O boundary design
+        usage: QualityAnchor
+  - id: formatting-cli-output
+    moduleId: csharp-wordfreq-cli
+    title: Formatting CLI Output
+    summary: Turn analyzer results into deterministic, user-readable command output.
+    markdown: tracks/csharp/lessons/formatting-cli-output.md
+    order: 9
+    concepts:
+      - csharp-cli-contracts
+      - csharp-ordering
+    sourceReferences:
+      - book: csharp-12-in-a-nutshell
+        chapter: Formatting and Text
+        topic: string formatting, joining lines, deterministic text output
+        usage: QualityAnchor
 exercises:
   - id: normalize-to-lowercase
     title: NormalizeToLowercase
@@ -179,6 +234,46 @@ exercises:
     order: 10
     concepts:
       - csharp-api-design
+  - id: parse-wordfreq-cli-options
+    title: ParseWordfreqCliOptions
+    summary: Parse simple command-line arguments into a clear input mode and value.
+    directory: tracks/csharp/exercises/parse-wordfreq-cli-options
+    order: 11
+    concepts:
+      - csharp-cli-contracts
+      - csharp-error-handling
+  - id: read-wordfreq-input-file
+    title: ReadWordfreqInputFile
+    summary: Read all text from a file path with a narrow, testable I/O boundary.
+    directory: tracks/csharp/exercises/read-wordfreq-input-file
+    order: 12
+    concepts:
+      - csharp-file-io
+  - id: handle-missing-input-file
+    title: HandleMissingInputFile
+    summary: Return a user-facing failure when a requested input file does not exist.
+    directory: tracks/csharp/exercises/handle-missing-input-file
+    order: 13
+    concepts:
+      - csharp-file-io
+      - csharp-error-handling
+  - id: format-wordfreq-table
+    title: FormatWordfreqTable
+    summary: Format word frequency records into deterministic text output.
+    directory: tracks/csharp/exercises/format-wordfreq-table
+    order: 14
+    concepts:
+      - csharp-cli-contracts
+      - csharp-ordering
+  - id: run-wordfreq-cli-request
+    title: RunWordfreqCliRequest
+    summary: Combine option parsing, input reading, analysis, formatting, and exit codes.
+    directory: tracks/csharp/exercises/run-wordfreq-cli-request
+    order: 15
+    concepts:
+      - csharp-cli-contracts
+      - csharp-file-io
+      - csharp-error-handling
 projects:
   - id: wordfreq-csharp
     title: wordfreq-csharp
@@ -212,4 +307,24 @@ projects:
           - book: csharp-players-guide-5
             chapter: Methods and Collections
             topic: small methods, collection practice, exercise-driven learning
+            usage: QualityAnchor
+      - id: cli-and-file-io
+        title: CLI and File I/O
+        summary: Wrap the pure analyzer with argument parsing, input reading, deterministic output, and user-facing failures.
+        markdown: tracks/csharp/projects/wordfreq/milestones/cli-and-file-io.md
+        order: 2
+        lessons:
+          - cli-contracts-and-exit-codes
+          - file-input-boundaries
+          - formatting-cli-output
+        exercises:
+          - parse-wordfreq-cli-options
+          - read-wordfreq-input-file
+          - handle-missing-input-file
+          - format-wordfreq-table
+          - run-wordfreq-cli-request
+        sourceReferences:
+          - book: code-that-fits-in-your-head
+            chapter: Boundaries and Errors
+            topic: CLI contract, side-effect boundaries, failure messages
             usage: QualityAnchor

@@ -7,3 +7,45 @@ workspace:
     Assert.Equal("abc 123 ", WordFrequencyAnalyzer.KeepAsciiLettersAndDigits("abc!123?"));
   hiddenTest: |
     Assert.Equal("a b 9", WordFrequencyAnalyzer.KeepAsciiLettersAndDigits("a-b_9"));
+hints:
+  - id: conceptual
+    level: conceptual
+    title: Separators preserve boundaries
+    body: Non-word characters should not disappear completely when they sit between words. Replacing them with spaces preserves a later split boundary.
+  - id: api-approach
+    level: api-approach
+    title: Check ASCII ranges directly
+    body: For this milestone, explicit char range checks are clearer than broad Unicode classifiers.
+  - id: structural
+    level: structural
+    title: Build a new string
+    body: Iterate through the normalized text and append either the original ASCII letter/digit or a space separator.
+solution:
+  title: Model solution
+  body: The solution keeps ASCII letters and digits and turns every other character into a separator for the next pipeline step.
+  code: |
+    public static string KeepAsciiLettersAndDigits(string? text)
+    {
+        if (string.IsNullOrEmpty(text))
+        {
+            return string.Empty;
+        }
+
+        var builder = new System.Text.StringBuilder(text.Length);
+        foreach (var character in text)
+        {
+            var isAsciiLetterOrDigit =
+                character is >= 'a' and <= 'z'
+                or >= 'A' and <= 'Z'
+                or >= '0' and <= '9';
+            builder.Append(isAsciiLetterOrDigit ? character : ' ');
+        }
+
+        return builder.ToString();
+    }
+commonWrongApproaches:
+  - Keeping punctuation instead of converting it into separators.
+  - Using broad Unicode character checks while the milestone contract is intentionally ASCII-first.
+expectedSolutionCharacteristics:
+  - Preserves ASCII letters and digits exactly.
+  - Replaces every non-ASCII-word character with a space separator.

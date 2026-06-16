@@ -7,3 +7,34 @@ workspace:
     Assert.Equal(["alpha", "beta"], WordFrequencyAnalyzer.SortFrequencies(new() { ["beta"] = 1, ["alpha"] = 1 }).Select(item => item.Word));
   hiddenTest: |
     Assert.Equal(["beta", "alpha"], WordFrequencyAnalyzer.SortFrequencies(new() { ["alpha"] = 1, ["beta"] = 2 }).Select(item => item.Word));
+hints:
+  - id: conceptual
+    level: conceptual
+    title: Sorting is output policy
+    body: The dictionary is for updating counts. The sorted list is for stable project output.
+  - id: api-approach
+    level: api-approach
+    title: Chain ordering calls
+    body: Use OrderByDescending for Count, then ThenBy for Word so both sort keys are visible.
+  - id: structural
+    level: structural
+    title: Project pairs into records
+    body: Convert each dictionary pair to WordFrequency before returning the read-only list so callers receive the project result shape.
+solution:
+  title: Model solution
+  body: The solution makes the count rule and tie-breaker explicit so tests can compare the exact output order.
+  code: |
+    public static IReadOnlyList<WordFrequency> SortFrequencies(Dictionary<string, int> frequencies)
+    {
+        return frequencies
+            .Select(pair => new WordFrequency(pair.Key, pair.Value))
+            .OrderByDescending(item => item.Count)
+            .ThenBy(item => item.Word, StringComparer.Ordinal)
+            .ToList();
+    }
+commonWrongApproaches:
+  - Sorting only by count and leaving equal counts unstable.
+  - Returning dictionary pairs instead of the project result record shape.
+expectedSolutionCharacteristics:
+  - Sorts by count descending and word ascending.
+  - Projects dictionary entries into WordFrequency records.

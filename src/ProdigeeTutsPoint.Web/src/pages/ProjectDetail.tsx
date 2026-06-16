@@ -5,10 +5,12 @@ import { AsyncState } from '../components/AsyncState'
 import { NotesPanel } from '../components/NotesPanel'
 import { Page } from '../components/Page'
 import { useApi } from '../hooks/useApi'
+import { useStudyTime } from '../hooks/useStudyTime'
 import type { LocalProfile } from '../types'
 
 export function ProjectDetail({ profile }: { profile: LocalProfile }) {
   const { projectId = 'wordfreq-csharp' } = useParams()
+  useStudyTime({ profileId: profile.id, targetType: 'project', targetId: projectId })
   const { data: project, error, isLoading } = useApi<ProjectDetailModel>(
     `/api/curriculum/projects/${projectId}`,
   )

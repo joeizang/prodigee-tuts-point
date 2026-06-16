@@ -7,3 +7,32 @@ workspace:
     Assert.Equal(["hello", "world", "again"], WordFrequencyAnalyzer.Tokenize("Hello, world... again!"));
   hiddenTest: |
     Assert.Empty(WordFrequencyAnalyzer.Tokenize("...!!!"));
+hints:
+  - id: conceptual
+    level: conceptual
+    title: Punctuation should split words
+    body: Punctuation is a separator in this milestone, so commas and exclamation marks should not remain attached to words.
+  - id: api-approach
+    level: api-approach
+    title: Let the separator helper do the work
+    body: If KeepAsciiLettersAndDigits turns punctuation into spaces, SplitWordsOnSeparators can remove the empty gaps.
+  - id: structural
+    level: structural
+    title: Test the all-separator case
+    body: A string containing only punctuation should return an empty token list.
+solution:
+  title: Model solution
+  body: The same tokenizer pipeline handles simple sentences and punctuation-heavy input when separators are represented consistently.
+  code: |
+    public static IReadOnlyList<string> Tokenize(string? text)
+    {
+        var normalized = NormalizeToLowercase(text);
+        var separated = KeepAsciiLettersAndDigits(normalized);
+        return SplitWordsOnSeparators(separated);
+    }
+commonWrongApproaches:
+  - Leaving punctuation attached to neighboring words.
+  - Special-casing a few punctuation marks instead of using the separator helper consistently.
+expectedSolutionCharacteristics:
+  - Treats punctuation as separators through the shared helper.
+  - Returns no empty tokens when punctuation repeats.

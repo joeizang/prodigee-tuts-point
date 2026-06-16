@@ -1,0 +1,61 @@
+id: run-wordfreq-cli-request
+title: RunWordfreqCliRequest
+kind: milestone-integration
+workspace:
+  starter: tracks/csharp/exercises/_shared/WordFrequencyCli.cs
+  visibleTest: |
+    var result = WordFrequencyCli.Run(["--text", "Go go stop"], () => "", _ => "");
+    Assert.Equal(0, result.ExitCode);
+    Assert.Contains("go\t2", result.Output);
+  hiddenTest: |
+    var result = WordFrequencyCli.Run(["--file", "input.txt"], () => "", _ => "Beta beta alpha");
+    Assert.Equal(0, result.ExitCode);
+    Assert.StartsWith("beta\t2", result.Output);
+hints:
+  - id: conceptual
+    level: conceptual
+    title: Compose the boundary
+    body: Run should orchestrate parsing, input acquisition, analysis, and formatting without hiding all logic in one branch.
+  - id: api-approach
+    level: api-approach
+    title: Use delegates for input
+    body: The readStdin and readFile delegates make the command behavior testable without launching a real process.
+  - id: structural
+    level: structural
+    title: Convert expected user errors
+    body: Catch argument failures and return a non-zero result with a usage message. Let unexpected defects remain visible in later hardening work.
+solution:
+  title: Model solution
+  body: The solution composes the CLI pipeline and keeps input, analysis, formatting, and result channels separate.
+  code: |
+    public static CliResult Run(string[] args, Func<string> readStdin, Func<string, string> readFile)
+    {
+        try
+        {
+            var options = ParseOptions(args);
+            var text = options.Mode switch
+            {
+                CliInputMode.Stdin => readStdin(),
+                CliInputMode.Text => options.Value ?? string.Empty,
+                CliInputMode.File => readFile(options.Value ?? string.Empty),
+                _ => string.Empty,
+            };
+
+            var output = FormatTable(Analyze(text));
+            return new CliResult(0, output, string.Empty);
+        }
+        catch (ArgumentException exception)
+        {
+            return new CliResult(2, string.Empty, exception.Message);
+        }
+        catch (FileNotFoundException exception)
+        {
+            return new CliResult(2, string.Empty, exception.Message);
+        }
+    }
+commonWrongApproaches:
+  - Calling Console.ReadLine or File.ReadAllText directly inside the testable runner.
+  - Returning success when parsing fails or input cannot be read.
+expectedSolutionCharacteristics:
+  - Composes parser, input delegates, analyzer, and formatter.
+  - Returns clear non-zero failures for expected user-facing errors.

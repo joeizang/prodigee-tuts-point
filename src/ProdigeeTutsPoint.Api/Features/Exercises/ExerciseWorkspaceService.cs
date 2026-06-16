@@ -202,6 +202,16 @@ public sealed class ExerciseWorkspaceService(
             Column = diagnostic.Column,
             CreatedAt = runHistory.CreatedAt,
         }));
+        await AddExerciseConceptEvidenceAsync(
+            profileId,
+            exerciseId,
+            "ExerciseAttempt",
+            runHistory.Id,
+            ExerciseAttemptScore(status),
+            3,
+            $"Exercise run completed with status {status}.",
+            runHistory.CreatedAt,
+            cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
 
         return new ExerciseRunResponse(
@@ -433,9 +443,8 @@ public sealed class ExerciseWorkspaceService(
 
     private async Task CleanupOldWorkspacesAsync(CancellationToken cancellationToken)
     {
-        var cutoff = DateTimeOffset.UtcNow.AddDays(-14);
-        await CleanupOldDirectoriesAsync(GetWorkspaceRoot(), cutoff, cancellationToken);
-        await CleanupOldDirectoriesAsync(GetRunWorkspaceRoot(), cutoff, cancellationToken);
+        await CleanupOldDirectoriesAsync(GetWorkspaceRoot(), DateTimeOffset.UtcNow.AddDays(-14), cancellationToken);
+        await CleanupOldDirectoriesAsync(GetRunWorkspaceRoot(), DateTimeOffset.UtcNow.AddHours(-1), cancellationToken);
     }
 
     private static Task CleanupOldDirectoriesAsync(
@@ -689,6 +698,17 @@ public sealed class ExerciseWorkspaceService(
         }
 
         return "Passed";
+    }
+
+    private static int ExerciseAttemptScore(string status)
+    {
+        return status switch
+        {
+            "Passed" => 3,
+            "FailedHidden" => 2,
+            "FailedVisible" => 1,
+            _ => 0,
+        };
     }
 
     private static string HiddenOutputForLearner(CommandResult hidden)

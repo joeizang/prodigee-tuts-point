@@ -7,3 +7,36 @@ workspace:
     Assert.Equal(2, WordFrequencyAnalyzer.CountWords(["go", "go", "stop"])["go"]);
   hiddenTest: |
     Assert.False(WordFrequencyAnalyzer.CountWords([]).ContainsKey("missing"));
+hints:
+  - id: conceptual
+    level: conceptual
+    title: The dictionary is the frequency map
+    body: Each distinct word should appear once as a key, with its occurrence count as the value.
+  - id: api-approach
+    level: api-approach
+    title: Delegate single updates
+    body: If UpdateFrequencyMap handles one word correctly, CountWords can loop through tokens and call it.
+  - id: structural
+    level: structural
+    title: Start from an empty map
+    body: Create a dictionary, update it for each input word, then return it.
+solution:
+  title: Model solution
+  body: The solution keeps counting focused on building the map and leaves ordering to a later method.
+  code: |
+    public static Dictionary<string, int> CountWords(IEnumerable<string> words)
+    {
+        var counts = new Dictionary<string, int>();
+        foreach (var word in words)
+        {
+            UpdateFrequencyMap(counts, word);
+        }
+
+        return counts;
+    }
+commonWrongApproaches:
+  - Sorting inside CountWords before the ordering exercise.
+  - Assuming every word already exists in the dictionary.
+expectedSolutionCharacteristics:
+  - Starts from an empty dictionary and updates once per token.
+  - Delegates single-word update behavior to UpdateFrequencyMap or equivalent logic.

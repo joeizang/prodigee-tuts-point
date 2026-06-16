@@ -36,11 +36,17 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
 
     public DbSet<ProjectMilestone> ProjectMilestones => Set<ProjectMilestone>();
 
+    public DbSet<ReviewCard> ReviewCards => Set<ReviewCard>();
+
+    public DbSet<ReviewCardAttempt> ReviewCardAttempts => Set<ReviewCardAttempt>();
+
     public DbSet<SourceBook> SourceBooks => Set<SourceBook>();
 
     public DbSet<SourceReference> SourceReferences => Set<SourceReference>();
 
     public DbSet<StaticAnalysisDiagnosticRecord> StaticAnalysisDiagnostics => Set<StaticAnalysisDiagnosticRecord>();
+
+    public DbSet<StudyTimeEntry> StudyTimeEntries => Set<StudyTimeEntry>();
 
     public DbSet<Track> Tracks => Set<Track>();
 

@@ -7,3 +7,112 @@ workspace:
     Assert.Equal(new WordFrequency("go", 2), WordFrequencyAnalyzer.Analyze("Go go stop").First());
   hiddenTest: |
     Assert.Equal(new WordFrequency("alpha", 2), WordFrequencyAnalyzer.Analyze("Beta alpha beta alpha").First());
+hints:
+  - id: conceptual
+    level: conceptual
+    title: Assemble proven helpers
+    body: Analyze should feel like orchestration, not a brand-new parser that repeats every helper's internal behavior.
+  - id: api-approach
+    level: api-approach
+    title: Keep the core pure
+    body: The method should accept text and return WordFrequency records without reading files or printing output.
+  - id: structural
+    level: structural
+    title: Pipeline order matters
+    body: Tokenize first, count second, sort last, and keep each intermediate value easy to inspect while learning.
+solution:
+  title: Model solution
+  body: The solution composes a small pure core that later CLI milestones can wrap.
+  code: |
+    namespace Exercise;
+
+    public sealed record WordFrequency(string Word, int Count);
+
+    public static class WordFrequencyAnalyzer
+    {
+        public static string NormalizeToLowercase(string? text)
+        {
+            return text?.ToLowerInvariant() ?? string.Empty;
+        }
+
+        public static string KeepAsciiLettersAndDigits(string? text)
+        {
+            if (string.IsNullOrEmpty(text))
+            {
+                return string.Empty;
+            }
+
+            var builder = new System.Text.StringBuilder(text.Length);
+            foreach (var character in text)
+            {
+                var isAsciiLetterOrDigit =
+                    character is >= 'a' and <= 'z'
+                    or >= 'A' and <= 'Z'
+                    or >= '0' and <= '9';
+                builder.Append(isAsciiLetterOrDigit ? character : ' ');
+            }
+
+            return builder.ToString();
+        }
+
+        public static IReadOnlyList<string> SplitWordsOnSeparators(string? text)
+        {
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                return [];
+            }
+
+            return text.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        }
+
+        public static IReadOnlyList<string> Tokenize(string? text)
+        {
+            var normalized = NormalizeToLowercase(text);
+            var separated = KeepAsciiLettersAndDigits(normalized);
+            return SplitWordsOnSeparators(separated);
+        }
+
+        public static Dictionary<string, int> CountWords(IEnumerable<string> words)
+        {
+            var counts = new Dictionary<string, int>();
+            foreach (var word in words)
+            {
+                UpdateFrequencyMap(counts, word);
+            }
+
+            return counts;
+        }
+
+        public static void UpdateFrequencyMap(Dictionary<string, int> map, string word)
+        {
+            if (map.TryGetValue(word, out var count))
+            {
+                map[word] = count + 1;
+                return;
+            }
+
+            map[word] = 1;
+        }
+
+        public static IReadOnlyList<WordFrequency> SortFrequencies(Dictionary<string, int> frequencies)
+        {
+            return frequencies
+                .Select(pair => new WordFrequency(pair.Key, pair.Value))
+                .OrderByDescending(item => item.Count)
+                .ThenBy(item => item.Word, StringComparer.Ordinal)
+                .ToList();
+        }
+
+        public static IReadOnlyList<WordFrequency> Analyze(string? text)
+        {
+            var tokens = Tokenize(text);
+            var counts = CountWords(tokens);
+            return SortFrequencies(counts);
+        }
+    }
+commonWrongApproaches:
+  - Rewriting the whole analyzer inside Analyze instead of composing proven helpers.
+  - Reading files or printing output from the pure core.
+expectedSolutionCharacteristics:
+  - Composes tokenization, counting, and sorting without side effects.
+  - Returns deterministic WordFrequency records for later CLI layers to format.

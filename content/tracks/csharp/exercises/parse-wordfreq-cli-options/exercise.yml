@@ -1,0 +1,42 @@
+id: parse-wordfreq-cli-options
+title: ParseWordfreqCliOptions
+kind: focused
+workspace:
+  starter: tracks/csharp/exercises/_shared/WordFrequencyCli.cs
+  visibleTest: |
+    Assert.Equal(new CliOptions(CliInputMode.Text, "Hello world"), WordFrequencyCli.ParseOptions(["--text", "Hello world"]));
+  hiddenTest: |
+    Assert.Equal(new CliOptions(CliInputMode.Stdin, null), WordFrequencyCli.ParseOptions([]));
+hints:
+  - id: conceptual
+    level: conceptual
+    title: Parse into a model
+    body: The parser should describe what the user asked for. It should not read files, analyze words, or format output.
+  - id: api-approach
+    level: api-approach
+    title: Use small argument shapes
+    body: This milestone only supports zero arguments, --text with one value, and --file with one path. Reject everything else clearly.
+  - id: structural
+    level: structural
+    title: Pattern matching fits
+    body: A switch expression over the string array can keep the supported command shapes compact and visible.
+solution:
+  title: Model solution
+  body: The solution maps valid argument shapes into CliOptions and rejects ambiguous or unknown shapes with a usage error.
+  code: |
+    public static CliOptions ParseOptions(string[] args)
+    {
+        return args switch
+        {
+            [] => new CliOptions(CliInputMode.Stdin, null),
+            ["--text", var value] when !string.IsNullOrWhiteSpace(value) => new CliOptions(CliInputMode.Text, value),
+            ["--file", var path] when !string.IsNullOrWhiteSpace(path) => new CliOptions(CliInputMode.File, path),
+            _ => throw new ArgumentException("Usage: wordfreq [--text VALUE|--file PATH]"),
+        };
+    }
+commonWrongApproaches:
+  - Reading files or stdin inside the parser.
+  - Accepting ambiguous argument combinations without reporting usage failure.
+expectedSolutionCharacteristics:
+  - Returns stdin mode when no arguments are supplied.
+  - Rejects unsupported shapes with a clear ArgumentException.

@@ -7,3 +7,35 @@ workspace:
     Assert.Equal(["alpha", "beta"], WordFrequencyAnalyzer.SplitWordsOnSeparators("alpha  beta"));
   hiddenTest: |
     Assert.Empty(WordFrequencyAnalyzer.SplitWordsOnSeparators("    "));
+hints:
+  - id: conceptual
+    level: conceptual
+    title: Separators are not words
+    body: Splitting should remove empty entries so repeated spaces do not become tokens.
+  - id: api-approach
+    level: api-approach
+    title: Use split options
+    body: StringSplitOptions.RemoveEmptyEntries expresses the no-empty-token rule directly and keeps repeated separators from leaking into the result.
+  - id: structural
+    level: structural
+    title: Return an immutable-looking result
+    body: Convert the split array to a list or return it as IReadOnlyList<string> after filtering empty entries.
+solution:
+  title: Model solution
+  body: The solution treats null as empty input and removes empty entries created by repeated separators.
+  code: |
+    public static IReadOnlyList<string> SplitWordsOnSeparators(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return [];
+        }
+
+        return text.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+    }
+commonWrongApproaches:
+  - Returning empty tokens when spaces repeat.
+  - Throwing for null or whitespace-only input instead of returning an empty result.
+expectedSolutionCharacteristics:
+  - Removes empty entries created by repeated separators.
+  - Treats null, empty, and whitespace-only input as no words.

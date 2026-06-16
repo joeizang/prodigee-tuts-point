@@ -105,7 +105,68 @@ public sealed class LearningEndpointTests
             TestContext.Current.CancellationToken);
 
         Assert.NotNull(mastery);
-        Assert.Contains(mastery, concept => concept.ConceptId == "csharp-dictionaries" && concept.Score == 1);
+        Assert.Contains(mastery, concept => concept.ConceptId == "csharp-dictionaries" && concept.Score == 1 && concept.Status == "Introduced");
+
+        var latest = await client.GetFromJsonAsync<DiagnosticAttemptTestResponse>(
+            $"/api/learner/diagnostics/csharp/latest?profileId={profileId}",
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(latest);
+        Assert.Equal(attempt.Id, latest.Id);
+    }
+
+    [Fact]
+    public async Task ReviewCardsStudyTimeAndSummaryAreTrackedPrivately()
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+        var profileId = $"mastery-loop-test-{Guid.NewGuid():n}";
+
+        var initialSummary = await client.GetFromJsonAsync<LearnerSummaryTestResponse>(
+            $"/api/learner/summary?profileId={profileId}",
+            TestContext.Current.CancellationToken);
+        var cards = await client.GetFromJsonAsync<IReadOnlyCollection<ReviewCardTestResponse>>(
+            $"/api/learner/review/cards?profileId={profileId}",
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(initialSummary);
+        Assert.Contains("Private", initialSummary.GamificationPolicy);
+        Assert.NotNull(cards);
+        Assert.NotEmpty(cards);
+        Assert.All(cards, card => Assert.True(card.IsDue));
+
+        var firstCard = cards.First();
+        var reviewResponse = await client.PostAsJsonAsync(
+            $"/api/learner/review/cards/{firstCard.Id}/attempts",
+            new ReviewCardAttemptTestRequest(profileId, "good"),
+            TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.OK, reviewResponse.StatusCode);
+
+        var timeResponse = await client.PostAsJsonAsync(
+            "/api/learner/study-time",
+            new StudyTimeRecordTestRequest(
+                profileId,
+                "lesson",
+                "text-as-data-csharp",
+                90,
+                DateTimeOffset.UtcNow.AddSeconds(-90),
+                DateTimeOffset.UtcNow),
+            TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.OK, timeResponse.StatusCode);
+
+        var summary = await client.GetFromJsonAsync<LearnerSummaryTestResponse>(
+            $"/api/learner/summary?profileId={profileId}",
+            TestContext.Current.CancellationToken);
+        var mastery = await client.GetFromJsonAsync<IReadOnlyCollection<ConceptMasteryTestResponse>>(
+            $"/api/learner/mastery/concepts?profileId={profileId}",
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(summary);
+        Assert.True(summary.TotalStudySeconds >= 90);
+        Assert.True(summary.StudyStreakDays >= 1);
+        Assert.True(summary.ReviewDueCount < cards.Count);
+        Assert.NotNull(mastery);
+        Assert.Contains(mastery, concept => concept.Status is "Introduced" or "Practiced" or "Applied" or "Reliable");
     }
 
     private sealed record NoteUpsertTestRequest(
@@ -154,7 +215,43 @@ public sealed class LearningEndpointTests
 
     private sealed record ConceptMasteryTestResponse(
         string ConceptId,
+        string Title,
         int Score,
         int MaxScore,
-        int EvidenceCount);
+        int EvidenceCount,
+        string Status,
+        DateTimeOffset? LastActivityAt);
+
+    private sealed record LearnerSummaryTestResponse(
+        int ReviewDueCount,
+        int StudyStreakDays,
+        int TotalStudySeconds,
+        int MilestonesCompleted,
+        int MilestoneCount,
+        int ExercisesPassed,
+        int ExerciseCount,
+        int ReliableConcepts,
+        int ConceptCount,
+        string GamificationPolicy);
+
+    private sealed record ReviewCardTestResponse(
+        string Id,
+        string ConceptId,
+        string Prompt,
+        string Answer,
+        string SourceType,
+        string SourceId,
+        DateTimeOffset? LastReviewedAt,
+        DateTimeOffset DueAt,
+        bool IsDue);
+
+    private sealed record ReviewCardAttemptTestRequest(string ProfileId, string Rating);
+
+    private sealed record StudyTimeRecordTestRequest(
+        string ProfileId,
+        string TargetType,
+        string TargetId,
+        int ActiveSeconds,
+        DateTimeOffset? StartedAt,
+        DateTimeOffset? EndedAt);
 }

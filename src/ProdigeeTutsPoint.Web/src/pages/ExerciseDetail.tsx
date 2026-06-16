@@ -21,10 +21,12 @@ import {
 } from '../features/exercises/ExerciseWorkspacePanel'
 import { selectActiveWorkspaceFile } from '../features/exercises/workspaceFiles'
 import { useApi } from '../hooks/useApi'
+import { useStudyTime } from '../hooks/useStudyTime'
 import type { LocalProfile, Theme } from '../types'
 
 export function ExerciseDetail({ profile, theme }: { profile: LocalProfile; theme: Theme }) {
   const { exerciseId = 'normalize-to-lowercase' } = useParams()
+  useStudyTime({ profileId: profile.id, targetType: 'exercise', targetId: exerciseId })
   const { data: exercise, error, isLoading } = useApi<ExerciseDetailModel>(
     `/api/curriculum/exercises/${exerciseId}`,
   )

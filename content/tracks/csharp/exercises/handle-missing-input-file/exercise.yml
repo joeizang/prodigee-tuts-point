@@ -1,0 +1,56 @@
+id: handle-missing-input-file
+title: HandleMissingInputFile
+kind: focused
+workspace:
+  starter: tracks/csharp/exercises/_shared/WordFrequencyCli.cs
+  visibleTest: |
+    var missing = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():n}.txt");
+    var result = WordFrequencyCli.TryReadInputFile(missing);
+    Assert.Equal(2, result.ExitCode);
+    Assert.Contains(missing, result.Error);
+  hiddenTest: |
+    var path = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():n}.txt");
+    File.WriteAllText(path, "ok");
+    try
+    {
+        var result = WordFrequencyCli.TryReadInputFile(path);
+        Assert.Equal(0, result.ExitCode);
+        Assert.Equal("ok", result.Output);
+        Assert.Equal(string.Empty, result.Error);
+    }
+    finally
+    {
+        File.Delete(path);
+    }
+hints:
+  - id: conceptual
+    level: conceptual
+    title: Missing files are user failures
+    body: A missing path is usually not a programmer defect. Return a clear result instead of pretending the command succeeded.
+  - id: api-approach
+    level: api-approach
+    title: Check File.Exists
+    body: File.Exists lets you handle the most common user-facing file error before calling File.ReadAllText.
+  - id: structural
+    level: structural
+    title: Keep result channels distinct
+    body: Success text should go in Output. Failure explanation should go in Error with a non-zero exit code.
+solution:
+  title: Model solution
+  body: The solution reports missing files with exit code 2 and returns successful file contents through Output.
+  code: |
+    public static CliResult TryReadInputFile(string path)
+    {
+        if (!File.Exists(path))
+        {
+            return new CliResult(2, string.Empty, $"Input file not found: {path}");
+        }
+
+        return new CliResult(0, File.ReadAllText(path), string.Empty);
+    }
+commonWrongApproaches:
+  - Returning exit code 0 while placing an error message in output.
+  - Omitting the missing path from the error message.
+expectedSolutionCharacteristics:
+  - Uses a non-zero exit code for missing files.
+  - Keeps successful content and failure text in separate result fields.

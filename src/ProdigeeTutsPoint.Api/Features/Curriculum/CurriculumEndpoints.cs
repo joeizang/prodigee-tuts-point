@@ -370,6 +370,44 @@ public static class CurriculumEndpoints
                 await BuildMilestoneSoftLocksAsync(db, milestone.ProjectId, milestone.Id, ct)));
         });
 
+        group.MapGet("/projects/{projectId}/milestones/{milestoneId}/theory-cluster", async (
+            string projectId,
+            string milestoneId,
+            AppDbContext db,
+            CancellationToken ct) =>
+        {
+            var cluster = await db.ProjectMilestones
+                .Where(milestone => milestone.ProjectId == projectId && milestone.Id == milestoneId)
+                .Select(milestone => new TheoryClusterResponse(
+                    milestone.ProjectId,
+                    milestone.Id,
+                    milestone.Title,
+                    milestone.Summary,
+                    milestone.Lessons
+                        .OrderBy(link => link.Order)
+                        .Select(link => new TheoryClusterItemResponse(
+                            link.LessonId,
+                            link.Lesson!.Title,
+                            link.Lesson.Summary,
+                            link.Lesson.SourceReferences
+                                .OrderBy(reference => reference.SourceBook!.Title)
+                                .ThenBy(reference => reference.Chapter)
+                                .ThenBy(reference => reference.Topic)
+                                .Select(reference => new SourceReferenceResponse(
+                                    reference.Id,
+                                    reference.SourceBookId,
+                                    reference.SourceBook!.Title,
+                                    reference.Chapter,
+                                    reference.Pages,
+                                    reference.Topic,
+                                    reference.Usage))
+                                .ToList()))
+                        .ToList()))
+                .FirstOrDefaultAsync(ct);
+
+            return cluster is null ? Results.NotFound() : Results.Ok(cluster);
+        });
+
         group.MapGet("/lessons/{lessonId}", async (
             string lessonId,
             AppDbContext db,
@@ -593,6 +631,19 @@ public sealed record MilestoneDetailResponse(
     IReadOnlyCollection<SoftLockResponse> SoftLocks);
 
 public sealed record LessonSummaryResponse(string Id, string Title, string Summary);
+
+public sealed record TheoryClusterResponse(
+    string ProjectId,
+    string MilestoneId,
+    string Title,
+    string Summary,
+    IReadOnlyCollection<TheoryClusterItemResponse> Items);
+
+public sealed record TheoryClusterItemResponse(
+    string LessonId,
+    string Title,
+    string Summary,
+    IReadOnlyCollection<SourceReferenceResponse> Sources);
 
 public sealed record LessonDetailResponse(
     string Id,

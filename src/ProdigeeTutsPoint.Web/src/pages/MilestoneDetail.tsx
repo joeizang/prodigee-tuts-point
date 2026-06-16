@@ -9,10 +9,12 @@ import { Page, Panel } from '../components/Page'
 import { LinkedList, SourceList } from '../components/PrimitiveLists'
 import { SoftLockNotice } from '../components/SoftLockNotice'
 import { useApi } from '../hooks/useApi'
+import { useStudyTime } from '../hooks/useStudyTime'
 import type { LocalProfile } from '../types'
 
 export function MilestoneDetail({ profile }: { profile: LocalProfile }) {
   const { milestoneId = 'pure-word-counting-core', projectId = 'wordfreq-csharp' } = useParams()
+  useStudyTime({ profileId: profile.id, targetType: 'milestone', targetId: milestoneId })
   const { data: milestone, error, isLoading } = useApi<MilestoneDetailModel>(
     `/api/curriculum/projects/${projectId}/milestones/${milestoneId}`,
   )

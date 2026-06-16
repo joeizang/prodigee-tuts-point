@@ -1,19 +1,25 @@
 import { CheckCircle2 } from 'lucide-react'
 import { useState } from 'react'
 import { postJson } from '../api'
-import type { Diagnostic, DiagnosticAttempt } from '../api'
+import type { Diagnostic, DiagnosticAttempt, ReviewCard } from '../api'
 import { AsyncState } from '../components/AsyncState'
-import { Page } from '../components/Page'
+import { Page, Panel } from '../components/Page'
 import { useApi } from '../hooks/useApi'
+import { useStudyTime } from '../hooks/useStudyTime'
 import type { LocalProfile } from '../types'
 
 export function Review({ profile }: { profile: LocalProfile }) {
+  useStudyTime({ profileId: profile.id, targetType: 'review', targetId: 'csharp' })
   const { data: diagnostic, error, isLoading } = useApi<Diagnostic>('/api/learner/diagnostics/csharp')
   const { data: latest } = useApi<DiagnosticAttempt | null>(
     `/api/learner/diagnostics/csharp/latest?profileId=${encodeURIComponent(profile.id)}`,
   )
+  const { data: initialCards } = useApi<ReviewCard[]>(
+    `/api/learner/review/cards?profileId=${encodeURIComponent(profile.id)}`,
+  )
   const [answers, setAnswers] = useState<Record<string, string>>({})
   const [result, setResult] = useState<DiagnosticAttempt | null>(null)
+  const [cardsOverride, setCardsOverride] = useState<ReviewCard[] | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   const submitDiagnostic = async () => {
@@ -37,12 +43,56 @@ export function Review({ profile }: { profile: LocalProfile }) {
   }
 
   const visibleResult = result ?? latest
+  const cards = cardsOverride ?? initialCards ?? []
+
+  const rateCard = async (card: ReviewCard, rating: string) => {
+    await postJson(`/api/learner/review/cards/${card.id}/attempts`, {
+      profileId: profile.id,
+      rating,
+    })
+    setCardsOverride((current) =>
+      (current ?? cards).map((candidate) =>
+        candidate.id === card.id
+          ? { ...candidate, lastReviewedAt: new Date().toISOString(), isDue: rating === 'again' }
+          : candidate,
+      ),
+    )
+  }
 
   return (
     <Page title="Review">
       <AsyncState error={error} isLoading={isLoading} />
       {diagnostic && (
         <div className="content-stack">
+          <Panel title="Due Review Cards">
+            <div className="review-card-list">
+              {cards.filter((card) => card.isDue).length === 0 ? (
+                <p className="body-copy">No cards are due right now.</p>
+              ) : (
+                cards
+                  .filter((card) => card.isDue)
+                  .map((card) => (
+                    <article className="review-card" key={card.id}>
+                      <strong>{card.prompt}</strong>
+                      <p>{card.answer}</p>
+                      <small>{card.conceptId}</small>
+                      <div className="review-rating-row">
+                        {['again', 'hard', 'good', 'easy'].map((rating) => (
+                          <button
+                            className="secondary-action"
+                            key={rating}
+                            type="button"
+                            onClick={() => void rateCard(card, rating)}
+                          >
+                            {rating}
+                          </button>
+                        ))}
+                      </div>
+                    </article>
+                  ))
+              )}
+            </div>
+          </Panel>
           <p className="body-copy">{diagnostic.summary}</p>
           {visibleResult && (
             <section className="diagnostic-result">

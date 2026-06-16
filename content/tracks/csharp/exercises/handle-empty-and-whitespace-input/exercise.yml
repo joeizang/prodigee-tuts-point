@@ -7,3 +7,32 @@ workspace:
     Assert.Empty(WordFrequencyAnalyzer.Analyze("   !!!   "));
   hiddenTest: |
     Assert.Empty(WordFrequencyAnalyzer.Analyze(string.Empty));
+hints:
+  - id: conceptual
+    level: conceptual
+    title: Empty input is valid input
+    body: The analyzer should return no results, not throw, when there are no words to count.
+  - id: api-approach
+    level: api-approach
+    title: Let the pipeline collapse empty data
+    body: If tokenization returns an empty list, counting and sorting should naturally return empty results.
+  - id: structural
+    level: structural
+    title: Avoid special cases in Analyze
+    body: A well-shaped pipeline can handle null, empty, whitespace, and separator-only input without many branches.
+solution:
+  title: Model solution
+  body: The solution lets each stage handle empty data so Analyze remains small.
+  code: |
+    public static IReadOnlyList<WordFrequency> Analyze(string? text)
+    {
+        var tokens = Tokenize(text);
+        var counts = CountWords(tokens);
+        return SortFrequencies(counts);
+    }
+commonWrongApproaches:
+  - Adding special-case branches in Analyze for every empty-looking input.
+  - Throwing when there are no tokens to count.
+expectedSolutionCharacteristics:
+  - Lets the pipeline naturally collapse empty input to an empty result.
+  - Handles null, whitespace, and separator-only strings consistently.

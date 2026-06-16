@@ -12,3 +12,36 @@ workspace:
     var map = new Dictionary<string, int> { ["go"] = 9 };
     WordFrequencyAnalyzer.UpdateFrequencyMap(map, "go");
     Assert.Equal(10, map["go"]);
+hints:
+  - id: conceptual
+    level: conceptual
+    title: Missing and existing keys differ
+    body: The first occurrence initializes a count. Later occurrences increment the existing value.
+  - id: api-approach
+    level: api-approach
+    title: Prefer TryGetValue
+    body: TryGetValue avoids exceptions and makes both missing-key and existing-key cases explicit in one readable branch.
+  - id: structural
+    level: structural
+    title: Mutate only the supplied map
+    body: This method should update the dictionary it receives, return void, and avoid replacing the caller's map instance.
+solution:
+  title: Model solution
+  body: The solution handles both missing and existing words without assuming the key already exists.
+  code: |
+    public static void UpdateFrequencyMap(Dictionary<string, int> map, string word)
+    {
+        if (map.TryGetValue(word, out var count))
+        {
+            map[word] = count + 1;
+            return;
+        }
+
+        map[word] = 1;
+    }
+commonWrongApproaches:
+  - Using the dictionary indexer before checking whether the key exists.
+  - Replacing the caller's dictionary instance instead of mutating the supplied map.
+expectedSolutionCharacteristics:
+  - Uses a safe missing-key and existing-key branch.
+  - Leaves the supplied dictionary as the single updated state holder.

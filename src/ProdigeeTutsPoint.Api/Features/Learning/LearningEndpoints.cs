@@ -155,9 +155,8 @@ public static class LearningEndpoints
 
         group.MapGet("/diagnostics/csharp/latest", async (string profileId, AppDbContext db, CancellationToken ct) =>
         {
-            var attempt = await db.DiagnosticAttempts
+            var attempts = await db.DiagnosticAttempts
                 .Where(attempt => attempt.ProfileId == profileId && attempt.TrackId == "csharp")
-                .OrderByDescending(attempt => attempt.SubmittedAt)
                 .Select(attempt => new DiagnosticAttemptResponse(
                     attempt.Id,
                     attempt.TrackId,
@@ -167,7 +166,10 @@ public static class LearningEndpoints
                     attempt.RecommendationTargetId,
                     attempt.RecommendationSummary,
                     attempt.SubmittedAt))
-                .FirstOrDefaultAsync(ct);
+                .ToListAsync(ct);
+            var attempt = attempts
+                .OrderByDescending(attempt => attempt.SubmittedAt)
+                .FirstOrDefault();
 
             return Results.Ok(attempt);
         });
@@ -231,20 +233,308 @@ public static class LearningEndpoints
 
         group.MapGet("/mastery/concepts", async (string profileId, AppDbContext db, CancellationToken ct) =>
         {
-            var evidence = await db.ConceptMasteryEvidence
+            var evidenceRows = await db.ConceptMasteryEvidence
                 .Where(evidence => evidence.ProfileId == profileId)
-                .GroupBy(evidence => evidence.ConceptId)
-                .Select(group => new ConceptMasterySummaryResponse(
-                    group.Key,
-                    group.Sum(evidence => evidence.Score),
-                    group.Sum(evidence => evidence.MaxScore),
-                    group.Count()))
                 .ToListAsync(ct);
+            var concepts = await db.Concepts
+                .Select(concept => new { concept.Id, concept.Title })
+                .ToListAsync(ct);
+            var evidenceByConcept = evidenceRows.ToLookup(evidence => evidence.ConceptId);
+            var evidence = concepts
+                .Select(concept =>
+                {
+                    var rows = evidenceByConcept[concept.Id].ToArray();
+                    var score = rows.Sum(row => row.Score);
+                    var maxScore = rows.Sum(row => row.MaxScore);
+                    DateTimeOffset? lastActivityAt = rows.Length == 0 ? null : rows.Max(row => row.CreatedAt);
+                    return new ConceptMasterySummaryResponse(
+                        concept.Id,
+                        concept.Title,
+                        score,
+                        maxScore,
+                        rows.Length,
+                        MasteryStatus(score, maxScore, rows.Length, lastActivityAt),
+                        lastActivityAt);
+                })
+                .OrderBy(concept => concept.ConceptId)
+                .ToArray();
 
             return Results.Ok(evidence);
         });
 
+        group.MapGet("/summary", async (string profileId, AppDbContext db, CancellationToken ct) =>
+        {
+            var masteryRows = await db.ConceptMasteryEvidence
+                .Where(evidence => evidence.ProfileId == profileId)
+                .ToListAsync(ct);
+            var conceptCount = await db.Concepts.CountAsync(ct);
+            var mastery = masteryRows
+                .GroupBy(evidence => evidence.ConceptId)
+                .Select(group =>
+                {
+                    var score = group.Sum(evidence => evidence.Score);
+                    var maxScore = group.Sum(evidence => evidence.MaxScore);
+                    var lastActivityAt = group.Max(evidence => evidence.CreatedAt);
+                    return MasteryStatus(score, maxScore, group.Count(), lastActivityAt);
+                })
+                .ToArray();
+            var reliableConcepts = mastery.Count(status => status == "Reliable");
+            var reviewDueCount = await ReviewDueCountAsync(profileId, db, ct);
+            var exerciseTotal = await db.Exercises.CountAsync(ct);
+            var exercisePassed = await db.ExerciseRunHistory
+                .Where(history => history.ProfileId == profileId && history.Status == "Passed")
+                .Select(history => history.ExerciseId)
+                .Distinct()
+                .CountAsync(ct);
+            var milestoneTotal = await db.ProjectMilestones.CountAsync(ct);
+            var milestoneCompleted = exerciseTotal > 0 && exercisePassed >= exerciseTotal ? 1 : 0;
+            var studyRows = await db.StudyTimeEntries
+                .Where(entry => entry.ProfileId == profileId)
+                .Select(entry => new { entry.StartedAt, entry.ActiveSeconds })
+                .ToListAsync(ct);
+            var totalStudySeconds = studyRows.Sum(entry => entry.ActiveSeconds);
+            var streakDays = StudyStreakDays(studyRows.Select(entry => entry.StartedAt));
+
+            return Results.Ok(new LearnerSummaryResponse(
+                reviewDueCount,
+                streakDays,
+                totalStudySeconds,
+                milestoneCompleted,
+                milestoneTotal,
+                exercisePassed,
+                exerciseTotal,
+                reliableConcepts,
+                conceptCount,
+                "Private personal progress only. No social comparison is recorded or displayed."));
+        });
+
+        group.MapGet("/review/cards", async (string profileId, AppDbContext db, CancellationToken ct) =>
+        {
+            var cards = await db.ReviewCards
+                .Where(card => card.IsActive)
+                .OrderBy(card => card.Order)
+                .ToListAsync(ct);
+            var attempts = await db.ReviewCardAttempts
+                .Where(attempt => attempt.ProfileId == profileId)
+                .ToListAsync(ct);
+            var attemptsByCard = attempts.ToLookup(attempt => attempt.ReviewCardId);
+            var now = DateTimeOffset.UtcNow;
+            return Results.Ok(cards.Select(card =>
+            {
+                var cardAttempts = attemptsByCard[card.Id].OrderByDescending(attempt => attempt.ReviewedAt).ToArray();
+                var last = cardAttempts.FirstOrDefault();
+                var dueAt = NextReviewAt(last);
+                return new ReviewCardResponse(
+                    card.Id,
+                    card.ConceptId,
+                    card.Prompt,
+                    card.Answer,
+                    card.SourceType,
+                    card.SourceId,
+                    last?.ReviewedAt,
+                    dueAt,
+                    dueAt <= now);
+            }).ToArray());
+        });
+
+        group.MapPost("/review/cards/{cardId}/attempts", async (
+            string cardId,
+            ReviewCardAttemptRequest request,
+            AppDbContext db,
+            CancellationToken ct) =>
+        {
+            var card = await db.ReviewCards.FirstOrDefaultAsync(card => card.Id == cardId && card.IsActive, ct);
+            if (card is null)
+            {
+                return Results.NotFound();
+            }
+
+            var now = DateTimeOffset.UtcNow;
+            var score = request.Rating.Trim().ToLowerInvariant() switch
+            {
+                "again" => 0,
+                "hard" => 1,
+                "good" => 2,
+                "easy" => 3,
+                _ => 1,
+            };
+            var attempt = new ReviewCardAttempt
+            {
+                Id = Guid.NewGuid().ToString("n"),
+                ProfileId = request.ProfileId,
+                ReviewCardId = card.Id,
+                ConceptId = card.ConceptId,
+                Rating = request.Rating,
+                Score = score,
+                MaxScore = 3,
+                ReviewedAt = now,
+            };
+            db.ReviewCardAttempts.Add(attempt);
+            db.ConceptMasteryEvidence.Add(new ConceptMasteryEvidence
+            {
+                Id = Guid.NewGuid().ToString("n"),
+                ProfileId = request.ProfileId,
+                ConceptId = card.ConceptId,
+                SourceType = "ReviewRecall",
+                SourceId = attempt.Id,
+                Score = score,
+                MaxScore = 3,
+                Summary = $"Review card rated {request.Rating}.",
+                CreatedAt = now,
+            });
+            await db.SaveChangesAsync(ct);
+
+            return Results.Ok(new ReviewCardAttemptResponse(attempt.Id, attempt.ReviewCardId, attempt.ConceptId, attempt.Rating, attempt.Score, attempt.MaxScore, attempt.ReviewedAt));
+        });
+
+        group.MapPost("/study-time", async (StudyTimeRecordRequest request, AppDbContext db, CancellationToken ct) =>
+        {
+            var targetType = NormalizeTargetType(request.TargetType);
+            if (!await TargetExistsAsync(db, targetType, request.TargetId, ct))
+            {
+                return Results.BadRequest(new ProblemResponse("Unknown study-time target."));
+            }
+
+            var activeSeconds = Math.Clamp(request.ActiveSeconds, 1, 15 * 60);
+            var endedAt = request.EndedAt ?? DateTimeOffset.UtcNow;
+            var startedAt = request.StartedAt ?? endedAt.AddSeconds(-activeSeconds);
+            var entry = new StudyTimeEntry
+            {
+                Id = Guid.NewGuid().ToString("n"),
+                ProfileId = request.ProfileId,
+                TargetType = targetType,
+                TargetId = request.TargetId,
+                ActiveSeconds = activeSeconds,
+                StartedAt = startedAt,
+                EndedAt = endedAt,
+            };
+            db.StudyTimeEntries.Add(entry);
+
+            if (activeSeconds >= 30)
+            {
+                foreach (var conceptId in await ConceptIdsForTargetAsync(db, targetType, request.TargetId, ct))
+                {
+                    db.ConceptMasteryEvidence.Add(new ConceptMasteryEvidence
+                    {
+                        Id = Guid.NewGuid().ToString("n"),
+                        ProfileId = request.ProfileId,
+                        ConceptId = conceptId,
+                        SourceType = "StudyTime",
+                        SourceId = entry.Id,
+                        Score = targetType is "project" or "milestone" ? 2 : 1,
+                        MaxScore = 3,
+                        Summary = $"Studied {targetType} for {activeSeconds} active second(s).",
+                        CreatedAt = endedAt,
+                    });
+                }
+            }
+
+            await db.SaveChangesAsync(ct);
+            return Results.Ok(new StudyTimeRecordResponse(entry.Id, entry.TargetType, entry.TargetId, entry.ActiveSeconds, entry.StartedAt, entry.EndedAt));
+        });
+
         return group;
+    }
+
+    private static async Task<int> ReviewDueCountAsync(string profileId, AppDbContext db, CancellationToken ct)
+    {
+        var cards = await db.ReviewCards.Where(card => card.IsActive).Select(card => card.Id).ToListAsync(ct);
+        var attempts = await db.ReviewCardAttempts
+            .Where(attempt => attempt.ProfileId == profileId)
+            .ToListAsync(ct);
+        var attemptsByCard = attempts.ToLookup(attempt => attempt.ReviewCardId);
+        var now = DateTimeOffset.UtcNow;
+        return cards.Count(cardId => NextReviewAt(attemptsByCard[cardId].OrderByDescending(attempt => attempt.ReviewedAt).FirstOrDefault()) <= now);
+    }
+
+    private static DateTimeOffset NextReviewAt(ReviewCardAttempt? latest)
+    {
+        if (latest is null)
+        {
+            return DateTimeOffset.MinValue;
+        }
+
+        var interval = latest.Rating.Trim().ToLowerInvariant() switch
+        {
+            "easy" => TimeSpan.FromDays(7),
+            "good" => TimeSpan.FromDays(3),
+            "hard" => TimeSpan.FromDays(1),
+            _ => TimeSpan.Zero,
+        };
+        return latest.ReviewedAt.Add(interval);
+    }
+
+    private static string MasteryStatus(int score, int maxScore, int evidenceCount, DateTimeOffset? lastActivityAt)
+    {
+        if (evidenceCount == 0 || maxScore == 0)
+        {
+            return "Not Started";
+        }
+
+        if (lastActivityAt is not null && lastActivityAt.Value < DateTimeOffset.UtcNow.AddDays(-14))
+        {
+            return "Needs Review";
+        }
+
+        var ratio = (double)score / maxScore;
+        return (evidenceCount, ratio) switch
+        {
+            (_, < 0.5) => "Needs Review",
+            (1, _) => "Introduced",
+            (>= 2 and < 4, < 0.85) => "Practiced",
+            (>= 2 and < 4, _) => "Applied",
+            (>= 4, >= 0.85) => "Reliable",
+            _ => "Applied",
+        };
+    }
+
+    private static int StudyStreakDays(IEnumerable<DateTimeOffset> timestamps)
+    {
+        var days = timestamps.Select(timestamp => timestamp.UtcDateTime.Date).Distinct().ToHashSet();
+        var current = DateTimeOffset.UtcNow.UtcDateTime.Date;
+        var streak = 0;
+        while (days.Contains(current))
+        {
+            streak++;
+            current = current.AddDays(-1);
+        }
+
+        return streak;
+    }
+
+    private static async Task<IReadOnlyCollection<string>> ConceptIdsForTargetAsync(
+        AppDbContext db,
+        string targetType,
+        string targetId,
+        CancellationToken ct)
+    {
+        return targetType switch
+        {
+            "lesson" => await db.Set<ProdigeeTutsPoint.Domain.Content.LessonConcept>()
+                .Where(link => link.LessonId == targetId)
+                .Select(link => link.ConceptId)
+                .ToListAsync(ct),
+            "exercise" => await db.Set<ProdigeeTutsPoint.Domain.Content.ExerciseConcept>()
+                .Where(link => link.ExerciseId == targetId)
+                .Select(link => link.ConceptId)
+                .ToListAsync(ct),
+            "project" => await db.ProjectMilestones
+                .Where(milestone => milestone.ProjectId == targetId)
+                .SelectMany(milestone => milestone.Exercises)
+                .SelectMany(link => link.Exercise!.Concepts)
+                .Select(link => link.ConceptId)
+                .Distinct()
+                .ToListAsync(ct),
+            "milestone" => await db.ProjectMilestones
+                .Where(milestone => milestone.Id == targetId)
+                .SelectMany(milestone => milestone.Exercises)
+                .SelectMany(link => link.Exercise!.Concepts)
+                .Select(link => link.ConceptId)
+                .Distinct()
+                .ToListAsync(ct),
+            "review" => await db.Concepts.Select(concept => concept.Id).ToListAsync(ct),
+            _ => [],
+        };
     }
 
     private static DiagnosticRecommendation BuildDiagnosticRecommendation(int score, int maxScore)
@@ -287,6 +577,7 @@ public static class LearningEndpoints
             "exercise" => db.Exercises.AnyAsync(exercise => exercise.Id == targetId, ct),
             "concept" => db.Concepts.AnyAsync(concept => concept.Id == targetId, ct),
             "sourcereference" => db.SourceReferences.AnyAsync(reference => reference.Id == targetId, ct),
+            "review" => Task.FromResult(targetId == "csharp"),
             _ => Task.FromResult(false),
         };
     }
@@ -353,8 +644,63 @@ public sealed record DiagnosticAttemptResponse(
 
 public sealed record ConceptMasterySummaryResponse(
     string ConceptId,
+    string Title,
     int Score,
     int MaxScore,
-    int EvidenceCount);
+    int EvidenceCount,
+    string Status,
+    DateTimeOffset? LastActivityAt);
+
+public sealed record LearnerSummaryResponse(
+    int ReviewDueCount,
+    int StudyStreakDays,
+    int TotalStudySeconds,
+    int MilestonesCompleted,
+    int MilestoneCount,
+    int ExercisesPassed,
+    int ExerciseCount,
+    int ReliableConcepts,
+    int ConceptCount,
+    string GamificationPolicy);
+
+public sealed record ReviewCardResponse(
+    string Id,
+    string ConceptId,
+    string Prompt,
+    string Answer,
+    string SourceType,
+    string SourceId,
+    DateTimeOffset? LastReviewedAt,
+    DateTimeOffset DueAt,
+    bool IsDue);
+
+public sealed record ReviewCardAttemptRequest(
+    string ProfileId,
+    string Rating);
+
+public sealed record ReviewCardAttemptResponse(
+    string Id,
+    string ReviewCardId,
+    string ConceptId,
+    string Rating,
+    int Score,
+    int MaxScore,
+    DateTimeOffset ReviewedAt);
+
+public sealed record StudyTimeRecordRequest(
+    string ProfileId,
+    string TargetType,
+    string TargetId,
+    int ActiveSeconds,
+    DateTimeOffset? StartedAt,
+    DateTimeOffset? EndedAt);
+
+public sealed record StudyTimeRecordResponse(
+    string Id,
+    string TargetType,
+    string TargetId,
+    int ActiveSeconds,
+    DateTimeOffset StartedAt,
+    DateTimeOffset EndedAt);
 
 public sealed record ProblemResponse(string Message);

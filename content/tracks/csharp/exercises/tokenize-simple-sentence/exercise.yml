@@ -7,3 +7,32 @@ workspace:
     Assert.Equal(["hello", "world"], WordFrequencyAnalyzer.Tokenize("Hello world"));
   hiddenTest: |
     Assert.Equal(["csharp", "12"], WordFrequencyAnalyzer.Tokenize("CSharp 12"));
+hints:
+  - id: conceptual
+    level: conceptual
+    title: Tokenization is a pipeline
+    body: Do not count yet. Tokenization should only normalize, separate, and split.
+  - id: api-approach
+    level: api-approach
+    title: Reuse earlier helpers
+    body: NormalizeToLowercase, KeepAsciiLettersAndDigits, and SplitWordsOnSeparators should compose naturally into one readable tokenizer pipeline.
+  - id: structural
+    level: structural
+    title: One expression can be enough
+    body: Store each intermediate value when learning; inline only after the behavior is obvious.
+solution:
+  title: Model solution
+  body: The solution composes the earlier helper methods so each rule remains testable.
+  code: |
+    public static IReadOnlyList<string> Tokenize(string? text)
+    {
+        var normalized = NormalizeToLowercase(text);
+        var separated = KeepAsciiLettersAndDigits(normalized);
+        return SplitWordsOnSeparators(separated);
+    }
+commonWrongApproaches:
+  - Counting words inside Tokenize instead of returning tokens.
+  - Reimplementing helper logic instead of composing the earlier methods.
+expectedSolutionCharacteristics:
+  - Normalizes, separates, and splits in a readable pipeline.
+  - Returns tokens only and leaves counting to later methods.

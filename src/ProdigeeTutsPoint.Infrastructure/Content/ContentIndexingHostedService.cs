@@ -1,5 +1,4 @@
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -43,17 +42,38 @@ public sealed class ContentIndexingHostedService(
 
     private static async Task EnsureContentSchemaAsync(AppDbContext db, CancellationToken cancellationToken)
     {
-        try
+        if (!await ColumnExistsAsync(db, "Exercises", "Kind", cancellationToken))
         {
             await db.Database.ExecuteSqlRawAsync(
                 """ALTER TABLE "Exercises" ADD COLUMN "Kind" TEXT NOT NULL DEFAULT 'focused';""",
                 cancellationToken);
         }
-        catch (SqliteException exception) when (exception.SqliteErrorCode == 1
-            && exception.Message.Contains("duplicate column name", StringComparison.OrdinalIgnoreCase))
+    }
+
+    private static async Task<bool> ColumnExistsAsync(
+        AppDbContext db,
+        string tableName,
+        string columnName,
+        CancellationToken cancellationToken)
+    {
+        await using var command = db.Database.GetDbConnection().CreateCommand();
+        command.CommandText = $"""PRAGMA table_info("{tableName.Replace("\"", "\"\"", StringComparison.Ordinal)}");""";
+
+        if (command.Connection?.State != System.Data.ConnectionState.Open)
         {
-            // Local single-user SQLite has no migrations yet; this keeps existing databases usable.
+            await db.Database.OpenConnectionAsync(cancellationToken);
         }
+
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            if (string.Equals(reader.GetString(1), columnName, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static async Task EnsureLearnerStateTablesAsync(AppDbContext db, CancellationToken cancellationToken)
@@ -301,6 +321,85 @@ public sealed class ContentIndexingHostedService(
             """,
             cancellationToken);
 
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            CREATE TABLE IF NOT EXISTS "ReviewCards" (
+                "Id" TEXT NOT NULL CONSTRAINT "PK_ReviewCards" PRIMARY KEY,
+                "ConceptId" TEXT NOT NULL,
+                "Prompt" TEXT NOT NULL,
+                "Answer" TEXT NOT NULL,
+                "SourceType" TEXT NOT NULL,
+                "SourceId" TEXT NOT NULL,
+                "Order" INTEGER NOT NULL,
+                "IsActive" INTEGER NOT NULL
+            );
+            """,
+            cancellationToken);
+
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            CREATE INDEX IF NOT EXISTS "IX_ReviewCards_ConceptId_Order"
+            ON "ReviewCards" ("ConceptId", "Order");
+            """,
+            cancellationToken);
+
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            CREATE TABLE IF NOT EXISTS "ReviewCardAttempts" (
+                "Id" TEXT NOT NULL CONSTRAINT "PK_ReviewCardAttempts" PRIMARY KEY,
+                "ProfileId" TEXT NOT NULL,
+                "ReviewCardId" TEXT NOT NULL,
+                "ConceptId" TEXT NOT NULL,
+                "Rating" TEXT NOT NULL,
+                "Score" INTEGER NOT NULL,
+                "MaxScore" INTEGER NOT NULL,
+                "ReviewedAt" TEXT NOT NULL
+            );
+            """,
+            cancellationToken);
+
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            CREATE INDEX IF NOT EXISTS "IX_ReviewCardAttempts_ProfileId_ReviewCardId_ReviewedAt"
+            ON "ReviewCardAttempts" ("ProfileId", "ReviewCardId", "ReviewedAt");
+            """,
+            cancellationToken);
+
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            CREATE INDEX IF NOT EXISTS "IX_ReviewCardAttempts_ProfileId_ConceptId_ReviewedAt"
+            ON "ReviewCardAttempts" ("ProfileId", "ConceptId", "ReviewedAt");
+            """,
+            cancellationToken);
+
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            CREATE TABLE IF NOT EXISTS "StudyTimeEntries" (
+                "Id" TEXT NOT NULL CONSTRAINT "PK_StudyTimeEntries" PRIMARY KEY,
+                "ProfileId" TEXT NOT NULL,
+                "TargetType" TEXT NOT NULL,
+                "TargetId" TEXT NOT NULL,
+                "ActiveSeconds" INTEGER NOT NULL,
+                "StartedAt" TEXT NOT NULL,
+                "EndedAt" TEXT NOT NULL
+            );
+            """,
+            cancellationToken);
+
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            CREATE INDEX IF NOT EXISTS "IX_StudyTimeEntries_ProfileId_TargetType_TargetId_StartedAt"
+            ON "StudyTimeEntries" ("ProfileId", "TargetType", "TargetId", "StartedAt");
+            """,
+            cancellationToken);
+
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            CREATE INDEX IF NOT EXISTS "IX_StudyTimeEntries_ProfileId_StartedAt"
+            ON "StudyTimeEntries" ("ProfileId", "StartedAt");
+            """,
+            cancellationToken);
+
         var now = DateTimeOffset.UtcNow;
         if (!await db.AiReviewProviderSettings.AnyAsync(provider => provider.Id == "hosted-openai", cancellationToken))
         {
@@ -332,6 +431,33 @@ public sealed class ContentIndexingHostedService(
                 CreatedAt = now,
                 UpdatedAt = now,
             });
+        }
+
+        var reviewCards = new[]
+        {
+            new { Id = "csharp-strings-ascii-contract", ConceptId = "csharp-strings", Prompt = "What is the milestone 1 text-processing contract?", Answer = "Use an ASCII-first contract: lowercase ASCII text deterministically, preserve ASCII letters and digits as word characters, and document that Unicode segmentation is a later extension.", SourceType = "Lesson", SourceId = "text-as-data-csharp", Order = 1 },
+            new { Id = "csharp-tokenization-empty-tokens", ConceptId = "csharp-tokenization", Prompt = "Why must tokenization avoid empty strings?", Answer = "Empty tokens make counts noisy, hide separator bugs, and create unstable tests. Separators should create boundaries, not words.", SourceType = "Lesson", SourceId = "normalization-and-tokenization", Order = 1 },
+            new { Id = "csharp-dictionaries-update-pattern", ConceptId = "csharp-dictionaries", Prompt = "What is the safe dictionary update pattern for word counts?", Answer = "Use TryGetValue to read the current count; increment existing words and initialize missing words to one.", SourceType = "Lesson", SourceId = "dictionaries-as-frequency-maps", Order = 1 },
+            new { Id = "csharp-ordering-tie-breaker", ConceptId = "csharp-ordering", Prompt = "What is the deterministic ordering rule for word frequencies?", Answer = "Sort by count descending, then by word ascending so ties are stable and testable.", SourceType = "Lesson", SourceId = "deterministic-ordering", Order = 1 },
+            new { Id = "csharp-xunit-pure-functions", ConceptId = "csharp-xunit", Prompt = "Why are pure functions the right first test target?", Answer = "They make behavior observable through inputs and return values without console, file-system, or clock effects.", SourceType = "Lesson", SourceId = "testing-pure-functions-xunit", Order = 1 },
+            new { Id = "csharp-api-design-core-boundary", ConceptId = "csharp-api-design", Prompt = "Why should the analyzer core avoid reading files directly?", Answer = "A pure core is easier to test, reuse, benchmark, and wrap later with CLI or file input without changing the parsing logic.", SourceType = "Lesson", SourceId = "designing-small-core-api", Order = 1 },
+        };
+        foreach (var card in reviewCards)
+        {
+            if (!await db.ReviewCards.AnyAsync(existing => existing.Id == card.Id, cancellationToken))
+            {
+                db.ReviewCards.Add(new ProdigeeTutsPoint.Domain.Learning.ReviewCard
+                {
+                    Id = card.Id,
+                    ConceptId = card.ConceptId,
+                    Prompt = card.Prompt,
+                    Answer = card.Answer,
+                    SourceType = card.SourceType,
+                    SourceId = card.SourceId,
+                    Order = card.Order,
+                    IsActive = true,
+                });
+            }
         }
 
         await db.SaveChangesAsync(cancellationToken);

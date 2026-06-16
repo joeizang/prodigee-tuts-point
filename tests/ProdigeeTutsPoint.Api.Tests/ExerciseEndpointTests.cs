@@ -981,9 +981,12 @@ public sealed class ExerciseEndpointTests
 
     private sealed record ConceptMasteryTestResponse(
         string ConceptId,
+        string Title,
         int Score,
         int MaxScore,
-        int EvidenceCount);
+        int EvidenceCount,
+        string Status,
+        DateTimeOffset? LastActivityAt);
 
     private sealed record ExerciseLanguageTestRequest(
         string ProfileId,
