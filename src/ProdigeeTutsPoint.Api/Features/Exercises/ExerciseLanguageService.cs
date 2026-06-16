@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using System.Collections.Concurrent;
 using System.Reflection;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
@@ -14,13 +15,29 @@ using Microsoft.CodeAnalysis.Text;
 
 namespace ProdigeeTutsPoint.Api.Features.Exercises;
 
-public sealed partial class ExerciseLanguageService(ExerciseWorkspaceService workspaces)
+public sealed partial class ExerciseLanguageService(ExerciseWorkspaceService workspaces, CSharpLspBridge lspBridge)
 {
     private const int CompletionLimit = 250;
     private const int CodeActionLimit = 20;
     private static readonly Lazy<MefHostServices> SharedRoslynHostServices = new(CreateRoslynHostServices);
     private static readonly Lazy<IReadOnlyCollection<MetadataReference>> TrustedPlatformReferences = new(CreateTrustedPlatformReferences);
     private static readonly ImmutableArray<DiagnosticAnalyzer> ExerciseAnalyzers = [new UnusedLocalVariableAnalyzer()];
+    private static readonly ConcurrentDictionary<string, CachedRoslynProject> ProjectSnapshots = new(StringComparer.Ordinal);
+    private static readonly SemaphoreSlim ProjectSnapshotLock = new(1, 1);
+    private static int ProjectSnapshotBuildCount;
+
+    internal static int CachedProjectSnapshotBuildCount => Volatile.Read(ref ProjectSnapshotBuildCount);
+
+    internal static void ResetProjectSnapshotCacheForTests()
+    {
+        foreach (var snapshot in ProjectSnapshots.Values)
+        {
+            snapshot.Workspace.Dispose();
+        }
+
+        ProjectSnapshots.Clear();
+        Interlocked.Exchange(ref ProjectSnapshotBuildCount, 0);
+    }
 
     public async Task<ExerciseDiagnosticsResponse?> GetDiagnosticsAsync(
         string exerciseId,
@@ -286,11 +303,26 @@ public sealed partial class ExerciseLanguageService(ExerciseWorkspaceService wor
         var span = ToTextSpan(sourceText, request.StartLineNumber, request.StartColumn, request.EndLineNumber, request.EndColumn);
         var actions = new List<ExerciseCodeActionItemResponse>();
 
+        actions.AddRange(await lspBridge.GetCodeActionsAsync(
+            context.WorkspacePath,
+            request.Path,
+            request.Content,
+            request.StartLineNumber,
+            request.StartColumn,
+            request.EndLineNumber,
+            request.EndColumn,
+            context.SetupMessages,
+            cancellationToken));
         await AddExpressionBodyRefactoringAsync(context.Document, root, span, actions, cancellationToken);
         await AddThrowCompletionActionsAsync(context.Document, root, span, actions, cancellationToken);
         await AddMissingUsingActionsAsync(context.Document, root, sourceText, actions, cancellationToken);
 
-        return new ExerciseCodeActionsResponse(actions.Take(CodeActionLimit).ToArray(), context.SetupMessages);
+        return new ExerciseCodeActionsResponse(
+            actions
+                .DistinctBy(action => (action.Title, action.Kind, string.Join('|', action.Edits.Select(edit => $"{edit.StartLineNumber}:{edit.StartColumn}:{edit.EndLineNumber}:{edit.EndColumn}:{edit.Text}"))))
+                .Take(CodeActionLimit)
+                .ToArray(),
+            context.SetupMessages);
     }
 
     public async Task<ExerciseFormatResponse?> FormatAsync(
@@ -324,13 +356,61 @@ public sealed partial class ExerciseLanguageService(ExerciseWorkspaceService wor
 
         EnsureEditableFile(workspace, path);
 
-        var setupMessages = new List<string>();
         var sourceText = SourceText.From(content);
         var documentPath = Path.GetFullPath(Path.Combine(workspace.WorkspacePath, path));
+        var snapshot = await GetOrCreateProjectSnapshotAsync(workspace.WorkspacePath, documentPath, cancellationToken);
+        var solution = snapshot.BaseSolution.WithDocumentText(snapshot.EditableDocumentId, sourceText);
+        var document = solution.GetDocument(snapshot.EditableDocumentId)
+            ?? throw new InvalidOperationException("Could not load the C# document snapshot.");
+
+        return new RoslynExerciseContext(workspace.WorkspacePath, document, sourceText, []);
+    }
+
+    private static async Task<CachedRoslynProject> GetOrCreateProjectSnapshotAsync(
+        string workspacePath,
+        string editableDocumentPath,
+        CancellationToken cancellationToken)
+    {
+        var cacheKey = $"{Path.GetFullPath(workspacePath)}::{Path.GetFullPath(editableDocumentPath)}";
+        var stamp = BuildProjectSnapshotStamp(workspacePath, editableDocumentPath);
+        if (ProjectSnapshots.TryGetValue(cacheKey, out var cached) && cached.Stamp == stamp)
+        {
+            return cached;
+        }
+
+        await ProjectSnapshotLock.WaitAsync(cancellationToken);
+        try
+        {
+            if (ProjectSnapshots.TryGetValue(cacheKey, out cached) && cached.Stamp == stamp)
+            {
+                return cached;
+            }
+
+            var snapshot = await BuildProjectSnapshotAsync(workspacePath, editableDocumentPath, stamp, cancellationToken);
+            ProjectSnapshots.AddOrUpdate(
+                cacheKey,
+                snapshot,
+                (_, _) => snapshot);
+            Interlocked.Increment(ref ProjectSnapshotBuildCount);
+            return snapshot;
+        }
+        finally
+        {
+            ProjectSnapshotLock.Release();
+        }
+    }
+
+    private static async Task<CachedRoslynProject> BuildProjectSnapshotAsync(
+        string workspacePath,
+        string editableDocumentPath,
+        string stamp,
+        CancellationToken cancellationToken)
+    {
         var roslynWorkspace = new AdhocWorkspace(SharedRoslynHostServices.Value);
         var projectId = ProjectId.CreateNewId("Exercise");
-        var documentId = DocumentId.CreateNewId(projectId, Path.GetFileName(path));
+        var editableDocumentId = DocumentId.CreateNewId(projectId, Path.GetFileName(editableDocumentPath));
         var globalsId = DocumentId.CreateNewId(projectId, "GlobalUsings.g.cs");
+        var projectPath = Path.Combine(workspacePath, "src", "Exercise", "Exercise.csproj");
         var solution = roslynWorkspace.CurrentSolution
             .AddProject(ProjectInfo.Create(
                 projectId,
@@ -338,7 +418,7 @@ public sealed partial class ExerciseLanguageService(ExerciseWorkspaceService wor
                 "Exercise",
                 "Exercise",
                 LanguageNames.CSharp,
-                filePath: Path.Combine(workspace.WorkspacePath, "src", "Exercise", "Exercise.csproj"),
+                filePath: projectPath,
                 parseOptions: CSharpParseOptions.Default.WithLanguageVersion(LanguageVersion.Preview),
                 compilationOptions: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary)
                     .WithNullableContextOptions(NullableContextOptions.Enable)
@@ -352,12 +432,28 @@ public sealed partial class ExerciseLanguageService(ExerciseWorkspaceService wor
                 global using System.Collections.Generic;
                 global using System.Linq;
                 """),
-                filePath: Path.Combine(workspace.WorkspacePath, "src", "Exercise", "obj", "GlobalUsings.g.cs"))
+                filePath: Path.Combine(workspacePath, "src", "Exercise", "obj", "GlobalUsings.g.cs"))
             .AddDocument(
-                documentId,
-                Path.GetFileName(path),
-                sourceText,
-                filePath: documentPath);
+                editableDocumentId,
+                Path.GetFileName(editableDocumentPath),
+                SourceText.From(await File.ReadAllTextAsync(editableDocumentPath, cancellationToken)),
+                filePath: editableDocumentPath);
+
+        foreach (var siblingPath in GetSiblingSourceFiles(workspacePath, editableDocumentPath))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            solution = solution.AddDocument(
+                DocumentId.CreateNewId(projectId, Path.GetFileName(siblingPath)),
+                Path.GetFileName(siblingPath),
+                SourceText.From(await File.ReadAllTextAsync(siblingPath, cancellationToken)),
+                filePath: siblingPath);
+        }
+
+        solution = await AddAnalyzerConfigDocumentAsync(
+            solution,
+            projectId,
+            Path.Combine(workspacePath, ".editorconfig"),
+            cancellationToken);
 
         if (!roslynWorkspace.TryApplyChanges(solution))
         {
@@ -365,10 +461,45 @@ public sealed partial class ExerciseLanguageService(ExerciseWorkspaceService wor
             throw new InvalidOperationException("Could not create the C# language workspace.");
         }
 
-        var document = roslynWorkspace.CurrentSolution.GetDocument(documentId)
-            ?? throw new InvalidOperationException("Could not load the C# document snapshot.");
+        return new CachedRoslynProject(
+            roslynWorkspace,
+            roslynWorkspace.CurrentSolution,
+            editableDocumentId,
+            stamp);
+    }
 
-        return new RoslynExerciseContext(roslynWorkspace, document, sourceText, setupMessages);
+    private static IEnumerable<string> GetSiblingSourceFiles(string workspacePath, string editableDocumentPath)
+    {
+        var sourceRoot = Path.Combine(workspacePath, "src", "Exercise");
+        if (!Directory.Exists(sourceRoot))
+        {
+            return [];
+        }
+
+        var normalizedEditablePath = Path.GetFullPath(editableDocumentPath);
+        return Directory
+            .EnumerateFiles(sourceRoot, "*.cs", SearchOption.TopDirectoryOnly)
+            .Select(Path.GetFullPath)
+            .Where(path => !string.Equals(path, normalizedEditablePath, StringComparison.Ordinal))
+            .Order(StringComparer.Ordinal);
+    }
+
+    private static string BuildProjectSnapshotStamp(string workspacePath, string editableDocumentPath)
+    {
+        var relevantFiles = new List<string>
+        {
+            Path.Combine(workspacePath, "src", "Exercise", "Exercise.csproj"),
+            Path.Combine(workspacePath, ".editorconfig"),
+        };
+        relevantFiles.AddRange(GetSiblingSourceFiles(workspacePath, editableDocumentPath));
+
+        return string.Join(
+            '|',
+            relevantFiles
+                .Select(Path.GetFullPath)
+                .Where(File.Exists)
+                .Order(StringComparer.Ordinal)
+                .Select(path => $"{path}:{new FileInfo(path).Length}:{File.GetLastWriteTimeUtc(path).Ticks}"));
     }
 
     private static async Task<IEnumerable<Diagnostic>> GetAnalyzerDiagnosticsAsync(
@@ -392,7 +523,7 @@ public sealed partial class ExerciseLanguageService(ExerciseWorkspaceService wor
 
             var compilationWithAnalyzers = compilation.WithAnalyzers(
                 analyzers,
-                new AnalyzerOptions(ImmutableArray<AdditionalText>.Empty));
+                document.Project.AnalyzerOptions);
             return (await compilationWithAnalyzers.GetAnalyzerDiagnosticsAsync(cancellationToken))
                 .Where(diagnostic => diagnostic.Location.SourceTree == syntaxTree);
         }
@@ -768,6 +899,25 @@ public sealed partial class ExerciseLanguageService(ExerciseWorkspaceService wor
         }
     }
 
+    private static async Task<Solution> AddAnalyzerConfigDocumentAsync(
+        Solution solution,
+        ProjectId projectId,
+        string editorConfigPath,
+        CancellationToken cancellationToken)
+    {
+        if (!File.Exists(editorConfigPath))
+        {
+            return solution;
+        }
+
+        var sourceText = SourceText.From(await File.ReadAllTextAsync(editorConfigPath, cancellationToken));
+        return solution.AddAnalyzerConfigDocument(
+            DocumentId.CreateNewId(projectId, ".editorconfig"),
+            ".editorconfig",
+            sourceText,
+            filePath: editorConfigPath);
+    }
+
     private static int GetAbsolutePosition(SourceText sourceText, int lineNumber, int column)
     {
         var lineIndex = Math.Clamp(lineNumber - 1, 0, sourceText.Lines.Count - 1);
@@ -840,8 +990,14 @@ public sealed partial class ExerciseLanguageService(ExerciseWorkspaceService wor
             span.EndLinePosition.Character + 1);
     }
 
+    private sealed record CachedRoslynProject(
+        AdhocWorkspace Workspace,
+        Solution BaseSolution,
+        DocumentId EditableDocumentId,
+        string Stamp);
+
     private sealed record RoslynExerciseContext(
-        Workspace Workspace,
+        string WorkspacePath,
         Document Document,
         SourceText SourceText,
         List<string> SetupMessages)
@@ -849,7 +1005,6 @@ public sealed partial class ExerciseLanguageService(ExerciseWorkspaceService wor
     {
         public void Dispose()
         {
-            Workspace.Dispose();
         }
     }
 

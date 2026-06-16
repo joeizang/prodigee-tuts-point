@@ -29,3 +29,5 @@ They are ordered roughly by dependency. Each task should leave the app in a more
 18. [0018 Polish and audit Slice 1](./0018-polish-audit-slice-1.md) - Completed
 19. [0019 Deepen C# wordfreq milestone 1 pedagogy](./0019-deepen-csharp-wordfreq-pedagogy.md) - Completed
 20. [0020 Add wordfreq-csharp CLI and file I/O milestone](./0020-add-wordfreq-cli-file-io.md) - Completed
+21. [0021 Render key-term bubbles](./0021-render-key-term-bubbles.md) - Completed
+22. [0022 Harden C# language-service parity and caching](./0022-harden-csharp-language-service-parity.md) - Completed

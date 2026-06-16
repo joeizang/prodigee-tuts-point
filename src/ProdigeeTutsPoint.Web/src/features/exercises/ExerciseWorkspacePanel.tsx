@@ -16,6 +16,13 @@ import type {
   ExerciseWorkspaceFile,
 } from '../../api'
 import type { Theme } from '../../types'
+import {
+  toMonacoCodeAction,
+  toMonacoRange,
+  type MonacoFormattingModel,
+  type MonacoLanguageModel,
+  type MonacoReplacementRange,
+} from './monacoCodeActions'
 
 let csharpProvidersRegistered = false
 let editorThemesRegistered = false
@@ -104,7 +111,7 @@ export function ExerciseWorkspacePanel({
     monacoRef.current = monaco
     monaco.editor.setTheme(editorTheme)
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Period, () => {
-      editor.trigger('keyboard', 'editor.action.quickFix', null)
+      triggerCodeActionMenu(editor)
     })
     setupCSharpProviders(monaco)
     void updateRoslynDiagnostics(
@@ -462,6 +469,14 @@ function setupCSharpProviders(monaco: Parameters<OnMount>[1]) {
   })
 
   monaco.languages.registerCodeActionProvider('csharp', {
+    providedCodeActionKinds: [
+      'quickfix',
+      'refactor',
+      'refactor.extract',
+      'refactor.inline',
+      'refactor.rewrite',
+      'source',
+    ],
     provideCodeActions: async (
       _model: unknown,
       range: {
@@ -492,19 +507,7 @@ function setupCSharpProviders(monaco: Parameters<OnMount>[1]) {
         )
 
         return {
-          actions: response.actions.map((action) => ({
-            edit: {
-              edits: action.edits.map((edit) => ({
-                edit: {
-                  range: toMonacoRange(monaco, model, edit),
-                  text: edit.text,
-                },
-                resource: model.uri,
-              })),
-            },
-            kind: action.kind,
-            title: action.title,
-          })),
+          actions: response.actions.map((action) => toMonacoCodeAction(monaco, model, action)),
           dispose: () => undefined,
         }
       } catch {
@@ -542,6 +545,21 @@ function setupCSharpProviders(monaco: Parameters<OnMount>[1]) {
       }
     },
   })
+}
+
+function triggerCodeActionMenu(editor: Parameters<OnMount>[0]) {
+  editor.focus()
+  const codeActionArgs = { apply: 'never', kind: '' }
+  try {
+    editor.trigger('keyboard', 'editor.action.codeAction', codeActionArgs)
+    return
+  } catch {
+    editor.trigger('keyboard', 'editor.action.quickFix', null)
+  }
+
+  window.setTimeout(() => {
+    editor.trigger('keyboard', 'editor.action.refactor', { apply: 'never', kind: 'refactor' })
+  }, 0)
 }
 
 function toMonacoCompletion(
@@ -721,43 +739,4 @@ type MonacoCompletionModel = {
     startColumn: number
     word: string
   }
-}
-
-type MonacoReplacementRange = {
-  endColumn: number
-  endLineNumber: number
-  startColumn: number
-  startLineNumber: number
-}
-
-type MonacoFormattingModel = {
-  getFullModelRange: () => MonacoReplacementRange
-  getValue: () => string
-  getVersionId: () => number
-}
-
-type MonacoLanguageModel = MonacoFormattingModel & {
-  uri: unknown
-}
-
-function toMonacoRange(
-  monaco: Parameters<OnMount>[1],
-  model: MonacoFormattingModel,
-  range: {
-    endColumn: number
-    endLineNumber: number
-    startColumn: number
-    startLineNumber: number
-  },
-) {
-  if (range.endLineNumber === 2147483647 || range.endColumn === 2147483647) {
-    return model.getFullModelRange()
-  }
-
-  return new monaco.Range(
-    range.startLineNumber,
-    range.startColumn,
-    range.endLineNumber,
-    range.endColumn,
-  )
 }

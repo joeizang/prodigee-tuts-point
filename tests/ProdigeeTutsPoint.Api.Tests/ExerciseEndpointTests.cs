@@ -488,7 +488,7 @@ public sealed class ExerciseEndpointTests
             TestContext.Current.CancellationToken);
 
         Assert.NotNull(result);
-        Assert.Contains(result.Diagnostics, diagnostic => diagnostic.Id == "PTP0001");
+        Assert.Contains(result.Diagnostics, diagnostic => diagnostic.Id == "PTP0001" && diagnostic.Severity == "Error");
     }
 
     [Fact]
@@ -878,6 +878,48 @@ public sealed class ExerciseEndpointTests
     }
 
     [Fact]
+    public async Task CodeActionsEndpointReturnsRoslynLspProviderRefactoring()
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+        var profileId = $"lsp-refactoring-test-{Guid.NewGuid():n}";
+        var content = """
+            namespace Exercise;
+
+            public static class WordFrequencyAnalyzer
+            {
+                public static string NormalizeToLowercase(string? text)
+                {
+                    return text?.ToLowerInvariant() ?? string.Empty;
+                }
+            }
+            """;
+        var start = PositionOf(content, "text?.ToLowerInvariant()");
+        var end = PositionOf(content, "text?.ToLowerInvariant()", "text?.ToLowerInvariant()".Length);
+
+        var response = await client.PostAsJsonAsync(
+            "/api/exercises/normalize-to-lowercase/language/code-actions",
+            new ExerciseCodeActionTestRequest(
+                profileId,
+                "src/Exercise/WordFrequencyAnalyzer.cs",
+                content,
+                start.Line,
+                start.Column,
+                end.Line,
+                end.Column),
+            TestContext.Current.CancellationToken);
+
+        var result = await response.Content.ReadFromJsonAsync<ExerciseCodeActionsTestResponse>(
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(result);
+        Assert.DoesNotContain(result.SetupMessages, message => message.Contains("Roslyn LSP code actions were unavailable", StringComparison.Ordinal));
+        Assert.Contains(result.Actions, action =>
+            action.Title.Equals("Extract method", StringComparison.Ordinal)
+            || action.Title.Equals("Extract local function", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task FormatEndpointReturnsRoslynFormattedContent()
     {
         await using var factory = new WebApplicationFactory<Program>();
@@ -904,6 +946,94 @@ public sealed class ExerciseEndpointTests
         Assert.Contains("public static class WordFrequencyAnalyzer\n{", result.Content);
         Assert.Contains("    public static string NormalizeToLowercase(string? text)", result.Content);
         Assert.Contains("return text?.ToLowerInvariant() ?? string.Empty;", result.Content);
+    }
+
+    [Fact]
+    public async Task LanguageServiceReusesCachedProjectSnapshotForRepeatedRequests()
+    {
+        ExerciseLanguageService.ResetProjectSnapshotCacheForTests();
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+        var profileId = $"snapshot-cache-test-{Guid.NewGuid():n}";
+        var content = """
+            namespace Exercise;
+
+            public static class WordFrequencyAnalyzer
+            {
+                public static string NormalizeToLowercase(string? text)
+                {
+                    return text.
+                }
+            }
+            """;
+        var position = PositionOf(content, "text.", "text.".Length);
+
+        for (var attempt = 0; attempt < 2; attempt++)
+        {
+            var result = await RequestCompletionsAsync(client, profileId, content, position);
+            Assert.Contains(result.Items, item => item.Label == "ToLowerInvariant");
+        }
+
+        Assert.Equal(1, ExerciseLanguageService.CachedProjectSnapshotBuildCount);
+    }
+
+    [Fact]
+    public async Task LanguageServiceCachesSiblingSourcesAndInvalidatesWhenTheyChange()
+    {
+        ExerciseLanguageService.ResetProjectSnapshotCacheForTests();
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+        var profileId = $"sibling-cache-test-{Guid.NewGuid():n}";
+        var workspace = await client.GetFromJsonAsync<ExerciseWorkspaceTestResponse>(
+            $"/api/exercises/normalize-to-lowercase/workspace?profileId={profileId}",
+            TestContext.Current.CancellationToken);
+        Assert.NotNull(workspace);
+
+        var siblingPath = Path.Combine(workspace.WorkspacePath, "src", "Exercise", "ExtraAnalyzer.cs");
+        await File.WriteAllTextAsync(
+            siblingPath,
+            """
+            namespace Exercise;
+
+            public static class ExtraAnalyzer
+            {
+                public static string NormalizeFromSibling(string? value) => value ?? string.Empty;
+            }
+            """,
+            TestContext.Current.CancellationToken);
+
+        var content = """
+            namespace Exercise;
+
+            public static class WordFrequencyAnalyzer
+            {
+                public static string NormalizeToLowercase(string? text)
+                {
+                    return ExtraAnalyzer.
+                }
+            }
+            """;
+        var position = PositionOf(content, "ExtraAnalyzer.", "ExtraAnalyzer.".Length);
+        var first = await RequestCompletionsAsync(client, profileId, content, position);
+        Assert.Contains(first.Items, item => item.Label == "NormalizeFromSibling");
+        Assert.Equal(1, ExerciseLanguageService.CachedProjectSnapshotBuildCount);
+
+        await File.WriteAllTextAsync(
+            siblingPath,
+            """
+            namespace Exercise;
+
+            public static class ExtraAnalyzer
+            {
+                public static string NormalizeFromSibling(string? value) => value ?? string.Empty;
+                public static string NormalizeAfterInvalidation(string? value) => value?.Trim() ?? string.Empty;
+            }
+            """,
+            TestContext.Current.CancellationToken);
+
+        var second = await RequestCompletionsAsync(client, profileId, content, position);
+        Assert.Contains(second.Items, item => item.Label == "NormalizeAfterInvalidation");
+        Assert.Equal(2, ExerciseLanguageService.CachedProjectSnapshotBuildCount);
     }
 
     private sealed record ExerciseWorkspaceTestResponse(
@@ -1059,7 +1189,8 @@ public sealed class ExerciseEndpointTests
         string Documentation);
 
     private sealed record ExerciseCodeActionsTestResponse(
-        IReadOnlyCollection<ExerciseCodeActionItemTestResponse> Actions);
+        IReadOnlyCollection<ExerciseCodeActionItemTestResponse> Actions,
+        IReadOnlyCollection<string> SetupMessages);
 
     private sealed record ExerciseCodeActionItemTestResponse(
         string Title,
@@ -1102,6 +1233,28 @@ public sealed class ExerciseEndpointTests
         }
 
         return (line, column);
+    }
+
+    private static async Task<ExerciseCompletionsTestResponse> RequestCompletionsAsync(
+        HttpClient client,
+        string profileId,
+        string content,
+        (int Line, int Column) position)
+    {
+        var response = await client.PostAsJsonAsync(
+            "/api/exercises/normalize-to-lowercase/language/completions",
+            new ExerciseCompletionTestRequest(
+                profileId,
+                "src/Exercise/WordFrequencyAnalyzer.cs",
+                content,
+                position.Line,
+                position.Column),
+            TestContext.Current.CancellationToken);
+        response.EnsureSuccessStatusCode();
+        var result = await response.Content.ReadFromJsonAsync<ExerciseCompletionsTestResponse>(
+            TestContext.Current.CancellationToken);
+        Assert.NotNull(result);
+        return result;
     }
 
     private sealed class FakeExerciseRunner(

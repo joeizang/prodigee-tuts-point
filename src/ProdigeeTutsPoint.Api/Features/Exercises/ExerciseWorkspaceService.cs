@@ -852,7 +852,7 @@ public sealed class ExerciseWorkspaceService(
         root = true
 
         [*.cs]
-        dotnet_diagnostic.PTP0001.severity = warning
+        dotnet_diagnostic.PTP0001.severity = error
         dotnet_diagnostic.PTP0002.severity = warning
         """;
     }

@@ -9,6 +9,22 @@ const markdownRenderer: RendererObject<string, string> = {
   codespan({ text }: Tokens.Codespan) {
     return `<code class="inline-code">${escapeHtml(text)}</code>`
   },
+  paragraph({ tokens }: Tokens.Paragraph) {
+    return `<p>${enrichTermDefinitions(this.parser.parseInline(tokens))}</p>`
+  },
+  strong({ tokens }: Tokens.Strong) {
+    const text = plainText(tokens).trim()
+    if (!text.startsWith('Term:')) {
+      return `<strong>${this.parser.parseInline(tokens)}</strong>`
+    }
+
+    const term = text.slice('Term:'.length).trim()
+    if (!term) {
+      return `<strong>${this.parser.parseInline(tokens)}</strong>`
+    }
+
+    return `<span class="term-keyword" data-term="${escapeHtml(term)}" tabindex="0">${escapeHtml(term)}</span>`
+  },
   html() {
     return ''
   },
@@ -103,6 +119,42 @@ function codeTokenClass(token: string) {
   }
 
   return 'keyword'
+}
+
+function enrichTermDefinitions(html: string) {
+  return html.replace(
+    /<span class="term-keyword" data-term="([^"]+)" tabindex="0">([^<]+)<\/span>\s+means\s+([\s\S]*?)(?=(?:\s*<span class="term-keyword")|$)/g,
+    (_match, dataTerm: string, label: string, definition: string) => {
+      const cleanDefinition = definition.trim()
+      const term = escapeHtml(unescapeHtml(dataTerm))
+      return `<span class="term-bubble"><span class="term-keyword" data-term="${term}" tabindex="0" role="button" aria-label="Key term: ${term}">${label}</span><span class="term-popover" role="tooltip"><strong>${term}</strong> <span>${cleanDefinition}</span></span></span> means ${cleanDefinition}`
+    },
+  )
+}
+
+function plainText(tokens: Tokens.Generic[]): string {
+  return tokens
+    .map((token) => {
+      if ('text' in token && typeof token.text === 'string') {
+        return token.text
+      }
+
+      if ('tokens' in token && Array.isArray(token.tokens)) {
+        return plainText(token.tokens as Tokens.Generic[])
+      }
+
+      return ''
+    })
+    .join('')
+}
+
+function unescapeHtml(value: string) {
+  return value
+    .replaceAll('&quot;', '"')
+    .replaceAll('&#39;', "'")
+    .replaceAll('&gt;', '>')
+    .replaceAll('&lt;', '<')
+    .replaceAll('&amp;', '&')
 }
 
 function sanitizeHref(href: string) {

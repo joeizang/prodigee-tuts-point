@@ -6,7 +6,7 @@ AFK
 
 ## Status
 
-In progress. The Monaco workspace uses Roslyn-backed C# services for completion, diagnostics, semantic hover, signature help, formatting, and a limited supported-action set. It is not yet full Microsoft C# extension parity because the complete Roslyn code-fix/refactoring provider catalog and persistent workspace cache are still pending.
+Completed.
 
 ## Quality bar
 
@@ -24,16 +24,19 @@ Build the multi-file Monaco exercise workspace with VS Code-grade C# editing con
 - Editable, read-only visible, and hidden file roles are represented.
 - Editable C# files use Monaco with a custom theme per app theme.
 - C# language requests create a fast in-memory Roslyn project snapshot from the generated exercise workspace instead of reopening the project with `MSBuildWorkspace` on every request.
+- C# language requests reuse cached immutable Roslyn base solutions and overlay the live Monaco buffer per request.
 - C# completion is Roslyn-backed for the active editable file and uses prefix-aware filtering before the result cap.
 - C# completion reads the current Monaco buffer at request time.
 - C# completion filters keyword/snippet noise from member access.
 - C# completion maps common Roslyn tags to Monaco item kinds.
 - Live diagnostics use Roslyn compiler diagnostics plus an embedded Roslyn `DiagnosticAnalyzer` for exercise-specific lint feedback.
+- Live Roslyn requests load the generated `.editorconfig` as an analyzer config document.
+- Cached Roslyn snapshots include sibling C# source files and invalidate when project/config/sibling files change.
 - Semantic hover returns symbol/type information for framework and user symbols.
 - Signature help returns active method/constructor signatures and active parameter indexes.
 - Document formatting is backed by Roslyn.
 - Monaco surfaces language-service setup messages as warning markers.
-- Monaco surfaces code actions/refactorings as workspace edits for supported quick-fix/refactoring cases. The supported set is intentionally limited until the full Roslyn provider catalog is integrated.
+- Monaco surfaces Roslyn LSP-backed code actions/refactorings as workspace edits, with the previous supported action set retained only as fallback.
 - Exercise execution runs visible and hidden tests in generated .NET workspaces.
 
 ## Acceptance criteria
@@ -53,20 +56,24 @@ Build the multi-file Monaco exercise workspace with VS Code-grade C# editing con
 - [x] C# hover returns useful information for framework symbols, user-defined symbols, methods, parameters, variables, and exceptions.
 - [x] C# signature help is implemented for method and constructor invocation.
 - [x] C# diagnostics include Roslyn analyzer-backed static analysis/lint diagnostics, not only compiler diagnostics.
+- [x] Live Roslyn diagnostics honor generated `.editorconfig` analyzer severity.
 - [x] Diagnostics are project-aware and include symbols/settings from the generated `.csproj`.
 - [x] Completion is project-aware and includes generated workspace references, package references, sibling source files where present, and project-level nullable/language settings.
+- [x] Repeated language-service requests reuse cached Roslyn project snapshots.
+- [x] Cached project snapshots invalidate when generated project/config/sibling source inputs change.
 - [x] Formatting respects project/editor settings where available, including `.editorconfig`.
 - [x] Code actions are surfaced in Monaco for currently supported fixable diagnostics.
 - [x] Refactorings are surfaced in Monaco for currently supported valid selections/cursor positions.
+- [x] Code actions/refactorings are backed by a Roslyn language-server bridge (`csharp-ls`) rather than static or hand-only provider logic.
 - [x] Language-service failures produce actionable setup messages instead of silent empty results.
 - [x] The editor never shows static placeholder language-service text in symbol hover.
 - [x] Regression tests or explicit verification cover completion, hover, signature help, diagnostics, formatting, and the currently supported code actions/refactorings.
 
-## Remaining acceptance gaps before full completion
+## Completion notes
 
-- [ ] Integrate the full Roslyn code-fix/refactoring provider catalog or a Roslyn-backed language-server bridge.
-- [ ] Add persistent workspace/project snapshot caching beyond shared MEF host, metadata references, and startup warmup.
-- [ ] Feed `.editorconfig` as analyzer config into live Roslyn requests instead of only emitting it into generated workspaces.
+- [x] Add persistent workspace/project snapshot caching beyond shared MEF host, metadata references, and startup warmup.
+- [x] Feed `.editorconfig` as analyzer config into live Roslyn requests instead of only emitting it into generated workspaces.
+- [x] Integrate the full Roslyn code-fix/refactoring provider catalog or a Roslyn-backed language-server bridge.
 
 ## Full implementation note
 
@@ -74,11 +81,11 @@ The full implementation should replace the current supported-action set with the
 
 ## Later full-IDE upgrades
 
-1. Replace the lightweight code-action/refactoring implementation with Roslyn's full exported code-fix/refactoring providers.
+1. Expand LSP usage to completion/hover/formatting if direct Roslyn endpoints become harder to keep aligned across languages.
 2. Add delegate-specific signature help tests once exercises contain delegate-heavy code.
 3. Add package-reference exercises and regression tests proving completion/hover sees external package APIs.
 4. Add multi-source-file exercises and regression tests proving sibling source symbols are present in completion/hover.
-5. Add a persistent project snapshot/cache so repeated language-service calls do not reopen the project on every request.
+5. Expand cache invalidation if future exercises add package restore, analyzer package references, or generated source outside `src/Exercise/*.cs`.
 
 ## Blocked by
 

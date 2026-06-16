@@ -13,6 +13,7 @@ builder.Services.AddOpenApi();
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddScoped<IExerciseRunner, DotnetExerciseRunner>();
 builder.Services.AddScoped<ExerciseWorkspaceService>();
+builder.Services.AddSingleton<CSharpLspBridge>();
 builder.Services.AddScoped<ExerciseLanguageService>();
 builder.Services.AddScoped<ExportImportService>();
 builder.Services.AddHostedService<ExerciseLanguageServiceWarmupHostedService>();
