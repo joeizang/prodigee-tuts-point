@@ -16,6 +16,7 @@ import {
 import { useMemo } from 'react'
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import type { NavigationItem } from '../api'
+import { useActiveLearning } from '../state/ActiveLearningContext'
 import type { LocalProfile, Theme } from '../types'
 
 type CommandItem = {
@@ -26,15 +27,6 @@ type CommandItem = {
   icon: React.ComponentType<{ size?: number }>
 }
 
-const navItems = [
-  { label: 'Dashboard', path: '/', icon: TerminalSquare },
-  { label: 'Tracks', path: '/tracks', icon: BookOpen },
-  { label: 'Projects', path: '/projects/wordfreq-csharp', icon: Play },
-  { label: 'Review', path: '/review', icon: NotebookPen },
-  { label: 'Search', path: '/search', icon: Search },
-  { label: 'Sources', path: '/sources', icon: Library },
-]
-
 export function Sidebar({
   onCommandOpen,
   onThemeChange,
@@ -44,6 +36,16 @@ export function Sidebar({
   onThemeChange: (theme: Theme) => void
   theme: Theme
 }) {
+  const { projectPath } = useActiveLearning()
+  const navItems = [
+    { label: 'Dashboard', path: '/', icon: TerminalSquare },
+    { label: 'Tracks', path: '/tracks', icon: BookOpen },
+    { label: 'Projects', path: projectPath, icon: Play },
+    { label: 'Review', path: '/review', icon: NotebookPen },
+    { label: 'Search', path: '/search', icon: Search },
+    { label: 'Sources', path: '/sources', icon: Library },
+  ]
+
   return (
     <aside className="sidebar" aria-label="Primary navigation">
       <Link className="brand" to="/">
@@ -249,6 +251,11 @@ function iconForCommandKind(kind: string): CommandItem['icon'] {
 function formatRouteSegment(segment: string) {
   const knownNames: Record<string, string> = {
     csharp: 'C#',
+    python: 'Python',
+    swift: 'Swift',
+    typescript: 'TypeScript',
+    'py-notes-cli': 'py-notes-cli',
+    'py-notes-title-normalization': 'Title Normalization',
     'pure-word-counting-core': 'Pure Word Counting Core',
     'wordfreq-csharp': 'wordfreq-csharp',
   }

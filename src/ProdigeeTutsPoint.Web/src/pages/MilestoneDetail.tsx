@@ -11,10 +11,15 @@ import { SoftLockNotice } from '../components/SoftLockNotice'
 import { ExerciseFirstLoopPanel, TheoryClusterPanel } from '../components/TheoryClusterPanel'
 import { useApi } from '../hooks/useApi'
 import { useStudyTime } from '../hooks/useStudyTime'
+import { useActiveLearning } from '../state/ActiveLearningContext'
 import type { LocalProfile } from '../types'
 
 export function MilestoneDetail({ profile }: { profile: LocalProfile }) {
-  const { milestoneId = 'pure-word-counting-core', projectId = 'wordfreq-csharp' } = useParams()
+  const { milestonePath, syncTrack } = useActiveLearning()
+  const fallbackSegments = milestonePath.split('/').filter(Boolean)
+  const fallbackProjectId = fallbackSegments[1] ?? ''
+  const fallbackMilestoneId = fallbackSegments[3] ?? ''
+  const { milestoneId = fallbackMilestoneId, projectId = fallbackProjectId } = useParams()
   useStudyTime({ profileId: profile.id, targetType: 'milestone', targetId: milestoneId })
   const { data: milestone, error, isLoading } = useApi<MilestoneDetailModel>(
     `/api/curriculum/projects/${projectId}/milestones/${milestoneId}`,
@@ -26,6 +31,12 @@ export function MilestoneDetail({ profile }: { profile: LocalProfile }) {
   const { data: initialReviews } = useApi<AiReview[]>(
     `/api/ai/reviews?profileId=${encodeURIComponent(profile.id)}&projectId=${encodeURIComponent(projectId)}&milestoneId=${encodeURIComponent(milestoneId)}`,
   )
+
+  useEffect(() => {
+    if (milestone?.projectId) {
+      void syncProjectTrack(milestone.projectId, syncTrack)
+    }
+  }, [milestone?.projectId, syncTrack])
 
   return (
     <Page title={milestone?.title ?? 'Milestone'}>
@@ -55,6 +66,18 @@ export function MilestoneDetail({ profile }: { profile: LocalProfile }) {
       )}
     </Page>
   )
+}
+
+async function syncProjectTrack(projectId: string, syncTrack: (trackId: string) => void) {
+  const response = await fetch(`/api/curriculum/projects/${encodeURIComponent(projectId)}`)
+  if (!response.ok) {
+    return
+  }
+
+  const project = (await response.json()) as { trackId?: string }
+  if (project.trackId) {
+    syncTrack(project.trackId)
+  }
 }
 
 export function AiReviewPanel({

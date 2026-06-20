@@ -55,11 +55,28 @@ public static class CurriculumEndpoints
             return track is null ? Results.NotFound() : Results.Ok(track);
         });
 
-        group.MapGet("/sources", async (AppDbContext db, CancellationToken ct) =>
+        group.MapGet("/sources", async (string? trackId, AppDbContext db, CancellationToken ct) =>
         {
+            var referenceQuery = db.SourceReferences.AsNoTracking();
+            if (!string.IsNullOrWhiteSpace(trackId))
+            {
+                referenceQuery = referenceQuery.Where(reference =>
+                    reference.Lesson != null && reference.Lesson.TrackId == trackId
+                    || reference.ProjectMilestone != null
+                    && reference.ProjectMilestone.Project != null
+                    && reference.ProjectMilestone.Project.TrackId == trackId);
+            }
+
+            var sourceBookIds = await referenceQuery
+                .Select(reference => reference.SourceBookId)
+                .Distinct()
+                .ToListAsync(ct);
+
             var books = await db.SourceBooks
                 .AsNoTracking()
-                .Where(book => book.OwnershipStatus == "Owned")
+                .Where(book => string.IsNullOrWhiteSpace(trackId)
+                    ? book.OwnershipStatus == "Owned"
+                    : sourceBookIds.Contains(book.Id))
                 .OrderBy(book => book.Title)
                 .Select(book => new SourceBookResponse(
                     book.Id,
@@ -69,6 +86,11 @@ public static class CurriculumEndpoints
                     book.Publisher,
                     book.OwnershipStatus ?? "Unspecified",
                     book.References
+                        .Where(reference => string.IsNullOrWhiteSpace(trackId)
+                            || reference.Lesson != null && reference.Lesson.TrackId == trackId
+                            || reference.ProjectMilestone != null
+                            && reference.ProjectMilestone.Project != null
+                            && reference.ProjectMilestone.Project.TrackId == trackId)
                         .OrderBy(reference => reference.Topic)
                         .Select(reference => new SourceReferenceResponse(
                             reference.Id,
@@ -84,7 +106,7 @@ public static class CurriculumEndpoints
             return Results.Ok(books);
         });
 
-        group.MapGet("/navigation", async (AppDbContext db, CancellationToken ct) =>
+        group.MapGet("/navigation", async (string? trackId, AppDbContext db, CancellationToken ct) =>
         {
             var staticItems = new[]
             {
@@ -98,6 +120,7 @@ public static class CurriculumEndpoints
 
             var tracks = await db.Tracks
                 .AsNoTracking()
+                .Where(track => string.IsNullOrWhiteSpace(trackId) || track.Id == trackId)
                 .OrderBy(track => track.Title)
                 .Select(track => new NavigationItemResponse(
                     "Track",
@@ -108,6 +131,7 @@ public static class CurriculumEndpoints
 
             var projects = await db.Projects
                 .AsNoTracking()
+                .Where(project => string.IsNullOrWhiteSpace(trackId) || project.TrackId == trackId)
                 .OrderBy(project => project.Title)
                 .Select(project => new NavigationItemResponse(
                     "Project",
@@ -118,6 +142,8 @@ public static class CurriculumEndpoints
 
             var milestones = await db.ProjectMilestones
                 .AsNoTracking()
+                .Where(milestone => string.IsNullOrWhiteSpace(trackId)
+                    || milestone.Project != null && milestone.Project.TrackId == trackId)
                 .OrderBy(milestone => milestone.Order)
                 .Select(milestone => new NavigationItemResponse(
                     "Milestone",
@@ -128,6 +154,7 @@ public static class CurriculumEndpoints
 
             var lessons = await db.Lessons
                 .AsNoTracking()
+                .Where(lesson => string.IsNullOrWhiteSpace(trackId) || lesson.TrackId == trackId)
                 .OrderBy(lesson => lesson.Order)
                 .Select(lesson => new NavigationItemResponse(
                     "Lesson",
@@ -138,6 +165,7 @@ public static class CurriculumEndpoints
 
             var exercises = await db.Exercises
                 .AsNoTracking()
+                .Where(exercise => string.IsNullOrWhiteSpace(trackId) || exercise.TrackId == trackId)
                 .OrderBy(exercise => exercise.Order)
                 .Select(exercise => new NavigationItemResponse(
                     "Exercise",
@@ -148,6 +176,7 @@ public static class CurriculumEndpoints
 
             var concepts = await db.Concepts
                 .AsNoTracking()
+                .Where(concept => string.IsNullOrWhiteSpace(trackId) || concept.TrackId == trackId)
                 .OrderBy(concept => concept.Title)
                 .Select(concept => new NavigationItemResponse(
                     "Concept",

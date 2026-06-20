@@ -42,9 +42,5 @@ function softLockPath(lock: SoftLock) {
     return `/exercises/${lock.targetId}`
   }
 
-  if (lock.targetType === 'milestone') {
-    return `/projects/wordfreq-csharp/milestones/${lock.targetId}`
-  }
-
   return '/search'
 }

@@ -572,6 +572,23 @@ public sealed class CurriculumEndpointTests
     }
 
     [Fact]
+    public async Task SourcesEndpointCanFilterReferencesByTrack()
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+
+        var books = await client.GetFromJsonAsync<List<SourceBookTestResponse>>(
+            "/api/curriculum/sources?trackId=python",
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(books);
+        Assert.Contains(books, book => book.Id == "python-official-tutorial");
+        Assert.Contains(books, book => book.Id == "pytest-docs");
+        Assert.DoesNotContain(books, book => book.Id == "csharp-12-in-a-nutshell");
+        Assert.All(books, book => Assert.NotEmpty(book.References));
+    }
+
+    [Fact]
     public async Task NavigationEndpointReturnsContentBackedCommandItems()
     {
         await using var factory = new WebApplicationFactory<Program>();
@@ -589,6 +606,25 @@ public sealed class CurriculumEndpointTests
         Assert.Contains(items, item => item.Kind == "Exercise" && item.Path == "/exercises/normalize-to-lowercase");
         Assert.Contains(items, item => item.Kind == "Exercise" && item.Path == "/exercises/run-logquery-summary");
         Assert.Contains(items, item => item.Kind == "Concept" && item.Path == "/concepts/csharp-dictionaries");
+    }
+
+    [Fact]
+    public async Task NavigationEndpointCanFilterCommandItemsByTrack()
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+
+        var items = await client.GetFromJsonAsync<List<NavigationItemTestResponse>>(
+            "/api/curriculum/navigation?trackId=python",
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(items);
+        Assert.Contains(items, item => item.Kind == "Track" && item.Path == "/tracks/python");
+        Assert.Contains(items, item => item.Kind == "Project" && item.Path == "/projects/py-notes-cli");
+        Assert.Contains(items, item => item.Kind == "Lesson" && item.Path == "/lessons/text-as-data-python");
+        Assert.Contains(items, item => item.Kind == "Exercise" && item.Path == "/exercises/normalize-note-title-py");
+        Assert.DoesNotContain(items, item => item.Path.Contains("wordfreq-csharp", StringComparison.Ordinal));
+        Assert.DoesNotContain(items, item => item.Path.Contains("text-as-data-csharp", StringComparison.Ordinal));
     }
 
     private sealed record TrackSummaryTestResponse(

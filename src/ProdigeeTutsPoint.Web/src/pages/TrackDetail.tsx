@@ -5,18 +5,20 @@ import type { TrackDetail as TrackDetailModel } from '../api'
 import { AsyncState } from '../components/AsyncState'
 import { Page } from '../components/Page'
 import { useApi } from '../hooks/useApi'
+import { useActiveLearning } from '../state/ActiveLearningContext'
 
-export function TrackDetail({ onTrackSelected }: { onTrackSelected?: (trackId: string) => void }) {
-  const { trackId = 'csharp' } = useParams()
+export function TrackDetail() {
+  const { selectedTrackId, syncTrack } = useActiveLearning()
+  const { trackId = selectedTrackId } = useParams()
   const { data: track, error, isLoading } = useApi<TrackDetailModel>(
     `/api/curriculum/tracks/${trackId}`,
   )
 
   useEffect(() => {
     if (track?.id) {
-      onTrackSelected?.(track.id)
+      syncTrack(track.id)
     }
-  }, [onTrackSelected, track?.id])
+  }, [syncTrack, track?.id])
 
   return (
     <Page title={track?.title ?? 'Track'}>

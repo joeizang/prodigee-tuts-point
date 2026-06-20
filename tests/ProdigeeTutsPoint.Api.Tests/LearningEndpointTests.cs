@@ -195,6 +195,27 @@ public sealed class LearningEndpointTests
         Assert.Equal(20, typeScriptSummary.ConceptCount);
     }
 
+    [Fact]
+    public async Task ReviewCardsCanBeFilteredByTrack()
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+        var profileId = $"review-track-test-{Guid.NewGuid():n}";
+
+        var csharpCards = await client.GetFromJsonAsync<IReadOnlyCollection<ReviewCardTestResponse>>(
+            $"/api/learner/review/cards?profileId={profileId}&trackId=csharp",
+            TestContext.Current.CancellationToken);
+        var pythonCards = await client.GetFromJsonAsync<IReadOnlyCollection<ReviewCardTestResponse>>(
+            $"/api/learner/review/cards?profileId={profileId}&trackId=python",
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(csharpCards);
+        Assert.NotNull(pythonCards);
+        Assert.NotEmpty(csharpCards);
+        Assert.All(csharpCards, card => Assert.StartsWith("csharp-", card.ConceptId, StringComparison.Ordinal));
+        Assert.DoesNotContain(pythonCards, card => card.ConceptId.StartsWith("csharp-", StringComparison.Ordinal));
+    }
+
     private sealed record NoteUpsertTestRequest(
         string ProfileId,
         string TargetType,

@@ -344,11 +344,13 @@ public static class LearningEndpoints
                 "Private personal progress only. No social comparison is recorded or displayed."));
         });
 
-        group.MapGet("/review/cards", async (string profileId, AppDbContext db, CancellationToken ct) =>
+        group.MapGet("/review/cards", async (string profileId, string? trackId, AppDbContext db, CancellationToken ct) =>
         {
             var cards = await db.ReviewCards
                 .AsNoTracking()
-                .Where(card => card.IsActive)
+                .Where(card => card.IsActive
+                    && (string.IsNullOrWhiteSpace(trackId)
+                        || db.Concepts.Any(concept => concept.Id == card.ConceptId && concept.TrackId == trackId)))
                 .OrderBy(card => card.Order)
                 .ToListAsync(ct);
             var attempts = await db.ReviewCardAttempts

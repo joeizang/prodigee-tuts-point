@@ -6,16 +6,23 @@ import { AsyncState } from '../components/AsyncState'
 import { Page, Panel } from '../components/Page'
 import { useApi } from '../hooks/useApi'
 import { useStudyTime } from '../hooks/useStudyTime'
+import { useActiveLearning } from '../state/ActiveLearningContext'
 import type { LocalProfile } from '../types'
 
 export function Review({ profile }: { profile: LocalProfile }) {
-  useStudyTime({ profileId: profile.id, targetType: 'review', targetId: 'csharp' })
-  const { data: diagnostic, error, isLoading } = useApi<Diagnostic>('/api/learner/diagnostics/csharp')
+  const { selectedTrackId, activeTrack } = useActiveLearning()
+  const diagnosticAvailable = selectedTrackId === 'csharp'
+  useStudyTime({ profileId: profile.id, targetType: 'review', targetId: selectedTrackId })
+  const { data: diagnostic, error, isLoading } = useApi<Diagnostic>(
+    diagnosticAvailable ? '/api/learner/diagnostics/csharp' : null,
+  )
   const { data: latest } = useApi<DiagnosticAttempt | null>(
-    `/api/learner/diagnostics/csharp/latest?profileId=${encodeURIComponent(profile.id)}`,
+    diagnosticAvailable
+      ? `/api/learner/diagnostics/csharp/latest?profileId=${encodeURIComponent(profile.id)}`
+      : null,
   )
   const { data: initialCards } = useApi<ReviewCard[]>(
-    `/api/learner/review/cards?profileId=${encodeURIComponent(profile.id)}`,
+    `/api/learner/review/cards?profileId=${encodeURIComponent(profile.id)}&trackId=${encodeURIComponent(selectedTrackId)}`,
   )
   const [answers, setAnswers] = useState<Record<string, string>>({})
   const [result, setResult] = useState<DiagnosticAttempt | null>(null)
@@ -62,6 +69,14 @@ export function Review({ profile }: { profile: LocalProfile }) {
   return (
     <Page title="Review">
       <AsyncState error={error} isLoading={isLoading} />
+      {!diagnosticAvailable && (
+        <Panel title={`${activeTrack?.title ?? selectedTrackId} review`}>
+          <p className="body-copy">
+            A diagnostic has not been authored for this track yet. Review cards from completed
+            exercises still appear here when they become due.
+          </p>
+        </Panel>
+      )}
       {diagnostic && (
         <div className="content-stack">
           <Panel title="Due Review Cards">

@@ -4,8 +4,10 @@ import type { TrackSummary } from '../api'
 import { AsyncState } from '../components/AsyncState'
 import { Page } from '../components/Page'
 import { useApi } from '../hooks/useApi'
+import { useActiveLearning } from '../state/ActiveLearningContext'
 
-export function Tracks({ selectedTrackId }: { selectedTrackId: string }) {
+export function Tracks() {
+  const { selectedTrackId, selectTrack } = useActiveLearning()
   const { data: tracks, error, isLoading } = useApi<TrackSummary[]>('/api/curriculum/tracks')
 
   return (
@@ -21,6 +23,7 @@ export function Tracks({ selectedTrackId }: { selectedTrackId: string }) {
               className={isActive ? 'list-row track-row active-track-row' : 'list-row track-row'}
               key={track.id}
               to={`/tracks/${track.id}`}
+              onClick={() => selectTrack(track.id)}
             >
               <BookOpen size={18} />
               <span className="track-row-copy">

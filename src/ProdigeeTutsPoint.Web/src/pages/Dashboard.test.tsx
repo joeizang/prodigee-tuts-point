@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { ActiveLearningProvider } from '../state/ActiveLearningContext'
 import { Dashboard } from './Dashboard'
 
 describe('Dashboard', () => {
@@ -226,12 +227,12 @@ describe('Dashboard', () => {
   })
 
   it('renders theory cluster lessons and source anchors as study links', async () => {
+    localStorage.setItem('prodigee.selectedTrack.default-profile', 'csharp')
     render(
       <MemoryRouter>
-        <Dashboard
-          profile={{ id: 'default-profile', displayName: 'Default Profile' }}
-          selectedTrackId="csharp"
-        />
+        <ActiveLearningProvider profile={{ id: 'default-profile', displayName: 'Default Profile' }}>
+          <Dashboard profile={{ id: 'default-profile', displayName: 'Default Profile' }} />
+        </ActiveLearningProvider>
       </MemoryRouter>,
     )
 
@@ -248,12 +249,12 @@ describe('Dashboard', () => {
   })
 
   it('filters dashboard mastery and links by selected track', async () => {
+    localStorage.setItem('prodigee.selectedTrack.default-profile', 'typescript')
     render(
       <MemoryRouter>
-        <Dashboard
-          profile={{ id: 'default-profile', displayName: 'Default Profile' }}
-          selectedTrackId="typescript"
-        />
+        <ActiveLearningProvider profile={{ id: 'default-profile', displayName: 'Default Profile' }}>
+          <Dashboard profile={{ id: 'default-profile', displayName: 'Default Profile' }} />
+        </ActiveLearningProvider>
       </MemoryRouter>,
     )
 

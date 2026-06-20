@@ -4,10 +4,14 @@ import { NotesPanel } from '../components/NotesPanel'
 import { Page, Panel } from '../components/Page'
 import { SourceReferenceDraftPanel } from '../components/SourceReferenceDraftPanel'
 import { useApi } from '../hooks/useApi'
+import { useActiveLearning } from '../state/ActiveLearningContext'
 import type { LocalProfile } from '../types'
 
 export function Sources({ profile }: { profile: LocalProfile }) {
-  const { data: books, error, isLoading } = useApi<SourceBook[]>('/api/curriculum/sources')
+  const { selectedTrackId } = useActiveLearning()
+  const { data: books, error, isLoading } = useApi<SourceBook[]>(
+    `/api/curriculum/sources?trackId=${encodeURIComponent(selectedTrackId)}`,
+  )
 
   return (
     <Page title="Sources">

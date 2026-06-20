@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Save } from 'lucide-react'
 import type { SourceBook } from '../api'
 import { Panel } from './Page'
@@ -30,6 +30,16 @@ export function SourceReferenceDraftPanel({ books }: { books: SourceBook[] }) {
   }))
   const [savedDrafts, setSavedDrafts] = useState<SourceReferenceDraft[]>(readDrafts)
   const yaml = useMemo(() => buildYaml(draft), [draft])
+
+  useEffect(() => {
+    if (books.length === 0) {
+      return
+    }
+
+    if (!books.some((book) => book.id === draft.book)) {
+      setDraft((current) => ({ ...current, book: books[0]?.id ?? '' }))
+    }
+  }, [books, draft.book])
 
   const saveDraft = () => {
     const next = [{ ...draft }, ...savedDrafts].slice(0, 8)

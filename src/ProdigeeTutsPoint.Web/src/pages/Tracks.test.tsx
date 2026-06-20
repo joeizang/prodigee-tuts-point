@@ -1,6 +1,7 @@
 import { render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { ActiveLearningProvider } from '../state/ActiveLearningContext'
 import { Tracks } from './Tracks'
 
 describe('Tracks', () => {
@@ -33,9 +34,12 @@ describe('Tracks', () => {
   })
 
   it('marks the selected track as active on the tracks page', async () => {
+    localStorage.setItem('prodigee.selectedTrack.default-profile', 'typescript')
     render(
       <MemoryRouter>
-        <Tracks selectedTrackId="typescript" />
+        <ActiveLearningProvider profile={{ id: 'default-profile', displayName: 'Default Profile' }}>
+          <Tracks />
+        </ActiveLearningProvider>
       </MemoryRouter>,
     )
 

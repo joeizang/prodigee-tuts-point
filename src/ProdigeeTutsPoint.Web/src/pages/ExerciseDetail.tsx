@@ -22,10 +22,13 @@ import {
 import { selectActiveWorkspaceFile } from '../features/exercises/workspaceFiles'
 import { useApi } from '../hooks/useApi'
 import { useStudyTime } from '../hooks/useStudyTime'
+import { useActiveLearning } from '../state/ActiveLearningContext'
 import type { LocalProfile, Theme } from '../types'
 
 export function ExerciseDetail({ profile, theme }: { profile: LocalProfile; theme: Theme }) {
-  const { exerciseId = 'normalize-to-lowercase' } = useParams()
+  const { exercisePath, syncTrack } = useActiveLearning()
+  const fallbackExerciseId = exercisePath.startsWith('/exercises/') ? exercisePath.split('/').at(-1) ?? '' : ''
+  const { exerciseId = fallbackExerciseId } = useParams()
   useStudyTime({ profileId: profile.id, targetType: 'exercise', targetId: exerciseId })
   const { data: exercise, error, isLoading } = useApi<ExerciseDetailModel>(
     `/api/curriculum/exercises/${exerciseId}`,
@@ -64,6 +67,12 @@ export function ExerciseDetail({ profile, theme }: { profile: LocalProfile; them
     setAssistanceOverride(null)
     setAttemptsOverride(null)
   }, [exerciseId])
+
+  useEffect(() => {
+    if (exercise?.trackId) {
+      syncTrack(exercise.trackId)
+    }
+  }, [exercise?.trackId, syncTrack])
 
   const saveActiveFile = useCallback(async () => {
     if (!activeFile?.editable) {

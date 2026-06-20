@@ -14,13 +14,13 @@ import { Sources } from './pages/Sources'
 import { TrackDetail } from './pages/TrackDetail'
 import { Tracks } from './pages/Tracks'
 import { useApi } from './hooks/useApi'
+import { ActiveLearningProvider, useActiveLearning } from './state/ActiveLearningContext'
 import type { NavigationItem } from './api'
 import type { LocalProfile, Theme } from './types'
 import './App.css'
 
 const themeKey = 'prodigee.theme'
 const profileKey = 'prodigee.localProfile'
-const selectedTrackKey = 'prodigee.selectedTrack'
 const defaultProfile: LocalProfile = {
   id: 'default-profile',
   displayName: 'Default Profile',
@@ -48,19 +48,11 @@ function App() {
   })
   const [isCommandOpen, setIsCommandOpen] = useState(false)
   const [query, setQuery] = useState('')
-  const [selectedTrackId, setSelectedTrackId] = useState(
-    () => localStorage.getItem(profileSelectedTrackKey(profile.id)) ?? 'csharp',
-  )
-  const { data: navigationItems } = useApi<NavigationItem[]>('/api/curriculum/navigation')
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme
     localStorage.setItem(profileThemeKey(profile.id), theme)
   }, [profile.id, theme])
-
-  useEffect(() => {
-    localStorage.setItem(profileSelectedTrackKey(profile.id), selectedTrackId)
-  }, [profile.id, selectedTrackId])
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -91,6 +83,49 @@ function App() {
   }, [])
 
   return (
+    <ActiveLearningProvider profile={profile}>
+      <AppBody
+        isCommandOpen={isCommandOpen}
+        profile={profile}
+        query={query}
+        setIsCommandOpen={setIsCommandOpen}
+        setQuery={setQuery}
+        setTheme={setTheme}
+        theme={theme}
+      />
+    </ActiveLearningProvider>
+  )
+}
+
+export default App
+
+function profileThemeKey(profileId: string) {
+  return `${themeKey}.${profileId}`
+}
+
+function AppBody({
+  isCommandOpen,
+  profile,
+  query,
+  setIsCommandOpen,
+  setQuery,
+  setTheme,
+  theme,
+}: {
+  isCommandOpen: boolean
+  profile: LocalProfile
+  query: string
+  setIsCommandOpen: (isOpen: boolean) => void
+  setQuery: (query: string) => void
+  setTheme: (theme: Theme) => void
+  theme: Theme
+}) {
+  const { selectedTrackId } = useActiveLearning()
+  const { data: navigationItems } = useApi<NavigationItem[]>(
+    `/api/curriculum/navigation?trackId=${encodeURIComponent(selectedTrackId)}`,
+  )
+
+  return (
     <div className="app-shell">
       <Sidebar
         theme={theme}
@@ -101,9 +136,9 @@ function App() {
       <main className="content-shell">
         <Header profile={profile} onCommandOpen={() => setIsCommandOpen(true)} />
         <Routes>
-          <Route path="/" element={<Dashboard profile={profile} selectedTrackId={selectedTrackId} />} />
-          <Route path="/tracks" element={<Tracks selectedTrackId={selectedTrackId} />} />
-          <Route path="/tracks/:trackId" element={<TrackDetail onTrackSelected={setSelectedTrackId} />} />
+          <Route path="/" element={<Dashboard profile={profile} />} />
+          <Route path="/tracks" element={<Tracks />} />
+          <Route path="/tracks/:trackId" element={<TrackDetail />} />
           <Route path="/projects/:projectId" element={<ProjectDetail profile={profile} />} />
           <Route
             path="/projects/:projectId/milestones/:milestoneId"
@@ -111,10 +146,7 @@ function App() {
           />
           <Route path="/lessons/:lessonId" element={<LessonDetail profile={profile} />} />
           <Route path="/concepts/:conceptId" element={<ConceptDetail profile={profile} />} />
-          <Route
-            path="/exercises/:exerciseId"
-            element={<ExerciseDetail profile={profile} theme={theme} />}
-          />
+          <Route path="/exercises/:exerciseId" element={<ExerciseDetail profile={profile} theme={theme} />} />
           <Route path="/review" element={<Review profile={profile} />} />
           <Route path="/search" element={<SearchPage />} />
           <Route path="/sources" element={<Sources profile={profile} />} />
@@ -135,16 +167,6 @@ function App() {
       )}
     </div>
   )
-}
-
-export default App
-
-function profileThemeKey(profileId: string) {
-  return `${themeKey}.${profileId}`
-}
-
-function profileSelectedTrackKey(profileId: string) {
-  return `${selectedTrackKey}.${profileId}`
 }
 
 const fallbackNavigationItems: NavigationItem[] = [

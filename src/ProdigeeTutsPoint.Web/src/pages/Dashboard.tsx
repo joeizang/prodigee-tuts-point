@@ -11,15 +11,11 @@ import type {
 import { Panel } from '../components/Page'
 import { Metric } from '../components/PrimitiveLists'
 import { useApi } from '../hooks/useApi'
+import { useActiveLearning } from '../state/ActiveLearningContext'
 import type { LocalProfile as LocalProfileType } from '../types'
 
-export function Dashboard({
-  profile,
-  selectedTrackId,
-}: {
-  profile: LocalProfileType
-  selectedTrackId: string
-}) {
+export function Dashboard({ profile }: { profile: LocalProfileType }) {
+  const { selectedTrackId } = useActiveLearning()
   const { data: track } = useApi<TrackDetail>(`/api/curriculum/tracks/${selectedTrackId}`)
   const primaryProject = track?.projects?.[0] ?? null
   const { data: project } = useApi<ProjectDetail>(
@@ -158,6 +154,17 @@ function formatTrackId(trackId: string) {
 }
 
 function fallbackTheoryClusterFor(trackId: string): TheoryCluster['items'] {
+  if (trackId === 'python') {
+    return [
+      {
+        lessonId: 'text-as-data-python',
+        title: 'Text as Data in Python',
+        summary: 'Learn names, immutable strings, return values, whitespace contracts, tests, and editor feedback.',
+        sources: [],
+      },
+    ]
+  }
+
   if (trackId === 'typescript') {
     return [
       {
