@@ -72,9 +72,37 @@ Scope:
 
 - Event loop, async I/O, streams, workers
 - HTTP APIs, routing, middleware, validation
+- Fastify as the target production framework after native Node boundaries are understood
+- Fastify schemas, plugins, hooks, typed route composition, and testable server modules
 - Filesystem, child processes, process lifecycle
 - Database access, error handling, logging
 - Performance, security, deployment readiness
+
+### Python
+
+Scope:
+
+- Absolute-beginner Python syntax, indentation, names, object references, truthiness, and `None`
+- Strings, numbers, lists, dictionaries, tuples, sets, iteration, comprehensions, and standard library fluency
+- Functions, modules, imports, virtual environments, packaging basics, and dependency management
+- Type hints, dataclasses, Pydantic-style data modeling, exceptions, debugging, and tracebacks
+- Testing with pytest, fixtures, parametrized tests, visible/hidden test design, and refactoring under tests
+- CLI programs, file/JSON I/O, local persistence, HTTP clients, async fundamentals, performance boundaries, and production-ready Python style
+
+The Python track has a different pacing rule from the existing C#, TypeScript, and Swift tracks: assume the learner starts with no Python. Fast syntax tours are not acceptable. Early milestones must be smaller, more repetitive, and more explicit about mental models before the learner is expected to use framework abstractions.
+
+### FastAPI
+
+Scope:
+
+- HTTP fundamentals, request/response modeling, route handlers, status codes, and API contracts
+- FastAPI routing, dependencies, validation, response models, exception handling, and OpenAPI docs
+- Pydantic models, schema boundaries, typed request bodies, query/path parameters, and serialization
+- Application structure with routers, services, repositories, settings, logging, and testable dependency overrides
+- Persistence with SQLite/Postgres-ready patterns, migrations, transactions, pagination, and database-backed tests
+- Authentication and authorization boundaries, background tasks, CORS, health checks, deployment readiness, and security review
+
+FastAPI should arrive only after Python functions, modules, data structures, exceptions, type hints, and pytest are usable. The framework track must repeatedly connect FastAPI behavior back to plain Python rather than presenting decorator-driven behavior as magic.
 
 ### Swift Language
 
@@ -126,6 +154,14 @@ Every serious lesson should include:
 - Further reading/source anchors
 
 Lessons should normally belong to a theory cluster that supports a project milestone. Standalone reference lessons are allowed, but they are not the dominant curriculum shape.
+
+Python beginner lessons have additional acceptance criteria:
+
+- Name the beginner mental model explicitly before introducing syntax.
+- Show at least one common wrong beginner interpretation and how to debug it.
+- Require recall, code writing, test running, and refactoring before the concept is considered practiced.
+- Avoid moving into FastAPI until the same concept has been used in plain Python.
+- Explain editor diagnostics, hover text, formatting, and type feedback as part of the learning loop.
 
 ## Exercise Contract
 
@@ -261,6 +297,16 @@ Initial seven-project ladder:
 7. `pkg-index` - external APIs, caching, data modeling
 
 Resolved: `pkg-index` is project 7. `mini-ci` remains the first advanced capstone after the core ladder.
+
+Python and FastAPI should use a beginner-to-proficient ladder that starts below the normal language-track floor:
+
+1. `py-notes-cli` - Python files, strings, functions, collections, JSON, CLI output, pytest
+2. `task-tracker-core` - data modeling, type hints, dataclasses/Pydantic-style validation, exceptions, module boundaries
+3. `task-api` - FastAPI routing, request bodies, response models, validation, status codes, route tests
+4. `task-api-v2` - routers, dependencies, settings, service boundaries, error responses, logging
+5. `task-api-sqlite` - persistence, migrations, repository boundaries, pagination, database-backed tests
+6. `team-tasks-api` - auth boundaries, ownership checks, background tasks, health checks, CORS, deployment configuration
+7. `learning-journal-api` - capstone service tied to Prodigee Tuts Point concepts, notes, review cards, study sessions, search, and production review
 
 ### First C# Project
 

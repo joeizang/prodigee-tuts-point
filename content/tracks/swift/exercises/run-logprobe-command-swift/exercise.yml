@@ -1,0 +1,98 @@
+id: run-logprobe-command-swift
+title: RunLogprobeCommand
+kind: project
+workspace:
+  runtime: swiftpm
+  entryPoint: runLogprobeCommand
+  starter: tracks/swift/exercises/_shared/LogprobeCore.swift
+  visibleTest: |
+    let request = LogprobeCommandRequest(source: .stdin, format: .table, limit: 2)
+    let result = try await runLogprobeCommand(
+        request,
+        readStdin: {
+            """
+            INFO boot
+            WARN disk
+            INFO ready
+            """
+        },
+        readFile: { _ in "" }
+    )
+    XCTAssertEqual(result, .rendered("INFO 2\nWARN 1"))
+  hiddenTest: |
+    let jsonRequest = LogprobeCommandRequest(source: .file("app.log"), format: .json, limit: 1)
+    let jsonResult = try await runLogprobeCommand(
+        jsonRequest,
+        readStdin: { "unused" },
+        readFile: { path in
+            XCTAssertEqual(path, "app.log")
+            return """
+            ERROR failed
+            INFO ready
+            ERROR failed again
+            """
+        }
+    )
+    XCTAssertEqual(jsonResult, .rendered("[{\"level\":\"ERROR\",\"count\":2}]"))
+
+    let failed = try await runLogprobeCommand(
+        LogprobeCommandRequest(source: .file("missing.log"), format: .table, limit: 3),
+        readStdin: { "unused" },
+        readFile: { _ in throw CliParseError.missingPath }
+    )
+    XCTAssertEqual(failed, .failed("Could not read input file: missing.log"))
+hints:
+  - id: conceptual
+    level: conceptual
+    title: Compose the pipeline
+    body: The command should resolve input, split it into a line stream, count levels, and render the chosen output format in that order.
+  - id: api-approach
+    level: api-approach
+    title: Keep failure controlled
+    body: File-read failures already come back as FileReadResult.failure, so return LogprobeCommandResult.failed instead of throwing.
+  - id: structural
+    level: structural
+    title: Render at the edge
+    body: Counting should produce LevelCount values. Only the last step should turn those values into table or JSON text.
+solution:
+  title: Model solution
+  body: The model solution composes the earlier input, streaming, and rendering functions without touching process APIs or real files.
+  code: |
+    public func renderLevelCounts(_ counts: [LevelCount], format: OutputFormat) -> String {
+        switch format {
+        case .table:
+            return counts.map { "\($0.level) \($0.count)" }.joined(separator: "\n")
+        case .json:
+            let objects = counts.map { "{\"level\":\"\($0.level)\",\"count\":\($0.count)}" }
+            return "[\(objects.joined(separator: ","))]"
+        }
+    }
+
+    public func runLogprobeCommand(
+        _ request: LogprobeCommandRequest,
+        readStdin: () async -> String,
+        readFile: (String) async throws -> String
+    ) async throws -> LogprobeCommandResult {
+        let input = await resolveInputSource(request.source, readStdin: readStdin, readFile: readFile)
+        switch input {
+        case .failure(let message):
+            return .failed(message)
+        case .success(let text):
+            let lines = AsyncStream<String> { continuation in
+                for line in text.split(whereSeparator: \.isNewline) {
+                    continuation.yield(String(line))
+                }
+                continuation.finish()
+            }
+            let counts = try await countLevels(from: lines, limit: request.limit)
+            return .rendered(renderLevelCounts(counts, format: request.format))
+        }
+    }
+commonWrongApproaches:
+  - Reading stdin or files directly inside the command instead of using the injected closures.
+  - Returning counts from the command and leaving output formatting to test code.
+  - Throwing on file read failures even though the command contract has a controlled failure result.
+expectedSolutionCharacteristics:
+  - Composes input resolution, async line counting, and edge rendering.
+  - Supports table and JSON output with deterministic ordering inherited from countLevels.
+  - Uses injected dependencies only, so the command stays testable and process-independent.

@@ -1,0 +1,50 @@
+id: parse-output-format-ts
+title: ParseOutputFormat
+kind: focused
+workspace:
+  runtime: node-typescript
+  entryPoint: parseOutputFormat
+  starter: tracks/typescript/exercises/_shared/CliContracts.ts
+  visibleTest: |
+    expect(parseOutputFormat('json')).toBe('json')
+    expect(parseOutputFormat(undefined)).toBe('table')
+  hiddenTest: |
+    expect(parseOutputFormat('table')).toBe('table')
+    expect(() => parseOutputFormat('yaml')).toThrow(/format/i)
+    expect(() => parseOutputFormat('')).toThrow(/format/i)
+hints:
+  - id: conceptual
+    level: conceptual
+    title: Narrow the string
+    body: The parser should convert an optional string into the OutputFormat union, not let any string travel farther into the program.
+  - id: api-approach
+    level: api-approach
+    title: Default at the boundary
+    body: Apply the default format where the raw option is parsed so deeper code can always expect a concrete OutputFormat.
+  - id: structural
+    level: structural
+    title: Reject unsupported values
+    body: Check explicitly for table and json, then throw an error that names the bad format for all other values.
+solution:
+  title: Model solution
+  body: The model solution applies the table default at the boundary and narrows accepted values to the OutputFormat union.
+  code: |
+    export type OutputFormat = 'table' | 'json'
+
+    export function parseOutputFormat(value: string | undefined): OutputFormat {
+      if (value === undefined) {
+        return 'table'
+      }
+
+      if (value === 'table' || value === 'json') {
+        return value
+      }
+
+      throw new Error(`Unsupported format: ${value}`)
+    }
+commonWrongApproaches:
+  - Returning the raw string and trusting later formatting code to handle it.
+  - Treating unknown formats as table, which hides user mistakes and makes automation harder to debug.
+expectedSolutionCharacteristics:
+  - Defaults missing format to table.
+  - Accepts only table and json, rejecting every other value with a useful error.

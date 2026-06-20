@@ -41,6 +41,9 @@
 - Resolved analytics model: basic active time tracking in v1.
 - Resolved content quality tooling: validator command in v1.
 - Resolved seed content requirement: first slice uses real rich content, not placeholders.
+- Resolved Python curriculum direction: add a Python category that assumes the learner is an absolute Python beginner and progresses methodically from fundamentals to proficient Python before FastAPI becomes the primary vehicle.
+- Resolved FastAPI curriculum direction: FastAPI lessons must connect framework behavior back to plain Python functions, type hints, objects, validation, and tests rather than teaching decorator-driven magic.
+- Resolved Python/FastAPI editor direction: Monaco must use real Python semantic tooling through Pyright or basedpyright plus Ruff, with package-aware FastAPI/Pydantic IntelliSense, not handcrafted suggestions.
 - Decide first vertical slice.
 
 ## Phase 1 - App Foundation
@@ -108,6 +111,9 @@
 - Harden C# language server bridge.
 - Add Swift SourceKit-LSP bridge.
 - Keep TypeScript Monaco language service.
+- Add Python Pyright or basedpyright bridge for semantic diagnostics, completions, hover, and signature help.
+- Add Ruff integration for Python formatting, lint diagnostics, organize imports, and supported code actions.
+- Ensure Python and FastAPI exercise runners and language services resolve the same dependency environment.
 
 ## Phase 6 - Projects
 
@@ -195,6 +201,9 @@
 - Add .NET SDK check.
 - Add Swift SDK check.
 - Add Node.js check.
+- Add Python runtime check.
+- Add Pyright or basedpyright check.
+- Add Ruff check.
 - Add Ollama check.
 - Add provider capability check.
 - Add setup guidance for missing tools.

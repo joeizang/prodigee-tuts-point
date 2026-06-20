@@ -1,0 +1,130 @@
+id: handle-hardened-logprobe-request-swift
+title: HandleHardenedLogprobeRequest
+kind: project
+workspace:
+  runtime: swiftpm
+  entryPoint: handleHardenedLogprobeRequest
+  starter: tracks/swift/exercises/_shared/LogprobeCore.swift
+  visibleTest: |
+    let result = await handleHardenedLogprobeRequest(
+        HttpLogprobeRequest(query: ["format": "json", "limit": "1"], body: "ERROR failed\nINFO ready\nERROR again"),
+        requestId: "req-123",
+        startedAtMs: 1_000,
+        deadlineMs: 500,
+        maxBodyBytes: 1_024,
+        nowMs: { 1_042 }
+    )
+
+    XCTAssertEqual(result.response.status, 200)
+    XCTAssertEqual(result.response.contentType, "application/json")
+    XCTAssertEqual(result.response.body, "[{\"level\":\"ERROR\",\"count\":2}]")
+    XCTAssertEqual(result.telemetry, LogprobeTelemetry(requestId: "req-123", status: 200, durationMs: 42, outcome: "ok"))
+  hiddenTest: |
+    let tooLarge = await handleHardenedLogprobeRequest(
+        HttpLogprobeRequest(query: [:], body: "abcdef"),
+        requestId: "large",
+        startedAtMs: 10,
+        deadlineMs: 1_000,
+        maxBodyBytes: 5,
+        nowMs: { 20 }
+    )
+    XCTAssertEqual(tooLarge.response, HttpLogprobeResponse(status: 413, contentType: "text/plain", body: "request body too large"))
+    XCTAssertEqual(tooLarge.telemetry, LogprobeTelemetry(requestId: "large", status: 413, durationMs: 10, outcome: "rejected"))
+
+    let invalid = await handleHardenedLogprobeRequest(
+        HttpLogprobeRequest(query: ["format": "yaml"], body: "INFO ready"),
+        requestId: "bad-format",
+        startedAtMs: 100,
+        deadlineMs: 1_000,
+        maxBodyBytes: 100,
+        nowMs: { 125 }
+    )
+    XCTAssertEqual(invalid.response.status, 400)
+    XCTAssertEqual(invalid.telemetry.outcome, "validation-failed")
+    XCTAssertEqual(invalid.telemetry.durationMs, 25)
+
+    let timedOut = await handleHardenedLogprobeRequest(
+        HttpLogprobeRequest(query: [:], body: "INFO ready"),
+        requestId: "timeout",
+        startedAtMs: 1_000,
+        deadlineMs: 50,
+        maxBodyBytes: 100,
+        nowMs: { 1_075 }
+    )
+    XCTAssertEqual(timedOut.response, HttpLogprobeResponse(status: 504, contentType: "text/plain", body: "request timed out"))
+    XCTAssertEqual(timedOut.telemetry, LogprobeTelemetry(requestId: "timeout", status: 504, durationMs: 75, outcome: "timed-out"))
+hints:
+  - id: conceptual
+    level: conceptual
+    title: Harden the adapter
+    body: "Server hardening is boundary behavior: reject oversized input, map timeouts, classify outcomes, and keep the core reusable."
+  - id: api-approach
+    level: api-approach
+    title: Build one envelope
+    body: "Return both the HTTP response and telemetry from the function so tests can verify user-facing and operational contracts together."
+  - id: structural
+    level: structural
+    title: Classify from status
+    body: "A 2xx response is ok, a 4xx response is validation-failed or rejected, a timeout is timed-out, and unexpected 5xx results are failed."
+solution:
+  title: Model solution
+  body: The model solution checks timeout and body size before delegating to the request adapter, then records a stable telemetry outcome for every response path.
+  code: |
+    public func handleHardenedLogprobeRequest(
+        _ request: HttpLogprobeRequest,
+        requestId: String,
+        startedAtMs: Int,
+        deadlineMs: Int,
+        maxBodyBytes: Int,
+        nowMs: () async -> Int
+    ) async -> HardenedLogprobeResponse {
+        let now = await nowMs()
+        let duration = max(0, now - startedAtMs)
+
+        func envelope(_ response: HttpLogprobeResponse, outcome: String) -> HardenedLogprobeResponse {
+            HardenedLogprobeResponse(
+                response: response,
+                telemetry: LogprobeTelemetry(
+                    requestId: requestId,
+                    status: response.status,
+                    durationMs: duration,
+                    outcome: outcome
+                )
+            )
+        }
+
+        if duration > deadlineMs {
+            return envelope(
+                HttpLogprobeResponse(status: 504, contentType: "text/plain", body: "request timed out"),
+                outcome: "timed-out"
+            )
+        }
+
+        if let body = request.body, body.utf8.count > maxBodyBytes {
+            return envelope(
+                HttpLogprobeResponse(status: 413, contentType: "text/plain", body: "request body too large"),
+                outcome: "rejected"
+            )
+        }
+
+        let response = await handleLogprobeRequest(request)
+        let outcome: String
+        switch response.status {
+        case 200..<300:
+            outcome = "ok"
+        case 400..<500:
+            outcome = "validation-failed"
+        default:
+            outcome = "failed"
+        }
+
+        return envelope(response, outcome: outcome)
+    }
+commonWrongApproaches:
+  - Logging telemetry only on success, which hides the failures operators most need to understand.
+  - Letting oversized request bodies reach the command core before applying a boundary limit.
+  - Returning 500 for client validation problems such as unsupported formats or invalid limits.
+expectedSolutionCharacteristics:
+  - Returns one response envelope for every path.
+  - Applies timeout and body-size checks before delegating to the normal request adapter.
+  - Produces stable telemetry with request id, status, duration, and outcome classification.

@@ -1,0 +1,132 @@
+id: parse-command-safely-ts
+title: ParseCommandSafely
+kind: focused
+workspace:
+  runtime: node-typescript
+  entryPoint: parseCommandSafely
+  starter: tracks/typescript/exercises/_shared/CliContracts.ts
+  visibleTest: |
+    expect(parseCommandSafely(['--level', 'warn', '--limit', '10', '--format', 'json'])).toEqual({
+      ok: true,
+      value: {
+        level: 'warn',
+        limit: 10,
+        includeArchived: false,
+        format: 'json',
+      },
+    })
+  hiddenTest: |
+    expect(parseCommandSafely(['--archived'])).toEqual({
+      ok: true,
+      value: {
+        level: 'info',
+        limit: 100,
+        includeArchived: true,
+        format: 'table',
+      },
+    })
+
+    expect(parseCommandSafely(['--level', 'trace'])).toEqual({
+      ok: false,
+      error: {
+        option: '--level',
+        message: 'Unsupported level: trace',
+      },
+    })
+
+    expect(parseCommandSafely(['--limit', 'zero']).ok).toBe(false)
+hints:
+  - id: conceptual
+    level: conceptual
+    title: Expected failures are data
+    body: A bad command is an operational failure. Return a structured result so the command runner can decide stderr and exit code.
+  - id: api-approach
+    level: api-approach
+    title: Use the ok discriminator
+    body: Return ok true with a value for success and ok false with an error for parse failures so TypeScript can narrow callers.
+  - id: structural
+    level: structural
+    title: Parse in one pass
+    body: Walk the argument array with an index, consume option values deliberately, and return immediately when a malformed option is found.
+solution:
+  title: Model solution
+  body: The model solution uses a discriminated result, applies defaults at the boundary, and reports the exact option that failed.
+  code: |
+    export type LogLevel = 'debug' | 'info' | 'warn' | 'error'
+    export type OutputFormat = 'table' | 'json'
+
+    export type CommandRequest = {
+      readonly level: LogLevel
+      readonly limit: number
+      readonly includeArchived: boolean
+      readonly format: OutputFormat
+    }
+
+    export type ParseError = {
+      readonly option: string
+      readonly message: string
+    }
+
+    export type ParseResult =
+      | { readonly ok: true; readonly value: CommandRequest }
+      | { readonly ok: false; readonly error: ParseError }
+
+    const levels = ['debug', 'info', 'warn', 'error'] as const
+
+    export function parseCommandSafely(args: readonly string[]): ParseResult {
+      let level: LogLevel = 'info'
+      let limit = 100
+      let includeArchived = false
+      let format: OutputFormat = 'table'
+
+      for (let index = 0; index < args.length; index++) {
+        const option = args[index]
+
+        if (option === '--archived') {
+          includeArchived = true
+          continue
+        }
+
+        if (option === '--level') {
+          const value = args[++index]
+          if (!isLogLevel(value)) {
+            return { ok: false, error: { option, message: `Unsupported level: ${value ?? '<missing>'}` } }
+          }
+          level = value
+          continue
+        }
+
+        if (option === '--limit') {
+          const value = args[++index]
+          const parsed = Number(value)
+          if (!Number.isInteger(parsed) || parsed < 1) {
+            return { ok: false, error: { option, message: `Invalid limit: ${value ?? '<missing>'}` } }
+          }
+          limit = parsed
+          continue
+        }
+
+        if (option === '--format') {
+          const value = args[++index]
+          if (value !== 'table' && value !== 'json') {
+            return { ok: false, error: { option, message: `Unsupported format: ${value ?? '<missing>'}` } }
+          }
+          format = value
+          continue
+        }
+
+        return { ok: false, error: { option: option ?? '<missing>', message: `Unknown option: ${option ?? '<missing>'}` } }
+      }
+
+      return { ok: true, value: { level, limit, includeArchived, format } }
+    }
+
+    function isLogLevel(value: string | undefined): value is LogLevel {
+      return levels.some((level) => level === value)
+    }
+commonWrongApproaches:
+  - Throwing for every user typo, which prevents the runner from producing controlled stderr and exit-code behavior.
+  - Returning a string error without the option that caused it.
+expectedSolutionCharacteristics:
+  - Returns a discriminated ParseResult for success and failure.
+  - Applies defaults and reports malformed level, limit, format, and unknown options clearly.

@@ -1,0 +1,104 @@
+id: parse-command-request-swift
+title: ParseCommandRequest
+kind: focused
+workspace:
+  runtime: swiftpm
+  entryPoint: parseCommandRequest
+  starter: tracks/swift/exercises/_shared/CommandBoundary.swift
+  visibleTest: |
+    let parsed = try parseCommandRequest(["--level", "warn", "--limit", "25", "--archived"])
+    XCTAssertEqual(parsed, CommandRequest(level: .warn, limit: 25, includeArchived: true))
+    XCTAssertEqual(try parseCommandRequest([]), CommandRequest(level: .info, limit: 100, includeArchived: false))
+  hiddenTest: |
+    XCTAssertThrowsError(try parseCommandRequest(["--level"])) { error in
+        XCTAssertEqual(error as? CommandRequestError, .missingValue("--level"))
+    }
+    XCTAssertThrowsError(try parseCommandRequest(["--level", "trace"])) { error in
+        XCTAssertEqual(error as? CommandRequestError, .invalidLevel("trace"))
+    }
+    XCTAssertThrowsError(try parseCommandRequest(["--limit", "0"])) { error in
+        XCTAssertEqual(error as? CommandRequestError, .invalidLimit("0"))
+    }
+    XCTAssertThrowsError(try parseCommandRequest(["--unknown"])) { error in
+        XCTAssertEqual(error as? CommandRequestError, .unknownOption("--unknown"))
+    }
+hints:
+  - id: conceptual
+    level: conceptual
+    title: Boundary parser
+    body: The parser is the only place where raw strings should become trusted Swift values for the rest of the application.
+  - id: api-approach
+    level: api-approach
+    title: Use typed cases
+    body: Convert level strings through LogLevel(rawValue:) so unsupported values fail instead of traveling as plain strings.
+  - id: structural
+    level: structural
+    title: Advance carefully
+    body: Use a while loop with an index so flags advance by one position and options with values advance by two positions.
+solution:
+  title: Model solution
+  body: The model solution walks the argument array once, applies defaults at the boundary, validates option values, and throws named errors for expected parse failures.
+  code: |
+    public enum LogLevel: String, Equatable {
+        case debug
+        case info
+        case warn
+        case error
+    }
+
+    public struct CommandRequest: Equatable {
+        public let level: LogLevel
+        public let limit: Int
+        public let includeArchived: Bool
+
+        public init(level: LogLevel, limit: Int, includeArchived: Bool) {
+            self.level = level
+            self.limit = limit
+            self.includeArchived = includeArchived
+        }
+    }
+
+    public enum CommandRequestError: Error, Equatable {
+        case unknownOption(String)
+        case missingValue(String)
+        case invalidLevel(String)
+        case invalidLimit(String)
+    }
+
+    public func parseCommandRequest(_ args: [String]) throws -> CommandRequest {
+        var level = LogLevel.info
+        var limit = 100
+        var includeArchived = false
+        var index = 0
+
+        while index < args.count {
+            let option = args[index]
+            switch option {
+            case "--archived":
+                includeArchived = true
+                index += 1
+            case "--level":
+                guard index + 1 < args.count else { throw CommandRequestError.missingValue(option) }
+                let value = args[index + 1]
+                guard let parsed = LogLevel(rawValue: value) else { throw CommandRequestError.invalidLevel(value) }
+                level = parsed
+                index += 2
+            case "--limit":
+                guard index + 1 < args.count else { throw CommandRequestError.missingValue(option) }
+                let value = args[index + 1]
+                guard let parsed = Int(value), parsed > 0 else { throw CommandRequestError.invalidLimit(value) }
+                limit = parsed
+                index += 2
+            default:
+                throw CommandRequestError.unknownOption(option)
+            }
+        }
+
+        return CommandRequest(level: level, limit: limit, includeArchived: includeArchived)
+    }
+commonWrongApproaches:
+  - Passing the raw argument array deeper into the application instead of returning a typed CommandRequest.
+  - Treating unsupported levels or invalid limits as defaults, which hides user mistakes and makes automation unreliable.
+expectedSolutionCharacteristics:
+  - Parses the supported flags in a single pass with stable defaults.
+  - Throws precise CommandRequestError cases for missing values, invalid values, and unknown options.

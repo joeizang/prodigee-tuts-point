@@ -1,0 +1,49 @@
+id: load-log-lines-ts
+title: LoadLogLines
+kind: focused
+workspace:
+  runtime: node-typescript
+  entryPoint: loadLogLines
+  starter: tracks/typescript/exercises/_shared/FileAndStreaming.ts
+  visibleTest: |
+    await expect(loadLogLines('app.log', async () => 'one\ntwo\nthree')).resolves.toEqual(['one', 'two', 'three'])
+  hiddenTest: |
+    await expect(loadLogLines('windows.log', async () => 'one\r\ntwo\r\n')).resolves.toEqual(['one', 'two'])
+    await expect(loadLogLines('empty.log', async () => '')).resolves.toEqual([])
+    await expect(loadLogLines('blank.log', async () => '\n')).resolves.toEqual([])
+hints:
+  - id: conceptual
+    level: conceptual
+    title: Preserve line policy
+    body: A line loader owns newline normalization, so later parsing code can reason about one line at a time.
+  - id: api-approach
+    level: api-approach
+    title: Normalize CRLF first
+    body: Replace Windows newlines with Unix newlines before splitting so tests are stable across platforms.
+  - id: structural
+    level: structural
+    title: Drop final empty line
+    body: Files often end with a newline. Remove empty lines produced only by splitting so they do not become fake log events.
+solution:
+  title: Model solution
+  body: The model solution reads text through the injected reader, normalizes newlines, and returns meaningful lines only.
+  code: |
+    export type TextFileReader = (path: string) => Promise<string>
+
+    export async function loadLogLines(path: string, readFile: TextFileReader): Promise<readonly string[]> {
+      const text = await readFile(path)
+      if (text.length === 0) {
+        return []
+      }
+
+      return text
+        .replaceAll('\r\n', '\n')
+        .split('\n')
+        .filter((line) => line.length > 0)
+    }
+commonWrongApproaches:
+  - Splitting only on "\n" and leaving carriage returns in each Windows line.
+  - Returning a single empty string for an empty file, which creates a fake log line.
+expectedSolutionCharacteristics:
+  - Supports Unix and Windows newline styles.
+  - Treats empty text and trailing newlines as no extra log event.

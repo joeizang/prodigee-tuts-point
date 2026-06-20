@@ -1,0 +1,71 @@
+id: resolve-input-source-ts
+title: ResolveInputSource
+kind: focused
+workspace:
+  runtime: node-typescript
+  entryPoint: resolveInputSource
+  starter: tracks/typescript/exercises/_shared/FileAndStreaming.ts
+  visibleTest: |
+    await expect(resolveInputSource({ kind: 'stdin' }, async () => 'from stdin', async () => 'from file')).resolves.toEqual({
+      ok: true,
+      text: 'from stdin',
+    })
+  hiddenTest: |
+    await expect(resolveInputSource({ kind: 'file', path: 'app.log' }, async () => 'stdin', async (path) => `file:${path}`)).resolves.toEqual({
+      ok: true,
+      text: 'file:app.log',
+    })
+    await expect(resolveInputSource({ kind: 'file', path: 'missing.log' }, async () => 'stdin', async () => {
+      throw new Error('missing')
+    })).resolves.toEqual({
+      ok: false,
+      message: 'Could not read input file: missing.log',
+    })
+hints:
+  - id: conceptual
+    level: conceptual
+    title: Narrow by kind
+    body: The discriminant tells you whether to read stdin or a file, so do not inspect path when the source is stdin.
+  - id: api-approach
+    level: api-approach
+    title: Reuse safe file reading
+    body: The file branch should return the same controlled result shape as readTextFileSafely instead of throwing raw errors.
+  - id: structural
+    level: structural
+    title: Keep both dependencies injected
+    body: Accept readStdin and readFile functions so tests can prove behavior without touching the real process or disk.
+solution:
+  title: Model solution
+  body: The model solution uses the InputSource discriminator and keeps both stdin and file reads behind injected functions.
+  code: |
+    export type FileReadResult =
+      | { readonly ok: true; readonly text: string }
+      | { readonly ok: false; readonly message: string }
+
+    export type InputSource =
+      | { readonly kind: 'stdin' }
+      | { readonly kind: 'file'; readonly path: string }
+
+    export type TextFileReader = (path: string) => Promise<string>
+
+    export async function resolveInputSource(
+      source: InputSource,
+      readStdin: () => Promise<string>,
+      readFile: TextFileReader,
+    ): Promise<FileReadResult> {
+      if (source.kind === 'stdin') {
+        return { ok: true, text: await readStdin() }
+      }
+
+      try {
+        return { ok: true, text: await readFile(source.path) }
+      } catch {
+        return { ok: false, message: `Could not read input file: ${source.path}` }
+      }
+    }
+commonWrongApproaches:
+  - Reading both stdin and file input before checking the source kind.
+  - Throwing missing-file errors from the resolver instead of returning a controlled result.
+expectedSolutionCharacteristics:
+  - Uses the source discriminator to choose exactly one input reader.
+  - Preserves stdin text and maps file-read failures to the shared failure shape.

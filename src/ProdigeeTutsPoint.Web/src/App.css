@@ -211,6 +211,16 @@
   margin-bottom: 8px;
 }
 
+.active-track-eyebrow {
+  color: var(--accent);
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0;
+  margin-bottom: 8px;
+  text-transform: uppercase;
+}
+
 .study-header p,
 .body-copy {
   color: var(--text);
@@ -307,6 +317,24 @@
 
 .panel {
   padding: 20px;
+}
+
+.panel.scroll-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.panel-scroll-region {
+  max-height: clamp(260px, 38vh, 520px);
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 4px;
+}
+
+.mastery-scroll-region {
+  max-height: clamp(240px, 34vh, 460px);
 }
 
 .page-panel {
@@ -624,9 +652,66 @@
   min-height: 48px;
 }
 
+.track-row {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) auto;
+  min-height: 70px;
+  width: 100%;
+}
+
+.track-row.active-track-row {
+  background: var(--accent-soft);
+  border-color: var(--accent-border);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.track-row.active-track-row svg,
+.track-row.active-track-row strong {
+  color: var(--accent);
+}
+
+.track-row-copy {
+  min-width: 0;
+}
+
+.active-track-token,
+.active-track-banner span {
+  align-items: center;
+  background: var(--accent);
+  border: 1px solid var(--accent-border);
+  border-radius: 999px;
+  color: var(--accent-contrast);
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+  padding: 6px 9px;
+  white-space: nowrap;
+}
+
+.active-track-banner {
+  align-items: center;
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-border);
+  border-radius: 8px;
+  color: var(--text-strong);
+  display: inline-flex;
+  gap: 10px;
+  margin-top: 2px;
+  padding: 8px 10px;
+}
+
+.active-track-banner strong {
+  color: var(--text-strong);
+}
+
 .list-row span {
   display: grid;
   gap: 3px;
+}
+
+.list-row .active-track-token {
+  display: inline-flex;
 }
 
 .list-row strong {
@@ -964,7 +1049,8 @@ pre {
   align-items: center;
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 10px;
+  margin-bottom: 12px;
 }
 
 .ai-review-controls select {
@@ -973,8 +1059,16 @@ pre {
   border-radius: 6px;
   color: var(--text-strong);
   font: inherit;
-  min-height: 40px;
-  padding: 8px 10px;
+  height: 42px;
+  min-width: min(360px, 100%);
+  padding: 0 12px;
+}
+
+.ai-review-controls .primary-action,
+.ai-review-controls .secondary-action {
+  height: 42px;
+  margin-top: 0;
+  white-space: nowrap;
 }
 
 .soft-lock {

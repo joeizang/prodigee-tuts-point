@@ -1,0 +1,67 @@
+id: parse-log-query-url-ts
+title: ParseLogQueryUrl
+kind: focused
+workspace:
+  runtime: node-typescript
+  entryPoint: parseLogQueryUrl
+  starter: tracks/typescript/exercises/_shared/HttpHandlers.ts
+  visibleTest: |
+    expect(parseLogQueryUrl('/logs?level=ERROR&limit=25')).toEqual({
+      ok: true,
+      value: {
+        level: 'ERROR',
+        limit: 25,
+      },
+    })
+  hiddenTest: |
+    expect(parseLogQueryUrl('/logs')).toEqual({ ok: true, value: { limit: 100 } })
+    expect(parseLogQueryUrl('/metrics')).toEqual({ ok: false, status: 404, message: 'Route not found' })
+    expect(parseLogQueryUrl('/logs?limit=0')).toEqual({ ok: false, status: 400, message: 'Invalid limit' })
+    expect(parseLogQueryUrl('/logs?limit=many')).toEqual({ ok: false, status: 400, message: 'Invalid limit' })
+hints:
+  - id: conceptual
+    level: conceptual
+    title: URL parsing is boundary work
+    body: Convert the route and query string into a LogQueryRequest before any summary logic sees the request.
+  - id: api-approach
+    level: api-approach
+    title: Use the URL API
+    body: Parse relative URLs with a dummy base URL, then check pathname and searchParams explicitly.
+  - id: structural
+    level: structural
+    title: Validate limit before returning
+    body: Default a missing limit to 100, but reject non-integer or less-than-one values with a 400 result.
+solution:
+  title: Model solution
+  body: The model solution uses the built-in URL parser, validates the supported route, and narrows query values before returning an application request.
+  code: |
+    export type LogQueryRequest = {
+      readonly level?: string
+      readonly limit: number
+    }
+
+    export type HttpRouteResult =
+      | { readonly ok: true; readonly value: LogQueryRequest }
+      | { readonly ok: false; readonly status: number; readonly message: string }
+
+    export function parseLogQueryUrl(url: string): HttpRouteResult {
+      const parsed = new URL(url, 'http://localhost')
+      if (parsed.pathname !== '/logs') {
+        return { ok: false, status: 404, message: 'Route not found' }
+      }
+
+      const rawLimit = parsed.searchParams.get('limit')
+      const limit = rawLimit === null ? 100 : Number(rawLimit)
+      if (!Number.isInteger(limit) || limit < 1) {
+        return { ok: false, status: 400, message: 'Invalid limit' }
+      }
+
+      const level = parsed.searchParams.get('level') ?? undefined
+      return { ok: true, value: level === undefined ? { limit } : { level, limit } }
+    }
+commonWrongApproaches:
+  - Splitting the URL string manually and missing encoded query-string edge cases.
+  - Letting invalid limits default to 100, which hides a client request bug.
+expectedSolutionCharacteristics:
+  - Accepts only the /logs route and returns 404 for other paths.
+  - Defaults missing limit to 100 while rejecting malformed or non-positive limits.

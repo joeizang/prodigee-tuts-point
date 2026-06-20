@@ -13,6 +13,7 @@ public static class CurriculumEndpoints
         group.MapGet("/tracks", async (AppDbContext db, CancellationToken ct) =>
         {
             var tracks = await db.Tracks
+                .AsNoTracking()
                 .OrderBy(track => track.Title)
                 .Select(track => new TrackSummaryResponse(
                     track.Id,
@@ -28,6 +29,7 @@ public static class CurriculumEndpoints
         group.MapGet("/tracks/{trackId}", async (string trackId, AppDbContext db, CancellationToken ct) =>
         {
             var track = await db.Tracks
+                .AsNoTracking()
                 .Where(track => track.Id == trackId)
                 .Select(track => new TrackDetailResponse(
                     track.Id,
@@ -56,6 +58,7 @@ public static class CurriculumEndpoints
         group.MapGet("/sources", async (AppDbContext db, CancellationToken ct) =>
         {
             var books = await db.SourceBooks
+                .AsNoTracking()
                 .Where(book => book.OwnershipStatus == "Owned")
                 .OrderBy(book => book.Title)
                 .Select(book => new SourceBookResponse(
@@ -94,6 +97,7 @@ public static class CurriculumEndpoints
             };
 
             var tracks = await db.Tracks
+                .AsNoTracking()
                 .OrderBy(track => track.Title)
                 .Select(track => new NavigationItemResponse(
                     "Track",
@@ -103,6 +107,7 @@ public static class CurriculumEndpoints
                 .ToListAsync(ct);
 
             var projects = await db.Projects
+                .AsNoTracking()
                 .OrderBy(project => project.Title)
                 .Select(project => new NavigationItemResponse(
                     "Project",
@@ -112,6 +117,7 @@ public static class CurriculumEndpoints
                 .ToListAsync(ct);
 
             var milestones = await db.ProjectMilestones
+                .AsNoTracking()
                 .OrderBy(milestone => milestone.Order)
                 .Select(milestone => new NavigationItemResponse(
                     "Milestone",
@@ -121,6 +127,7 @@ public static class CurriculumEndpoints
                 .ToListAsync(ct);
 
             var lessons = await db.Lessons
+                .AsNoTracking()
                 .OrderBy(lesson => lesson.Order)
                 .Select(lesson => new NavigationItemResponse(
                     "Lesson",
@@ -130,6 +137,7 @@ public static class CurriculumEndpoints
                 .ToListAsync(ct);
 
             var exercises = await db.Exercises
+                .AsNoTracking()
                 .OrderBy(exercise => exercise.Order)
                 .Select(exercise => new NavigationItemResponse(
                     "Exercise",
@@ -139,6 +147,7 @@ public static class CurriculumEndpoints
                 .ToListAsync(ct);
 
             var concepts = await db.Concepts
+                .AsNoTracking()
                 .OrderBy(concept => concept.Title)
                 .Select(concept => new NavigationItemResponse(
                     "Concept",
@@ -169,6 +178,7 @@ public static class CurriculumEndpoints
             var pattern = $"%{string.Join('%', terms.Select(EscapeLikePattern))}%";
 
             var tracks = await db.Tracks
+                .AsNoTracking()
                 .Where(track => EF.Functions.Like(track.Title, pattern) || EF.Functions.Like(track.Description, pattern))
                 .Select(track => new SearchResultResponse(
                     "Track",
@@ -180,6 +190,7 @@ public static class CurriculumEndpoints
                 .ToListAsync(ct);
 
             var projects = await db.Projects
+                .AsNoTracking()
                 .Where(project => EF.Functions.Like(project.Title, pattern) || EF.Functions.Like(project.Description, pattern))
                 .Select(project => new SearchResultResponse(
                     "Project",
@@ -191,6 +202,7 @@ public static class CurriculumEndpoints
                 .ToListAsync(ct);
 
             var lessons = await db.Lessons
+                .AsNoTracking()
                 .Where(lesson => EF.Functions.Like(lesson.Title, pattern) || EF.Functions.Like(lesson.Summary, pattern))
                 .Select(lesson => new SearchResultResponse(
                     "Lesson",
@@ -202,6 +214,7 @@ public static class CurriculumEndpoints
                 .ToListAsync(ct);
             var lessonIds = lessons.Select(lesson => lesson.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
             var lessonBodies = await db.Lessons
+                .AsNoTracking()
                 .Where(lesson => !lessonIds.Contains(lesson.Id))
                 .Select(lesson => new { lesson.Id, lesson.Title, lesson.Summary, lesson.MarkdownPath })
                 .ToListAsync(ct);
@@ -222,6 +235,7 @@ public static class CurriculumEndpoints
             }
 
             var exercises = await db.Exercises
+                .AsNoTracking()
                 .Where(exercise => EF.Functions.Like(exercise.Title, pattern) || EF.Functions.Like(exercise.Summary, pattern))
                 .Select(exercise => new SearchResultResponse(
                     "Exercise",
@@ -233,6 +247,7 @@ public static class CurriculumEndpoints
                 .ToListAsync(ct);
 
             var concepts = await db.Concepts
+                .AsNoTracking()
                 .Where(concept => EF.Functions.Like(concept.Title, pattern) || EF.Functions.Like(concept.Description, pattern))
                 .Select(concept => new SearchResultResponse(
                     "Concept",
@@ -244,6 +259,7 @@ public static class CurriculumEndpoints
                 .ToListAsync(ct);
 
             var sources = await db.SourceReferences
+                .AsNoTracking()
                 .Where(reference =>
                     EF.Functions.Like(reference.Topic, pattern)
                     || EF.Functions.Like(reference.Usage, pattern)
@@ -274,6 +290,7 @@ public static class CurriculumEndpoints
         group.MapGet("/concepts/{conceptId}", async (string conceptId, AppDbContext db, CancellationToken ct) =>
         {
             var concept = await db.Concepts
+                .AsNoTracking()
                 .Where(concept => concept.Id == conceptId)
                 .Select(concept => new ConceptDetailResponse(
                     concept.Id,
@@ -288,6 +305,7 @@ public static class CurriculumEndpoints
         group.MapGet("/projects/{projectId}", async (string projectId, AppDbContext db, CancellationToken ct) =>
         {
             var project = await db.Projects
+                .AsNoTracking()
                 .Where(project => project.Id == projectId)
                 .Select(project => new ProjectDetailResponse(
                     project.Id,
@@ -316,6 +334,7 @@ public static class CurriculumEndpoints
             CancellationToken ct) =>
         {
             var milestone = await db.ProjectMilestones
+                .AsNoTracking()
                 .Where(milestone => milestone.ProjectId == projectId && milestone.Id == milestoneId)
                 .Select(milestone => new
                 {
@@ -378,6 +397,7 @@ public static class CurriculumEndpoints
             CancellationToken ct) =>
         {
             var cluster = await db.ProjectMilestones
+                .AsNoTracking()
                 .Where(milestone => milestone.ProjectId == projectId && milestone.Id == milestoneId)
                 .Select(milestone => new TheoryClusterResponse(
                     milestone.ProjectId,
@@ -416,6 +436,7 @@ public static class CurriculumEndpoints
             CancellationToken ct) =>
         {
             var lesson = await db.Lessons
+                .AsNoTracking()
                 .Where(lesson => lesson.Id == lessonId)
                 .Select(lesson => new
                 {
@@ -457,6 +478,7 @@ public static class CurriculumEndpoints
         group.MapGet("/exercises/{exerciseId}", async (string exerciseId, AppDbContext db, CancellationToken ct) =>
         {
             var exercise = await db.Exercises
+                .AsNoTracking()
                 .Where(exercise => exercise.Id == exerciseId)
                 .Select(exercise => new
                 {
@@ -509,6 +531,7 @@ public static class CurriculumEndpoints
         CancellationToken ct)
     {
         var lesson = await db.Lessons
+            .AsNoTracking()
             .Where(lesson => lesson.Id == lessonId)
             .Select(lesson => new { lesson.ModuleId, lesson.Order })
             .FirstOrDefaultAsync(ct);
@@ -519,6 +542,7 @@ public static class CurriculumEndpoints
         }
 
         return await db.Lessons
+            .AsNoTracking()
             .Where(candidate => candidate.ModuleId == lesson.ModuleId && candidate.Order < lesson.Order)
             .OrderBy(candidate => candidate.Order)
             .Select(candidate => new SoftLockResponse(
@@ -536,6 +560,7 @@ public static class CurriculumEndpoints
         CancellationToken ct)
     {
         var milestone = await db.ProjectMilestones
+            .AsNoTracking()
             .Where(milestone => milestone.ProjectId == projectId && milestone.Id == milestoneId)
             .Select(milestone => new { milestone.Order })
             .FirstOrDefaultAsync(ct);
@@ -546,6 +571,7 @@ public static class CurriculumEndpoints
         }
 
         return await db.ProjectMilestones
+            .AsNoTracking()
             .Where(candidate => candidate.ProjectId == projectId && candidate.Order < milestone.Order)
             .OrderBy(candidate => candidate.Order)
             .Select(candidate => new SoftLockResponse(
@@ -562,6 +588,7 @@ public static class CurriculumEndpoints
         CancellationToken ct)
     {
         var milestoneLink = await db.Set<ProdigeeTutsPoint.Domain.Content.MilestoneExercise>()
+            .AsNoTracking()
             .Where(link => link.ExerciseId == exerciseId)
             .OrderBy(link => link.Order)
             .Select(link => new { link.ProjectMilestoneId, link.Order })
@@ -573,6 +600,7 @@ public static class CurriculumEndpoints
         }
 
         return await db.Set<ProdigeeTutsPoint.Domain.Content.MilestoneLesson>()
+            .AsNoTracking()
             .Where(link => link.ProjectMilestoneId == milestoneLink.ProjectMilestoneId && link.Order <= milestoneLink.Order)
             .OrderBy(link => link.Order)
             .Select(link => new SoftLockResponse(

@@ -34,4 +34,39 @@ describe('MarkdownText', () => {
     expect(tooltips[0]).not.toHaveTextContent('Streaming also changes failure handling')
     expect(tooltips[1]).toHaveTextContent('owned mutable state')
   })
+
+  it('syntax highlights fenced Swift examples', () => {
+    const { container } = render(
+      <MarkdownText
+        markdown={`\`\`\`swift
+// swift-tools-version: 6.0
+import PackageDescription
+
+let package = Package(name: "ProdigeeSwiftExercise")
+\`\`\``}
+      />,
+    )
+
+    expect(container.querySelector('code.language-swift')).toBeInTheDocument()
+    expect(screen.getByText('import')).toHaveClass('token', 'keyword')
+    expect(screen.getByText('PackageDescription')).toHaveClass('token', 'type')
+    expect(screen.getByText('"ProdigeeSwiftExercise"')).toHaveClass('token', 'string')
+  })
+
+  it('infers supported-language highlighting for untagged code fences', () => {
+    const { container } = render(
+      <MarkdownText
+        markdown={`\`\`\`
+public static string Normalize(string text)
+{
+    return text.ToLowerInvariant();
+}
+\`\`\``}
+      />,
+    )
+
+    expect(container.querySelector('code.language-csharp')).toBeInTheDocument()
+    expect(screen.getByText('public')).toHaveClass('token', 'keyword')
+    expect(screen.getByText('Normalize')).toHaveClass('token', 'type')
+  })
 })

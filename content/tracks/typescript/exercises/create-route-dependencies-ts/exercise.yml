@@ -1,0 +1,48 @@
+id: create-route-dependencies-ts
+title: CreateRouteDependencies
+kind: focused
+workspace:
+  runtime: node-typescript
+  entryPoint: createRouteDependencies
+  starter: tracks/typescript/exercises/_shared/ServerRuntime.ts
+  visibleTest: |
+    const readSummary = async () => [{ level: 'INFO', count: 1 }]
+    const dependencies = createRouteDependencies(readSummary)
+    expect(dependencies.readSummary).toBe(readSummary)
+    expect(typeof dependencies.nowMs()).toBe('number')
+    expect(dependencies.newRequestId()).toMatch(/^req-/)
+  hiddenTest: |
+    const readSummary = async () => []
+    const first = createRouteDependencies(readSummary).newRequestId()
+    const second = createRouteDependencies(readSummary).newRequestId()
+    expect(first).not.toBe(second)
+hints:
+  - id: conceptual
+    level: conceptual
+    title: Composition root is explicit
+    body: This function assembles the small runtime dependency object that the handler needs.
+  - id: api-approach
+    level: api-approach
+    title: Keep readSummary unchanged
+    body: Preserve the injected readSummary function exactly so tests and callers can control the core behavior.
+  - id: structural
+    level: structural
+    title: Generate usable request ids
+    body: Return request ids with a stable req- prefix and enough uniqueness that two calls do not collide in normal tests.
+solution:
+  title: Model solution
+  body: The model solution returns the injected summary reader, a clock, and a simple request-id provider without a container.
+  code: |
+    export function createRouteDependencies(readSummary: LogSummaryReader): RuntimeDependencies {
+      return {
+        readSummary,
+        nowMs: () => Date.now(),
+        newRequestId: () => `req-${crypto.randomUUID()}`,
+      }
+    }
+commonWrongApproaches:
+  - Replacing the injected summary reader with a hard-coded fake implementation.
+  - Returning a constant request id, which breaks correlation when multiple requests are handled.
+expectedSolutionCharacteristics:
+  - Preserves the injected summary reader and exposes a real clock function.
+  - Produces request ids with a req- prefix and per-call uniqueness.

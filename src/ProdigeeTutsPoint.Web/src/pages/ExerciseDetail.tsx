@@ -207,6 +207,7 @@ export function ExerciseDetail({ profile, theme }: { profile: LocalProfile; them
           )}
           <ExerciseAssistancePanel
             assistance={assistance}
+            language={exercise.language}
             isUnlockingSolution={isUnlockingSolution}
             onUnlockSolution={unlockSolution}
             onUseHint={useHint}
@@ -222,11 +223,13 @@ export function ExerciseDetail({ profile, theme }: { profile: LocalProfile; them
 
 export function ExerciseAssistancePanel({
   assistance,
+  language = 'csharp',
   isUnlockingSolution,
   onUnlockSolution,
   onUseHint,
 }: {
   assistance: ExerciseAssistance | null
+  language?: string
   isUnlockingSolution: boolean
   onUnlockSolution: () => void
   onUseHint: (hint: ExerciseHint) => void
@@ -260,7 +263,7 @@ export function ExerciseAssistancePanel({
           <>
             <strong>{assistance.solution.title}</strong>
             <p>{assistance.solution.body}</p>
-            <MarkdownText markdown={`\`\`\`csharp\n${assistance.solution.code}\n\`\`\``} />
+            <MarkdownText markdown={`\`\`\`${language}\n${assistance.solution.code}\n\`\`\``} />
           </>
         ) : (
           <button

@@ -15,7 +15,10 @@ using Microsoft.CodeAnalysis.Text;
 
 namespace ProdigeeTutsPoint.Api.Features.Exercises;
 
-public sealed partial class ExerciseLanguageService(ExerciseWorkspaceService workspaces, CSharpLspBridge lspBridge)
+public sealed partial class ExerciseLanguageService(
+    ExerciseWorkspaceService workspaces,
+    CSharpLspBridge lspBridge,
+    SwiftLspBridge swiftLspBridge)
 {
     private const int CompletionLimit = 250;
     private const int CodeActionLimit = 20;
@@ -44,6 +47,22 @@ public sealed partial class ExerciseLanguageService(ExerciseWorkspaceService wor
         ExerciseLanguageRequest request,
         CancellationToken cancellationToken)
     {
+        if (IsSwiftFile(request.Path))
+        {
+            var workspace = await workspaces.EnsureWorkspaceAsync(request.ProfileId, exerciseId, cancellationToken);
+            if (workspace is null)
+            {
+                return null;
+            }
+
+            EnsureEditableFile(workspace, request.Path);
+            return await swiftLspBridge.GetDiagnosticsAsync(
+                workspace.WorkspacePath,
+                request.Path,
+                request.Content,
+                cancellationToken);
+        }
+
         using var context = await CreateContextAsync(exerciseId, request.ProfileId, request.Path, request.Content, cancellationToken);
         if (context is null)
         {
@@ -129,6 +148,24 @@ public sealed partial class ExerciseLanguageService(ExerciseWorkspaceService wor
         ExerciseCompletionRequest request,
         CancellationToken cancellationToken)
     {
+        if (IsSwiftFile(request.Path))
+        {
+            var workspace = await workspaces.EnsureWorkspaceAsync(request.ProfileId, exerciseId, cancellationToken);
+            if (workspace is null)
+            {
+                return null;
+            }
+
+            EnsureEditableFile(workspace, request.Path);
+            return await swiftLspBridge.GetCompletionsAsync(
+                workspace.WorkspacePath,
+                request.Path,
+                request.Content,
+                request.LineNumber,
+                request.Column,
+                cancellationToken);
+        }
+
         using var context = await CreateContextAsync(exerciseId, request.ProfileId, request.Path, request.Content, cancellationToken);
         if (context is null)
         {
@@ -213,6 +250,24 @@ public sealed partial class ExerciseLanguageService(ExerciseWorkspaceService wor
         ExercisePositionRequest request,
         CancellationToken cancellationToken)
     {
+        if (IsSwiftFile(request.Path))
+        {
+            var workspace = await workspaces.EnsureWorkspaceAsync(request.ProfileId, exerciseId, cancellationToken);
+            if (workspace is null)
+            {
+                return null;
+            }
+
+            EnsureEditableFile(workspace, request.Path);
+            return await swiftLspBridge.GetHoverAsync(
+                workspace.WorkspacePath,
+                request.Path,
+                request.Content,
+                request.LineNumber,
+                request.Column,
+                cancellationToken);
+        }
+
         using var context = await CreateContextAsync(exerciseId, request.ProfileId, request.Path, request.Content, cancellationToken);
         if (context is null)
         {
@@ -246,6 +301,24 @@ public sealed partial class ExerciseLanguageService(ExerciseWorkspaceService wor
         ExercisePositionRequest request,
         CancellationToken cancellationToken)
     {
+        if (IsSwiftFile(request.Path))
+        {
+            var workspace = await workspaces.EnsureWorkspaceAsync(request.ProfileId, exerciseId, cancellationToken);
+            if (workspace is null)
+            {
+                return null;
+            }
+
+            EnsureEditableFile(workspace, request.Path);
+            return await swiftLspBridge.GetSignatureHelpAsync(
+                workspace.WorkspacePath,
+                request.Path,
+                request.Content,
+                request.LineNumber,
+                request.Column,
+                cancellationToken);
+        }
+
         using var context = await CreateContextAsync(exerciseId, request.ProfileId, request.Path, request.Content, cancellationToken);
         if (context is null)
         {
@@ -291,6 +364,26 @@ public sealed partial class ExerciseLanguageService(ExerciseWorkspaceService wor
         ExerciseCodeActionRequest request,
         CancellationToken cancellationToken)
     {
+        if (IsSwiftFile(request.Path))
+        {
+            var workspace = await workspaces.EnsureWorkspaceAsync(request.ProfileId, exerciseId, cancellationToken);
+            if (workspace is null)
+            {
+                return null;
+            }
+
+            EnsureEditableFile(workspace, request.Path);
+            return await swiftLspBridge.GetCodeActionsAsync(
+                workspace.WorkspacePath,
+                request.Path,
+                request.Content,
+                request.StartLineNumber,
+                request.StartColumn,
+                request.EndLineNumber,
+                request.EndColumn,
+                cancellationToken);
+        }
+
         using var context = await CreateContextAsync(exerciseId, request.ProfileId, request.Path, request.Content, cancellationToken);
         if (context is null)
         {
@@ -330,6 +423,22 @@ public sealed partial class ExerciseLanguageService(ExerciseWorkspaceService wor
         ExerciseLanguageRequest request,
         CancellationToken cancellationToken)
     {
+        if (IsSwiftFile(request.Path))
+        {
+            var workspace = await workspaces.EnsureWorkspaceAsync(request.ProfileId, exerciseId, cancellationToken);
+            if (workspace is null)
+            {
+                return null;
+            }
+
+            EnsureEditableFile(workspace, request.Path);
+            return await swiftLspBridge.FormatAsync(
+                workspace.WorkspacePath,
+                request.Path,
+                request.Content,
+                cancellationToken);
+        }
+
         using var context = await CreateContextAsync(exerciseId, request.ProfileId, request.Path, request.Content, cancellationToken);
         if (context is null)
         {
@@ -897,6 +1006,11 @@ public sealed partial class ExerciseLanguageService(ExerciseWorkspaceService wor
         {
             throw new InvalidOperationException("Only editable exercise files support language service requests.");
         }
+    }
+
+    private static bool IsSwiftFile(string path)
+    {
+        return path.EndsWith(".swift", StringComparison.OrdinalIgnoreCase);
     }
 
     private static async Task<Solution> AddAnalyzerConfigDocumentAsync(

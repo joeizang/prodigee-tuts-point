@@ -23,9 +23,17 @@ import {
   type MonacoLanguageModel,
   type MonacoReplacementRange,
 } from './monacoCodeActions'
+import {
+  configureTypeScriptLanguageService,
+  isTypeScriptRuntime,
+  monacoLanguageForPath,
+  shouldUseBackendLanguageService,
+  syncWorkspaceModels,
+} from './typescriptLanguageService'
 
-let csharpProvidersRegistered = false
+const backendProviderRegistrations = new Set<string>()
 let editorThemesRegistered = false
+let swiftLanguageRegistered = false
 let currentLanguageContext: (() => LanguageServiceContext | null) | null = null
 
 export function ExerciseWorkspacePanel({
@@ -62,15 +70,18 @@ export function ExerciseWorkspacePanel({
   const languageContextRef = useRef<LanguageServiceContext | null>(null)
   const editorTheme = monacoThemeName(theme)
   const languageContext = useMemo(
-    () =>
-      activeFile?.editable
-        ? {
-            activeContent,
-            exerciseId: workspace.exerciseId,
-            path: activeFile.path,
-            profileId,
-          }
-        : null,
+    () => {
+      if (!activeFile || !shouldUseBackendLanguageService(activeFile)) {
+        return null
+      }
+
+      return {
+        activeContent,
+        exerciseId: workspace.exerciseId,
+        path: activeFile.path,
+        profileId,
+      }
+    },
     [activeContent, activeFile, profileId, workspace.exerciseId],
   )
 
@@ -100,7 +111,7 @@ export function ExerciseWorkspacePanel({
     }
 
     const timeout = window.setTimeout(() => {
-      void updateRoslynDiagnostics(monaco, model, context, runResult?.diagnostics ?? '')
+      void updateBackendDiagnostics(monaco, model, context, runResult?.diagnostics ?? '')
     }, 350)
 
     return () => window.clearTimeout(timeout)
@@ -110,11 +121,17 @@ export function ExerciseWorkspacePanel({
     editorRef.current = editor
     monacoRef.current = monaco
     monaco.editor.setTheme(editorTheme)
+    if (isTypeScriptRuntime(workspace)) {
+      void configureTypeScriptLanguageService(monaco)
+      syncWorkspaceModels(monaco, workspace, fileEdits)
+    }
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Period, () => {
       triggerCodeActionMenu(editor)
     })
-    setupCSharpProviders(monaco)
-    void updateRoslynDiagnostics(
+    setupSwiftSyntaxHighlighting(monaco)
+    setupBackendLanguageProviders(monaco, 'csharp')
+    setupBackendLanguageProviders(monaco, 'swift')
+    void updateBackendDiagnostics(
       monaco,
       editor.getModel(),
       languageContext,
@@ -130,7 +147,7 @@ export function ExerciseWorkspacePanel({
     const content = value ?? ''
     onFileChange(activeFile.path, content)
 
-    languageContextRef.current = activeFile?.editable
+    languageContextRef.current = shouldUseBackendLanguageService(activeFile)
       ? {
           activeContent: content,
           exerciseId: workspace.exerciseId,
@@ -139,6 +156,16 @@ export function ExerciseWorkspacePanel({
         }
       : null
   }
+
+  useEffect(() => {
+    const monaco = monacoRef.current
+    if (!monaco || !isTypeScriptRuntime(workspace)) {
+      return
+    }
+
+    void configureTypeScriptLanguageService(monaco)
+    syncWorkspaceModels(monaco, workspace, fileEdits)
+  }, [fileEdits, workspace])
 
   const hiddenCount = workspace.files.filter((file) => file.role === 'hidden-test').length
 
@@ -192,7 +219,7 @@ export function ExerciseWorkspacePanel({
             <Editor
               beforeMount={setupEditorThemes}
               height="clamp(560px, calc(100vh - 330px), 820px)"
-              language="csharp"
+              language={monacoLanguageForPath(activeFile.path, workspace.language)}
               options={{
                 acceptSuggestionOnCommitCharacter: true,
                 fontSize: 14,
@@ -218,7 +245,7 @@ export function ExerciseWorkspacePanel({
                 wordBasedSuggestions: 'off',
                 wordWrap: 'on',
               }}
-              path={activeFile.path}
+              path={`/workspace/${activeFile.path}`}
               theme={editorTheme}
               value={activeContent}
               onChange={handleChange}
@@ -258,6 +285,8 @@ function monacoThemeName(theme: Theme) {
 }
 
 function setupEditorThemes(monaco: Parameters<OnMount>[1]) {
+  setupSwiftSyntaxHighlighting(monaco)
+
   if (editorThemesRegistered) {
     return
   }
@@ -340,14 +369,34 @@ function setupEditorThemes(monaco: Parameters<OnMount>[1]) {
   })
 }
 
-function setupCSharpProviders(monaco: Parameters<OnMount>[1]) {
-  if (csharpProvidersRegistered) {
+function setupSwiftSyntaxHighlighting(monaco: Parameters<OnMount>[1]) {
+  if (swiftLanguageRegistered) {
     return
   }
 
-  csharpProvidersRegistered = true
-  monaco.languages.registerCompletionItemProvider('csharp', {
-    triggerCharacters: ['.', '(', ',', '<'],
+  swiftLanguageRegistered = true
+  monaco.languages.register({ id: 'swift' })
+  monaco.languages.setMonarchTokensProvider('swift', {
+    tokenizer: {
+      root: [
+        [/\b(actor|as|async|await|case|catch|class|defer|do|else|enum|extension|false|for|func|guard|if|import|in|init|let|nil|private|protocol|public|return|self|static|struct|switch|throws|throw|true|try|var|while)\b/, 'keyword'],
+        [/\b(Bool|Double|Error|Float|Int|String|Void)\b/, 'type'],
+        [/".*?"/, 'string'],
+        [/\/\/.*$/, 'comment'],
+        [/\b\d+\b/, 'number'],
+      ],
+    },
+  })
+}
+
+function setupBackendLanguageProviders(monaco: Parameters<OnMount>[1], languageId: 'csharp' | 'swift') {
+  if (backendProviderRegistrations.has(languageId)) {
+    return
+  }
+
+  backendProviderRegistrations.add(languageId)
+  monaco.languages.registerCompletionItemProvider(languageId, {
+    triggerCharacters: languageId === 'swift' ? ['.', '(', ','] : ['.', '(', ',', '<'],
     provideCompletionItems: async (
       _model: unknown,
       position: { lineNumber: number; column: number },
@@ -387,7 +436,7 @@ function setupCSharpProviders(monaco: Parameters<OnMount>[1]) {
     },
   })
 
-  monaco.languages.registerHoverProvider('csharp', {
+  monaco.languages.registerHoverProvider(languageId, {
     provideHover: async (_model: unknown, position: { lineNumber: number; column: number }) => {
       const context = currentLanguageContext?.()
       if (!context) {
@@ -421,7 +470,7 @@ function setupCSharpProviders(monaco: Parameters<OnMount>[1]) {
     },
   })
 
-  monaco.languages.registerSignatureHelpProvider('csharp', {
+  monaco.languages.registerSignatureHelpProvider(languageId, {
     signatureHelpTriggerCharacters: ['(', ','],
     signatureHelpRetriggerCharacters: [',', ')'],
     provideSignatureHelp: async (_model: unknown, position: { lineNumber: number; column: number }) => {
@@ -468,7 +517,7 @@ function setupCSharpProviders(monaco: Parameters<OnMount>[1]) {
     },
   })
 
-  monaco.languages.registerCodeActionProvider('csharp', {
+  monaco.languages.registerCodeActionProvider(languageId, {
     providedCodeActionKinds: [
       'quickfix',
       'refactor',
@@ -516,7 +565,7 @@ function setupCSharpProviders(monaco: Parameters<OnMount>[1]) {
     },
   })
 
-  monaco.languages.registerDocumentFormattingEditProvider('csharp', {
+  monaco.languages.registerDocumentFormattingEditProvider(languageId, {
     provideDocumentFormattingEdits: async (_model: unknown) => {
       const context = currentLanguageContext?.()
       if (!context) {
@@ -578,7 +627,7 @@ function toMonacoCompletion(
   }
 }
 
-async function updateRoslynDiagnostics(
+async function updateBackendDiagnostics(
   monaco: Parameters<OnMount>[1],
   model: ReturnType<Parameters<OnMount>[0]['getModel']>,
   context: LanguageServiceContext | null,
@@ -594,7 +643,7 @@ async function updateRoslynDiagnostics(
     : []
 
   if (!context) {
-    monaco.editor.setModelMarkers(model, 'csharp-roslyn', markers)
+    monaco.editor.setModelMarkers(model, 'backend-language-service', markers)
     return
   }
 
@@ -610,7 +659,7 @@ async function updateRoslynDiagnostics(
     markers.push(...response.diagnostics.map((diagnostic) => toMonacoMarker(monaco, diagnostic)))
     markers.push(...setupMessageMarkers(monaco, response.setupMessages))
   } catch (error) {
-    console.warn('Roslyn diagnostics request failed.', error)
+    console.warn('Backend language diagnostics request failed.', error)
     return
   }
 
@@ -618,7 +667,7 @@ async function updateRoslynDiagnostics(
     return
   }
 
-  monaco.editor.setModelMarkers(model, 'csharp-roslyn', markers)
+  monaco.editor.setModelMarkers(model, 'backend-language-service', markers)
 }
 
 function setupMessageMarkers(monaco: Parameters<OnMount>[1], setupMessages: string[] | undefined) {

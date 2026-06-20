@@ -13,7 +13,9 @@ public sealed class ExerciseWorkspaceService(
     IWebHostEnvironment environment,
     IOptions<ContentOptions> contentOptions,
     AppDbContext db,
-    IExerciseRunner runner)
+    IExerciseRunner runner,
+    ITypeScriptExerciseRunner typeScriptRunner,
+    ISwiftExerciseRunner swiftRunner)
 {
     private const int OutputLimit = 24_000;
     private static readonly Regex DotnetLocationDiagnosticPattern = new(
@@ -21,6 +23,12 @@ public sealed class ExerciseWorkspaceService(
         RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
     private static readonly Regex DotnetLocationlessDiagnosticPattern = new(
         @"^(?<severity>error|warning) (?<rule>[A-Z]+[A-Z0-9]*\d+): (?<message>.+)$",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
+    private static readonly Regex TypeScriptDiagnosticPattern = new(
+        @"^(?<file>.+?)\((?<line>\d+),(?<column>\d+)\): (?<severity>error) (?<rule>TS\d+): (?<message>.+)$",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
+    private static readonly Regex SwiftDiagnosticPattern = new(
+        @"^(?<file>.+?):(?<line>\d+):(?<column>\d+): (?<severity>error|warning): (?<message>.+)$",
         RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
     private readonly IDeserializer deserializer = new DeserializerBuilder()
         .WithNamingConvention(CamelCaseNamingConvention.Instance)
@@ -33,8 +41,9 @@ public sealed class ExerciseWorkspaceService(
         CancellationToken cancellationToken)
     {
         var exercise = await db.Exercises
+            .AsNoTracking()
             .Where(exercise => exercise.Id == exerciseId)
-            .Select(exercise => new { exercise.Id, exercise.Title, exercise.Summary, exercise.DirectoryPath })
+            .Select(exercise => new { exercise.Id, exercise.Title, exercise.Summary, exercise.Language, exercise.DirectoryPath })
             .FirstOrDefaultAsync(cancellationToken);
 
         if (exercise is null)
@@ -47,18 +56,7 @@ public sealed class ExerciseWorkspaceService(
         var workspacePath = GetWorkspacePath(profileId, exerciseId);
         var definition = await ReadExerciseDefinitionAsync(exercise.DirectoryPath, cancellationToken);
         Directory.CreateDirectory(workspacePath);
-        Directory.CreateDirectory(Path.Combine(workspacePath, "src", "Exercise"));
-        Directory.CreateDirectory(Path.Combine(workspacePath, "tests", "Exercise.Tests"));
-
-        WriteGeneratedFile(Path.Combine(workspacePath, "ExerciseWorkspace.sln"), SolutionFile());
-        WriteGeneratedFile(Path.Combine(workspacePath, ".editorconfig"), EditorConfigFile());
-        WriteGeneratedFile(Path.Combine(workspacePath, "src", "Exercise", "Exercise.csproj"), ExerciseProjectFile());
-        WriteFileIfMissing(
-            Path.Combine(workspacePath, "src", "Exercise", "WordFrequencyAnalyzer.cs"),
-            await ReadContentTextAsync(definition.Workspace.Starter, cancellationToken));
-        WriteGeneratedFile(Path.Combine(workspacePath, "tests", "Exercise.Tests", "Exercise.Tests.csproj"), TestProjectFile());
-        WriteGeneratedFile(Path.Combine(workspacePath, "tests", "Exercise.Tests", "VisibleTests.cs"), VisibleTests(definition.Workspace.VisibleTest));
-        WriteGeneratedFile(Path.Combine(workspacePath, "tests", "Exercise.Tests", "HiddenTests.cs"), HiddenTests(definition.Workspace.HiddenTest));
+        await EnsureGeneratedWorkspaceFilesAsync(workspacePath, definition, cancellationToken);
 
         var attempt = await db.ExerciseAttempts
             .FirstOrDefaultAsync(attempt => attempt.ProfileId == profileId && attempt.ExerciseId == exerciseId, cancellationToken);
@@ -78,7 +76,7 @@ public sealed class ExerciseWorkspaceService(
             await db.SaveChangesAsync(cancellationToken);
         }
 
-        return await BuildResponseAsync(exercise.Id, exercise.Title, workspacePath, attempt, cancellationToken);
+        return await BuildResponseAsync(exercise.Id, exercise.Title, exercise.Language, workspacePath, definition, attempt, cancellationToken);
     }
 
     public async Task<ExerciseWorkspaceResponse?> SaveFileAsync(
@@ -107,7 +105,14 @@ public sealed class ExerciseWorkspaceService(
         attempt.UpdatedAt = DateTimeOffset.UtcNow;
         await db.SaveChangesAsync(cancellationToken);
 
-        return await BuildResponseAsync(workspace.ExerciseId, workspace.Title, workspace.WorkspacePath, attempt, cancellationToken);
+        var definition = await ReadDefinitionForExerciseIdAsync(exerciseId, cancellationToken);
+        var language = await db.Exercises
+            .AsNoTracking()
+            .Where(exercise => exercise.Id == exerciseId)
+            .Select(exercise => exercise.Language)
+            .FirstAsync(cancellationToken);
+
+        return await BuildResponseAsync(workspace.ExerciseId, workspace.Title, language, workspace.WorkspacePath, definition, attempt, cancellationToken);
     }
 
     public async Task<ExerciseRunResponse?> RunAsync(
@@ -131,19 +136,41 @@ public sealed class ExerciseWorkspaceService(
         }
 
         var runWorkspacePath = CreateRunWorkspace(workspace.WorkspacePath, profileId, exerciseId);
+        var definition = await ReadDefinitionForExerciseIdAsync(exerciseId, cancellationToken);
         CommandResult visible;
         CommandResult hidden;
         CommandResult analysis;
         IReadOnlyCollection<StaticAnalysisDiagnosticResponse> analysisDiagnostics;
         try
         {
-            var testProject = Path.Combine(runWorkspacePath, "tests", "Exercise.Tests", "Exercise.Tests.csproj");
-            analysis = await runner.RunStaticAnalysisAsync(testProject, cancellationToken);
-            analysisDiagnostics = ParseStaticAnalysisDiagnostics(runWorkspacePath, analysis);
-            visible = await runner.RunVisibleTestsAsync(testProject, cancellationToken);
-            hidden = visible.ExitCode == 0 && !visible.TimedOut && !visible.HasRunnerError
-                ? await runner.RunHiddenTestsAsync(testProject, cancellationToken)
-                : CommandResult.Skipped("Hidden tests were not run because visible tests failed.");
+            if (definition.Workspace.Runtime.Equals("node-typescript", StringComparison.OrdinalIgnoreCase))
+            {
+                analysis = await typeScriptRunner.RunStaticAnalysisAsync(runWorkspacePath, cancellationToken);
+                analysisDiagnostics = ParseTypeScriptStaticAnalysisDiagnostics(runWorkspacePath, analysis);
+                visible = await typeScriptRunner.RunVisibleTestsAsync(runWorkspacePath, cancellationToken);
+                hidden = visible.ExitCode == 0 && !visible.TimedOut && !visible.HasRunnerError
+                    ? await typeScriptRunner.RunHiddenTestsAsync(runWorkspacePath, cancellationToken)
+                    : CommandResult.Skipped("Hidden tests were not run because visible tests failed.");
+            }
+            else if (definition.Workspace.Runtime.Equals("swiftpm", StringComparison.OrdinalIgnoreCase))
+            {
+                analysis = await swiftRunner.RunStaticAnalysisAsync(runWorkspacePath, cancellationToken);
+                analysisDiagnostics = ParseSwiftStaticAnalysisDiagnostics(runWorkspacePath, analysis);
+                visible = await swiftRunner.RunVisibleTestsAsync(runWorkspacePath, cancellationToken);
+                hidden = visible.ExitCode == 0 && !visible.TimedOut && !visible.HasRunnerError
+                    ? await swiftRunner.RunHiddenTestsAsync(runWorkspacePath, cancellationToken)
+                    : CommandResult.Skipped("Hidden tests were not run because visible tests failed.");
+            }
+            else
+            {
+                var testProject = Path.Combine(runWorkspacePath, "tests", "Exercise.Tests", "Exercise.Tests.csproj");
+                analysis = await runner.RunStaticAnalysisAsync(testProject, cancellationToken);
+                analysisDiagnostics = ParseStaticAnalysisDiagnostics(runWorkspacePath, analysis);
+                visible = await runner.RunVisibleTestsAsync(testProject, cancellationToken);
+                hidden = visible.ExitCode == 0 && !visible.TimedOut && !visible.HasRunnerError
+                    ? await runner.RunHiddenTestsAsync(testProject, cancellationToken)
+                    : CommandResult.Skipped("Hidden tests were not run because visible tests failed.");
+            }
         }
         finally
         {
@@ -231,6 +258,7 @@ public sealed class ExerciseWorkspaceService(
         CancellationToken cancellationToken)
     {
         var history = await db.ExerciseRunHistory
+            .AsNoTracking()
             .Where(history => history.ProfileId == profileId && history.ExerciseId == exerciseId)
             .Select(history => new ExerciseRunHistoryResponse(
                 history.Id,
@@ -258,6 +286,7 @@ public sealed class ExerciseWorkspaceService(
         CancellationToken cancellationToken)
     {
         var query = db.StaticAnalysisDiagnostics
+            .AsNoTracking()
             .Where(diagnostic => diagnostic.ProfileId == profileId && diagnostic.ExerciseId == exerciseId);
         if (!string.IsNullOrWhiteSpace(runHistoryId))
         {
@@ -295,6 +324,7 @@ public sealed class ExerciseWorkspaceService(
         CancellationToken cancellationToken)
     {
         var exercise = await db.Exercises
+            .AsNoTracking()
             .Where(exercise => exercise.Id == exerciseId)
             .Select(exercise => new { exercise.Id, exercise.DirectoryPath })
             .FirstOrDefaultAsync(cancellationToken);
@@ -305,6 +335,7 @@ public sealed class ExerciseWorkspaceService(
 
         var definition = await ReadExerciseDefinitionAsync(exercise.DirectoryPath, cancellationToken);
         var usedHintIds = await db.ExerciseHintUsages
+            .AsNoTracking()
             .Where(usage => usage.ProfileId == profileId && usage.ExerciseId == exerciseId)
             .Select(usage => usage.HintId)
             .ToListAsync(cancellationToken);
@@ -326,6 +357,7 @@ public sealed class ExerciseWorkspaceService(
         CancellationToken cancellationToken)
     {
         var exercise = await db.Exercises
+            .AsNoTracking()
             .Where(exercise => exercise.Id == exerciseId)
             .Select(exercise => new { exercise.Id, exercise.DirectoryPath })
             .FirstOrDefaultAsync(cancellationToken);
@@ -342,7 +374,7 @@ public sealed class ExerciseWorkspaceService(
         }
 
         var now = DateTimeOffset.UtcNow;
-        if (!await db.ExerciseHintUsages.AnyAsync(
+        if (!await db.ExerciseHintUsages.AsNoTracking().AnyAsync(
                 usage => usage.ProfileId == profileId && usage.ExerciseId == exerciseId && usage.HintId == hintId,
                 cancellationToken))
         {
@@ -369,6 +401,7 @@ public sealed class ExerciseWorkspaceService(
         CancellationToken cancellationToken)
     {
         var exercise = await db.Exercises
+            .AsNoTracking()
             .Where(exercise => exercise.Id == exerciseId)
             .Select(exercise => new { exercise.Id, exercise.DirectoryPath })
             .FirstOrDefaultAsync(cancellationToken);
@@ -384,7 +417,7 @@ public sealed class ExerciseWorkspaceService(
         }
 
         var now = DateTimeOffset.UtcNow;
-        if (!await db.ExerciseSolutionUnlocks.AnyAsync(
+        if (!await db.ExerciseSolutionUnlocks.AsNoTracking().AnyAsync(
                 unlock => unlock.ProfileId == profileId && unlock.ExerciseId == exerciseId,
                 cancellationToken))
         {
@@ -406,28 +439,112 @@ public sealed class ExerciseWorkspaceService(
     private async Task<ExerciseWorkspaceResponse> BuildResponseAsync(
         string exerciseId,
         string title,
+        string language,
         string workspacePath,
+        ExerciseContentDefinition definition,
         ExerciseAttempt attempt,
         CancellationToken cancellationToken)
     {
-        var files = new List<ExerciseWorkspaceFileResponse>
+        var files = definition.Workspace.Runtime.ToLowerInvariant() switch
         {
-            await FileResponseAsync(workspacePath, "src/Exercise/WordFrequencyAnalyzer.cs", "editable", true, cancellationToken),
-            await FileResponseAsync(workspacePath, "tests/Exercise.Tests/VisibleTests.cs", "visible-test", false, cancellationToken),
-            new("tests/Exercise.Tests/HiddenTests.cs", "hidden-test", false, null),
-            await FileResponseAsync(workspacePath, "src/Exercise/Exercise.csproj", "readonly", false, cancellationToken),
-            await FileResponseAsync(workspacePath, "tests/Exercise.Tests/Exercise.Tests.csproj", "readonly", false, cancellationToken),
+            "node-typescript" => new List<ExerciseWorkspaceFileResponse>
+            {
+                await FileResponseAsync(workspacePath, "src/exercise.ts", "editable", true, cancellationToken),
+                await FileResponseAsync(workspacePath, "tests/visible.test.ts", "visible-test", false, cancellationToken),
+                new("tests/hidden.test.ts", "hidden-test", false, null),
+                await FileResponseAsync(workspacePath, "tsconfig.json", "readonly", false, cancellationToken),
+                await FileResponseAsync(workspacePath, "package.json", "readonly", false, cancellationToken),
+            },
+            "swiftpm" => new List<ExerciseWorkspaceFileResponse>
+            {
+                await FileResponseAsync(workspacePath, "Sources/Exercise/Exercise.swift", "editable", true, cancellationToken),
+                await FileResponseAsync(workspacePath, "Tests/ExerciseVisibleTests/VisibleTests.swift", "visible-test", false, cancellationToken),
+                new("Tests/ExerciseHiddenTests/HiddenTests.swift", "hidden-test", false, null),
+                await FileResponseAsync(workspacePath, "Package.swift", "readonly", false, cancellationToken),
+            },
+            _ => new List<ExerciseWorkspaceFileResponse>
+            {
+                await FileResponseAsync(workspacePath, "src/Exercise/WordFrequencyAnalyzer.cs", "editable", true, cancellationToken),
+                await FileResponseAsync(workspacePath, "tests/Exercise.Tests/VisibleTests.cs", "visible-test", false, cancellationToken),
+                new("tests/Exercise.Tests/HiddenTests.cs", "hidden-test", false, null),
+                await FileResponseAsync(workspacePath, "src/Exercise/Exercise.csproj", "readonly", false, cancellationToken),
+                await FileResponseAsync(workspacePath, "tests/Exercise.Tests/Exercise.Tests.csproj", "readonly", false, cancellationToken),
+            },
         };
 
         return new ExerciseWorkspaceResponse(
             exerciseId,
             title,
+            language,
+            definition.Workspace.Runtime,
             workspacePath,
-            "Project-aware Roslyn services are active for editable C# files: diagnostics, completions, hover, signature help, formatting, and code actions.",
+            LanguageServiceMessage(definition.Workspace.Runtime),
             files,
             attempt.Status,
             attempt.Output,
             attempt.Diagnostics);
+    }
+
+    private async Task EnsureGeneratedWorkspaceFilesAsync(
+        string workspacePath,
+        ExerciseContentDefinition definition,
+        CancellationToken cancellationToken)
+    {
+        if (definition.Workspace.Runtime.Equals("node-typescript", StringComparison.OrdinalIgnoreCase))
+        {
+            Directory.CreateDirectory(Path.Combine(workspacePath, "src"));
+            Directory.CreateDirectory(Path.Combine(workspacePath, "tests"));
+            WriteGeneratedFile(Path.Combine(workspacePath, "package.json"), TypeScriptPackageFile());
+            WriteGeneratedFile(Path.Combine(workspacePath, "tsconfig.json"), TypeScriptConfigFile());
+            WriteFileIfMissing(
+                Path.Combine(workspacePath, "src", "exercise.ts"),
+                await ReadContentTextAsync(definition.Workspace.Starter, cancellationToken));
+            WriteGeneratedFile(Path.Combine(workspacePath, "tests", "visible.test.ts"), TypeScriptVisibleTests(definition.Workspace.EntryPoint, definition.Workspace.VisibleTest));
+            WriteGeneratedFile(Path.Combine(workspacePath, "tests", "hidden.test.ts"), TypeScriptHiddenTests(definition.Workspace.EntryPoint, definition.Workspace.HiddenTest));
+            return;
+        }
+
+        if (definition.Workspace.Runtime.Equals("swiftpm", StringComparison.OrdinalIgnoreCase))
+        {
+            Directory.CreateDirectory(Path.Combine(workspacePath, "Sources", "Exercise"));
+            Directory.CreateDirectory(Path.Combine(workspacePath, "Tests", "ExerciseVisibleTests"));
+            Directory.CreateDirectory(Path.Combine(workspacePath, "Tests", "ExerciseHiddenTests"));
+            WriteGeneratedFile(Path.Combine(workspacePath, "Package.swift"), SwiftPackageFile());
+            WriteFileIfMissing(
+                Path.Combine(workspacePath, "Sources", "Exercise", "Exercise.swift"),
+                await ReadContentTextAsync(definition.Workspace.Starter, cancellationToken));
+            WriteGeneratedFile(Path.Combine(workspacePath, "Tests", "ExerciseVisibleTests", "VisibleTests.swift"), SwiftVisibleTests(definition.Workspace.VisibleTest));
+            WriteGeneratedFile(Path.Combine(workspacePath, "Tests", "ExerciseHiddenTests", "HiddenTests.swift"), SwiftHiddenTests(definition.Workspace.HiddenTest));
+            return;
+        }
+
+        Directory.CreateDirectory(Path.Combine(workspacePath, "src", "Exercise"));
+        Directory.CreateDirectory(Path.Combine(workspacePath, "tests", "Exercise.Tests"));
+
+        WriteGeneratedFile(Path.Combine(workspacePath, "ExerciseWorkspace.sln"), SolutionFile());
+        WriteGeneratedFile(Path.Combine(workspacePath, ".editorconfig"), EditorConfigFile());
+        WriteGeneratedFile(Path.Combine(workspacePath, "src", "Exercise", "Exercise.csproj"), ExerciseProjectFile());
+        WriteFileIfMissing(
+            Path.Combine(workspacePath, "src", "Exercise", "WordFrequencyAnalyzer.cs"),
+            await ReadContentTextAsync(definition.Workspace.Starter, cancellationToken));
+        WriteGeneratedFile(Path.Combine(workspacePath, "tests", "Exercise.Tests", "Exercise.Tests.csproj"), TestProjectFile());
+        WriteGeneratedFile(Path.Combine(workspacePath, "tests", "Exercise.Tests", "VisibleTests.cs"), VisibleTests(definition.Workspace.VisibleTest));
+        WriteGeneratedFile(Path.Combine(workspacePath, "tests", "Exercise.Tests", "HiddenTests.cs"), HiddenTests(definition.Workspace.HiddenTest));
+    }
+
+    private static string LanguageServiceMessage(string runtime)
+    {
+        if (runtime.Equals("node-typescript", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Monaco TypeScript language service is active for editable TypeScript files: semantic diagnostics, completions, hover, signature help, formatting, and supported code actions.";
+        }
+
+        if (runtime.Equals("swiftpm", StringComparison.OrdinalIgnoreCase))
+        {
+            return "SwiftPM workspace generation, SourceKit-LSP IntelliSense, Swift diagnostics, formatting, and swift test execution are active for editable Swift files.";
+        }
+
+        return "Project-aware Roslyn services are active for editable C# files: diagnostics, completions, hover, signature help, formatting, and code actions.";
     }
 
     private static async Task<ExerciseWorkspaceFileResponse> FileResponseAsync(
@@ -487,6 +604,15 @@ public sealed class ExerciseWorkspaceService(
         return Path.Combine(environment.ContentRootPath, "App_Data", "exercise-runs");
     }
 
+    private string GetWebNodeModulesPath()
+    {
+        return Path.GetFullPath(Path.Combine(
+            environment.ContentRootPath,
+            "..",
+            "ProdigeeTutsPoint.Web",
+            "node_modules"));
+    }
+
     private string GetContentRoot()
     {
         return Path.GetFullPath(Path.IsPathRooted(contentOptions.Value.RootPath)
@@ -511,12 +637,25 @@ public sealed class ExerciseWorkspaceService(
         return definition;
     }
 
+    private async Task<ExerciseContentDefinition> ReadDefinitionForExerciseIdAsync(
+        string exerciseId,
+        CancellationToken cancellationToken)
+    {
+        var exercise = await db.Exercises
+            .AsNoTracking()
+            .Where(exercise => exercise.Id == exerciseId)
+            .Select(exercise => new { exercise.DirectoryPath })
+            .FirstAsync(cancellationToken);
+
+        return await ReadExerciseDefinitionAsync(exercise.DirectoryPath, cancellationToken);
+    }
+
     private async Task<bool> IsSolutionAvailableAsync(
         string profileId,
         string exerciseId,
         CancellationToken cancellationToken)
     {
-        var passed = await db.ExerciseRunHistory.AnyAsync(
+        var passed = await db.ExerciseRunHistory.AsNoTracking().AnyAsync(
             history => history.ProfileId == profileId && history.ExerciseId == exerciseId && history.Status == "Passed",
             cancellationToken);
         if (passed)
@@ -524,7 +663,7 @@ public sealed class ExerciseWorkspaceService(
             return true;
         }
 
-        return await db.ExerciseSolutionUnlocks.AnyAsync(
+        return await db.ExerciseSolutionUnlocks.AsNoTracking().AnyAsync(
             unlock => unlock.ProfileId == profileId && unlock.ExerciseId == exerciseId,
             cancellationToken);
     }
@@ -541,6 +680,7 @@ public sealed class ExerciseWorkspaceService(
         CancellationToken cancellationToken)
     {
         var conceptIds = await db.Set<ProdigeeTutsPoint.Domain.Content.ExerciseConcept>()
+            .AsNoTracking()
             .Where(link => link.ExerciseId == exerciseId)
             .Select(link => link.ConceptId)
             .ToListAsync(cancellationToken);
@@ -614,7 +754,7 @@ public sealed class ExerciseWorkspaceService(
 
     private static bool IsGeneratedBuildDirectory(string segment)
     {
-        return segment is "bin" or "obj";
+        return segment is "bin" or "obj" or "node_modules" or ".vite" or ".build";
     }
 
     private static string SafeSegment(string value)
@@ -775,6 +915,76 @@ public sealed class ExerciseWorkspaceService(
             .ToArray();
     }
 
+    private static IReadOnlyCollection<StaticAnalysisDiagnosticResponse> ParseTypeScriptStaticAnalysisDiagnostics(
+        string workspacePath,
+        CommandResult analysis)
+    {
+        var lines = $"{analysis.Output}\n{analysis.Diagnostics}".Split(["\r\n", "\n"], StringSplitOptions.RemoveEmptyEntries);
+        return lines
+            .Select(line => ParseTypeScriptStaticAnalysisDiagnostic(workspacePath, line.Trim()))
+            .Where(diagnostic => diagnostic is not null)
+            .Cast<StaticAnalysisDiagnosticResponse>()
+            .DistinctBy(diagnostic => (diagnostic.RuleId, diagnostic.FilePath, diagnostic.Line, diagnostic.Column, diagnostic.Message))
+            .ToArray();
+    }
+
+    private static IReadOnlyCollection<StaticAnalysisDiagnosticResponse> ParseSwiftStaticAnalysisDiagnostics(
+        string workspacePath,
+        CommandResult analysis)
+    {
+        var lines = $"{analysis.Output}\n{analysis.Diagnostics}".Split(["\r\n", "\n"], StringSplitOptions.RemoveEmptyEntries);
+        return lines
+            .Select(line => ParseSwiftStaticAnalysisDiagnostic(workspacePath, line.Trim()))
+            .Where(diagnostic => diagnostic is not null)
+            .Cast<StaticAnalysisDiagnosticResponse>()
+            .DistinctBy(diagnostic => (diagnostic.RuleId, diagnostic.FilePath, diagnostic.Line, diagnostic.Column, diagnostic.Message))
+            .ToArray();
+    }
+
+    private static StaticAnalysisDiagnosticResponse? ParseSwiftStaticAnalysisDiagnostic(string workspacePath, string line)
+    {
+        var match = SwiftDiagnosticPattern.Match(line);
+        if (!match.Success)
+        {
+            return null;
+        }
+
+        var filePath = match.Groups["file"].Value;
+        var relativePath = Path.IsPathRooted(filePath)
+            ? Path.GetRelativePath(workspacePath, filePath)
+            : filePath;
+
+        return new StaticAnalysisDiagnosticResponse(
+            "SWIFT",
+            match.Groups["severity"].Value.ToLowerInvariant(),
+            match.Groups["message"].Value,
+            relativePath,
+            int.Parse(match.Groups["line"].Value),
+            int.Parse(match.Groups["column"].Value));
+    }
+
+    private static StaticAnalysisDiagnosticResponse? ParseTypeScriptStaticAnalysisDiagnostic(string workspacePath, string line)
+    {
+        var match = TypeScriptDiagnosticPattern.Match(line);
+        if (!match.Success)
+        {
+            return null;
+        }
+
+        var filePath = match.Groups["file"].Value;
+        var relativePath = Path.IsPathRooted(filePath)
+            ? Path.GetRelativePath(workspacePath, filePath)
+            : filePath;
+
+        return new StaticAnalysisDiagnosticResponse(
+            match.Groups["rule"].Value,
+            match.Groups["severity"].Value.ToLowerInvariant(),
+            match.Groups["message"].Value,
+            relativePath,
+            int.Parse(match.Groups["line"].Value),
+            int.Parse(match.Groups["column"].Value));
+    }
+
     private static StaticAnalysisDiagnosticResponse? ParseStaticAnalysisDiagnostic(string workspacePath, string line)
     {
         var locationMatch = DotnetLocationDiagnosticPattern.Match(line);
@@ -919,6 +1129,151 @@ public sealed class ExerciseWorkspaceService(
         """;
     }
 
+    private static string TypeScriptPackageFile()
+    {
+        return """
+        {
+          "name": "prodigee-typescript-exercise",
+          "private": true,
+          "type": "module",
+          "scripts": {
+            "check": "tsc --noEmit",
+            "test:visible": "vitest run tests/visible.test.ts",
+            "test:hidden": "vitest run tests/hidden.test.ts"
+          },
+          "devDependencies": {}
+        }
+        """;
+    }
+
+    private string TypeScriptConfigFile()
+    {
+        var typeRoots = Path.Combine(GetWebNodeModulesPath(), "@types").Replace("\\", "\\\\", StringComparison.Ordinal);
+        return $$"""
+        {
+          "compilerOptions": {
+            "target": "ES2024",
+            "lib": ["ES2024"],
+            "module": "NodeNext",
+            "moduleResolution": "NodeNext",
+            "strict": true,
+            "noImplicitAny": true,
+            "strictNullChecks": true,
+            "noUncheckedIndexedAccess": true,
+            "noImplicitReturns": true,
+            "noFallthroughCasesInSwitch": true,
+            "exactOptionalPropertyTypes": true,
+            "verbatimModuleSyntax": true,
+            "types": ["node"],
+            "typeRoots": ["{{typeRoots}}"],
+            "skipLibCheck": true
+          },
+          "include": ["src/**/*.ts"]
+        }
+        """;
+    }
+
+    private static string TypeScriptVisibleTests(string entryPoint, string assertions)
+    {
+        return $$"""
+        import { describe, expect, it } from 'vitest'
+        import { {{entryPoint}} } from '../src/exercise'
+
+        describe('visible exercise checks', () => {
+          it('handles a normal request with a level and limit', async () => {
+        {{Indent(assertions, 4)}}
+          })
+        })
+        """;
+    }
+
+    private static string TypeScriptHiddenTests(string entryPoint, string assertions)
+    {
+        return $$"""
+        import { describe, expect, it } from 'vitest'
+        import { {{entryPoint}} } from '../src/exercise'
+
+        describe('hidden exercise checks', () => {
+          it('handles edge cases without leaking implementation assumptions', async () => {
+        {{Indent(assertions, 4)}}
+          })
+        })
+        """;
+    }
+
+    private static string SwiftPackageFile()
+    {
+        return """
+        // swift-tools-version: 6.0
+        import PackageDescription
+
+        let package = Package(
+            name: "ProdigeeSwiftExercise",
+            platforms: [
+                .macOS(.v14)
+            ],
+            products: [
+                .library(name: "Exercise", targets: ["Exercise"])
+            ],
+            targets: [
+                .target(
+                    name: "Exercise",
+                    swiftSettings: [
+                        .enableUpcomingFeature("StrictConcurrency")
+                    ]
+                ),
+                .testTarget(
+                    name: "ExerciseVisibleTests",
+                    dependencies: ["Exercise"]
+                ),
+                .testTarget(
+                    name: "ExerciseHiddenTests",
+                    dependencies: ["Exercise"]
+                )
+            ]
+        )
+        """;
+    }
+
+    private static string SwiftVisibleTests(string assertions)
+    {
+        var methodModifiers = SwiftTestMethodModifiers(assertions);
+
+        return $$"""
+        import Exercise
+        import XCTest
+
+        final class VisibleTests: XCTestCase {
+            func testVisibleScenario() {{methodModifiers}} {
+        {{Indent(assertions, 8)}}
+            }
+        }
+        """;
+    }
+
+    private static string SwiftHiddenTests(string assertions)
+    {
+        var methodModifiers = SwiftTestMethodModifiers(assertions);
+
+        return $$"""
+        import Exercise
+        import XCTest
+
+        final class HiddenTests: XCTestCase {
+            func testHiddenScenario() {{methodModifiers}} {
+        {{Indent(assertions, 8)}}
+            }
+        }
+        """;
+    }
+
+    private static string SwiftTestMethodModifiers(string assertions)
+    {
+        return assertions.Contains("await ", StringComparison.Ordinal)
+            ? "async throws"
+            : "throws";
+    }
+
     private static string Indent(string value, int spaces)
     {
         var padding = new string(' ', spaces);
@@ -930,6 +1285,10 @@ public sealed class ExerciseWorkspaceService(
 
 public sealed class ExerciseContentDefinition
 {
+    public string Id { get; set; } = string.Empty;
+
+    public string Kind { get; set; } = string.Empty;
+
     public ExerciseWorkspaceDefinition Workspace { get; set; } = new();
 
     public List<ExerciseHintDefinition> Hints { get; set; } = [];
@@ -939,6 +1298,10 @@ public sealed class ExerciseContentDefinition
 
 public sealed class ExerciseWorkspaceDefinition
 {
+    public string Runtime { get; set; } = "dotnet";
+
+    public string EntryPoint { get; set; } = "parseCommandRequest";
+
     public string Starter { get; set; } = string.Empty;
 
     public string VisibleTest { get; set; } = string.Empty;
@@ -990,6 +1353,8 @@ public sealed record ExerciseSolutionUnlockRequest(
 public sealed record ExerciseWorkspaceResponse(
     string ExerciseId,
     string Title,
+    string Language,
+    string Runtime,
     string WorkspacePath,
     string LanguageServiceMessage,
     IReadOnlyCollection<ExerciseWorkspaceFileResponse> Files,

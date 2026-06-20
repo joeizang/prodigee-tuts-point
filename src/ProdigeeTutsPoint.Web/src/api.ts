@@ -255,6 +255,8 @@ export type SetupCheck = {
 export type ExerciseWorkspace = {
   exerciseId: string
   title: string
+  language: string
+  runtime: string
   workspacePath: string
   languageServiceMessage: string
   files: ExerciseWorkspaceFile[]

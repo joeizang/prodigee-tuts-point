@@ -107,6 +107,20 @@ public sealed class LearningEndpointTests
         Assert.NotNull(mastery);
         Assert.Contains(mastery, concept => concept.ConceptId == "csharp-dictionaries" && concept.Score == 1 && concept.Status == "Introduced");
 
+        var csharpMastery = await client.GetFromJsonAsync<List<ConceptMasteryTestResponse>>(
+            $"/api/learner/mastery/concepts?profileId={profileId}&trackId=csharp",
+            TestContext.Current.CancellationToken);
+        var typeScriptMastery = await client.GetFromJsonAsync<List<ConceptMasteryTestResponse>>(
+            $"/api/learner/mastery/concepts?profileId={profileId}&trackId=typescript",
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(csharpMastery);
+        Assert.NotNull(typeScriptMastery);
+        Assert.Contains(csharpMastery, concept => concept.ConceptId == "csharp-dictionaries");
+        Assert.DoesNotContain(csharpMastery, concept => concept.ConceptId == "ts-type-boundaries");
+        Assert.Contains(typeScriptMastery, concept => concept.ConceptId == "ts-type-boundaries" && concept.Score == 0);
+        Assert.DoesNotContain(typeScriptMastery, concept => concept.ConceptId == "csharp-dictionaries");
+
         var latest = await client.GetFromJsonAsync<DiagnosticAttemptTestResponse>(
             $"/api/learner/diagnostics/csharp/latest?profileId={profileId}",
             TestContext.Current.CancellationToken);
@@ -167,6 +181,18 @@ public sealed class LearningEndpointTests
         Assert.True(summary.ReviewDueCount < cards.Count);
         Assert.NotNull(mastery);
         Assert.Contains(mastery, concept => concept.Status is "Introduced" or "Practiced" or "Applied" or "Reliable");
+
+        var csharpSummary = await client.GetFromJsonAsync<LearnerSummaryTestResponse>(
+            $"/api/learner/summary?profileId={profileId}&trackId=csharp",
+            TestContext.Current.CancellationToken);
+        var typeScriptSummary = await client.GetFromJsonAsync<LearnerSummaryTestResponse>(
+            $"/api/learner/summary?profileId={profileId}&trackId=typescript",
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(csharpSummary);
+        Assert.NotNull(typeScriptSummary);
+        Assert.Equal(14, csharpSummary.ConceptCount);
+        Assert.Equal(20, typeScriptSummary.ConceptCount);
     }
 
     private sealed record NoteUpsertTestRequest(

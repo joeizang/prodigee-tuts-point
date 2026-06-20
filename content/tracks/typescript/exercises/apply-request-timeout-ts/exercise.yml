@@ -1,0 +1,47 @@
+id: apply-request-timeout-ts
+title: ApplyRequestTimeout
+kind: focused
+workspace:
+  runtime: node-typescript
+  entryPoint: applyRequestTimeout
+  starter: tracks/typescript/exercises/_shared/ServerRuntime.ts
+  visibleTest: |
+    await expect(applyRequestTimeout(Promise.resolve('fast'), 50, 'timeout')).resolves.toBe('fast')
+  hiddenTest: |
+    await expect(applyRequestTimeout(new Promise<string>(() => {}), 1, 'timeout')).resolves.toBe('timeout')
+    await expect(applyRequestTimeout(Promise.resolve({ ok: true }), 50, { ok: false })).resolves.toEqual({ ok: true })
+hints:
+  - id: conceptual
+    level: conceptual
+    title: Bound slow work
+    body: A timeout policy prevents one unresolved operation from holding the request open forever.
+  - id: api-approach
+    level: api-approach
+    title: Race operation and timer
+    body: Promise.race can return either the operation result or the timeout fallback, whichever resolves first.
+  - id: structural
+    level: structural
+    title: Keep generic type
+    body: The timeout value should have the same generic type as the operation result so callers get a stable contract.
+solution:
+  title: Model solution
+  body: The model solution races the operation with a timer that resolves to a caller-supplied fallback value.
+  code: |
+    export async function applyRequestTimeout<T>(
+      operation: Promise<T>,
+      timeoutMs: number,
+      timeoutValue: T,
+    ): Promise<T> {
+      return await Promise.race([
+        operation,
+        new Promise<T>((resolve) => {
+          setTimeout(() => resolve(timeoutValue), timeoutMs)
+        }),
+      ])
+    }
+commonWrongApproaches:
+  - Throwing on timeout when the caller asked for a typed fallback response value.
+  - Forgetting to return the original operation result when it resolves before the timeout.
+expectedSolutionCharacteristics:
+  - Returns fast operation results unchanged.
+  - Returns the typed timeout fallback when the operation does not resolve in time.

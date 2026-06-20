@@ -1,0 +1,53 @@
+id: parse-output-format-swift
+title: ParseOutputFormat
+kind: focused
+workspace:
+  runtime: swiftpm
+  entryPoint: parseOutputFormat
+  starter: tracks/swift/exercises/_shared/LogprobeCore.swift
+  visibleTest: |
+    XCTAssertEqual(try parseOutputFormat("json"), .json)
+    XCTAssertEqual(try parseOutputFormat(nil), .table)
+  hiddenTest: |
+    XCTAssertEqual(try parseOutputFormat("table"), .table)
+    XCTAssertThrowsError(try parseOutputFormat("yaml")) { error in
+        XCTAssertEqual(error as? CliParseError, .unsupportedFormat("yaml"))
+    }
+    XCTAssertThrowsError(try parseOutputFormat("")) { error in
+        XCTAssertEqual(error as? CliParseError, .unsupportedFormat(""))
+    }
+hints:
+  - id: conceptual
+    level: conceptual
+    title: Narrow strings
+    body: The raw optional string should become an OutputFormat enum at the CLI boundary so formatting code never receives arbitrary strings.
+  - id: api-approach
+    level: api-approach
+    title: Default once
+    body: Apply the table default only when the option is missing; unsupported values should still produce a precise parse error.
+  - id: structural
+    level: structural
+    title: Switch deliberately
+    body: Use a switch over the optional string so nil, table, json, and unsupported values are each handled explicitly.
+solution:
+  title: Model solution
+  body: The model solution narrows the raw option into the OutputFormat enum and throws a named CLI parse error for unsupported formats.
+  code: |
+    public func parseOutputFormat(_ value: String?) throws -> OutputFormat {
+        switch value {
+        case nil:
+            return .table
+        case "table":
+            return .table
+        case "json":
+            return .json
+        case let unsupported?:
+            throw CliParseError.unsupportedFormat(unsupported)
+        }
+    }
+commonWrongApproaches:
+  - Returning a String and expecting later output code to remember the supported values.
+  - Treating every unknown format as table, which hides user mistakes in scripts and CI jobs.
+expectedSolutionCharacteristics:
+  - Missing format defaults to table while table and json are accepted exactly.
+  - Unsupported strings throw CliParseError.unsupportedFormat with the original value preserved.

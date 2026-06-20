@@ -1,0 +1,83 @@
+id: adapt-node-request-ts
+title: AdaptNodeRequest
+kind: focused
+workspace:
+  runtime: node-typescript
+  entryPoint: adaptNodeRequest
+  starter: tracks/typescript/exercises/_shared/ServerRuntime.ts
+  visibleTest: |
+    async function* chunks() {
+      yield 'hello '
+      yield Buffer.from('world')
+    }
+    await expect(adaptNodeRequest({
+      method: 'POST',
+      url: '/logs',
+      headers: { 'Content-Type': 'application/json', accept: ['application/json', 'text/plain'] },
+      bodyChunks: chunks(),
+    })).resolves.toEqual({
+      method: 'POST',
+      url: '/logs',
+      headers: {
+        'content-type': 'application/json',
+        accept: 'application/json, text/plain',
+      },
+      body: 'hello world',
+    })
+  hiddenTest: |
+    async function* empty() {}
+    await expect(adaptNodeRequest({ headers: {}, bodyChunks: empty() })).resolves.toEqual({
+      method: 'GET',
+      url: '/',
+      headers: {},
+      body: '',
+    })
+hints:
+  - id: conceptual
+    level: conceptual
+    title: Normalize at the edge
+    body: The adapter owns defaults, header casing, duplicate header values, and body decoding before routing sees the request.
+  - id: api-approach
+    level: api-approach
+    title: Consume async chunks
+    body: Use for await to read every string or Buffer chunk and append its string representation.
+  - id: structural
+    level: structural
+    title: Lowercase header names
+    body: Store headers under lowercase names and join readonly string arrays with comma-space; typeof string checks narrow this union cleanly.
+solution:
+  title: Model solution
+  body: The model solution turns Node-shaped input into one stable RuntimeRequest with normalized headers and decoded body text.
+  code: |
+    export type RuntimeRequest = {
+      readonly method: string
+      readonly url: string
+      readonly headers: Readonly<Record<string, string>>
+      readonly body: string
+    }
+
+    export async function adaptNodeRequest(input: {
+      readonly method?: string
+      readonly url?: string
+      readonly headers: Readonly<Record<string, string | readonly string[] | undefined>>
+      readonly bodyChunks: AsyncIterable<string | Buffer>
+    }): Promise<RuntimeRequest> {
+      const headers: Record<string, string> = {}
+      for (const [name, value] of Object.entries(input.headers)) {
+        if (value === undefined) continue
+        headers[name.toLowerCase()] = typeof value === 'string' ? value : value.join(', ')
+      }
+
+      let body = ''
+      for await (const chunk of input.bodyChunks) {
+        body += typeof chunk === 'string' ? chunk : chunk.toString('utf8')
+      }
+
+      return { method: input.method ?? 'GET', url: input.url ?? '/', headers, body }
+    }
+commonWrongApproaches:
+  - Passing raw headers through without normalizing names, which makes later lookup inconsistent.
+  - Assuming body chunks are all strings and failing when Node supplies Buffer values.
+expectedSolutionCharacteristics:
+  - Consumes async string and Buffer chunks into a UTF-8 body.
+  - Defaults missing method and URL while normalizing headers into a readonly-compatible string record.

@@ -17,7 +17,16 @@ describe('Milestone AI review panel', () => {
             displayName: 'Local Ollama',
             preset: 'LocalOllama',
             endpoint: 'http://127.0.0.1:11434/v1',
-            model: 'llama3.1',
+            model: 'gemma4:31b-mlx',
+            secretName: null,
+            isEnabled: false,
+          },
+          {
+            id: 'local-ollama-qwen',
+            displayName: 'Local Ollama - Qwen 3.6 35B MLX',
+            preset: 'LocalOllama',
+            endpoint: 'http://127.0.0.1:11434/v1',
+            model: 'qwen3.6:35b-mlx',
             secretName: null,
             isEnabled: false,
           },
@@ -27,7 +36,7 @@ describe('Milestone AI review panel', () => {
             id: 'review-1',
             providerId: 'local-ollama',
             providerPreset: 'LocalOllama',
-            model: 'llama3.1',
+            model: 'gemma4:31b-mlx',
             promptVersion: 'ai-review-v1',
             rubricVersion: 'milestone.md:abcdef123456',
             policy: 'Advisory',
@@ -45,7 +54,8 @@ describe('Milestone AI review panel', () => {
     )
 
     expect(screen.getByRole('button', { name: /run advisory review/i })).toBeDisabled()
-    expect(screen.getByText(/LocalOllama at http:\/\/127\.0\.0\.1:11434\/v1/)).toBeInTheDocument()
+    expect(screen.getByRole('combobox')).toHaveValue('local-ollama')
+    expect(screen.getByText(/Local Ollama using gemma4:31b-mlx at http:\/\/127\.0\.0\.1:11434\/v1/)).toBeInTheDocument()
     expect(screen.getByText('82/100 - Advisory')).toBeInTheDocument()
     expect(screen.getByText('Solid advisory review.')).toBeInTheDocument()
   })

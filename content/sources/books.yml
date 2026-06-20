@@ -20,3 +20,47 @@ books:
     author: Mark Seemann
     publisher: Pearson
     ownership: Owned
+  - id: effective-typescript-2
+    title: Effective TypeScript
+    author: Dan Vanderkam
+    edition: "2"
+    publisher: O'Reilly
+    ownership: Owned
+  - id: essential-typescript-5
+    title: Essential TypeScript 5
+    author: Adam Freeman
+    edition: "3"
+    publisher: Manning
+    ownership: Owned
+  - id: nodejs-cookbook-5
+    title: Node.js Cookbook
+    author: Bethany Griggs
+    edition: "5"
+    publisher: Packt
+    ownership: Owned
+  - id: full-stack-javascript-strategies
+    title: Full-stack JavaScript Strategies
+    author: Federico Kereki
+    publisher: Packt
+    ownership: Owned
+  - id: grokking-algorithms
+    title: Grokking Algorithms
+    author: Aditya Y. Bhargava
+    publisher: Manning
+    ownership: Owned
+  - id: the-swift-programming-language
+    title: The Swift Programming Language
+    author: Apple
+    publisher: Apple
+    ownership: Owned
+  - id: swift-apprentice-beyond-basics
+    title: Swift Apprentice
+    author: Kodeco
+    edition: Beyond the Basics
+    publisher: Kodeco
+    ownership: Owned
+  - id: server-side-swift-vapor
+    title: Server-Side Swift with Vapor
+    author: Kodeco
+    publisher: Kodeco
+    ownership: Owned

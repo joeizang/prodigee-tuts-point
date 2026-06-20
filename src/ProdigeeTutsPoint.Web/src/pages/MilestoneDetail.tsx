@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { postJson } from '../api'
 import type { AiProvider, AiReview, MilestoneDetail as MilestoneDetailModel, TheoryCluster } from '../api'
@@ -70,30 +70,43 @@ export function AiReviewPanel({
   providers: AiProvider[]
   reviews: AiReview[]
 }) {
-  const [selectedProviderId, setSelectedProviderId] = useState(providers[0]?.id ?? 'local-ollama')
+  const [selectedProviderId, setSelectedProviderId] = useState(() => chooseDefaultProviderId(providers))
   const [providerOverride, setProviderOverride] = useState<AiProvider[] | null>(null)
   const [reviewOverride, setReviewOverride] = useState<AiReview[]>([])
   const [status, setStatus] = useState('')
+  const [isTestingProvider, setIsTestingProvider] = useState(false)
+  const [isRunningReview, setIsRunningReview] = useState(false)
   const providerState = providerOverride ?? providers
   const reviewState = [...reviewOverride, ...reviews.filter((review) => reviewOverride.every((item) => item.id !== review.id))]
   const selectedProvider = providerState.find((provider) => provider.id === selectedProviderId)
+
+  useEffect(() => {
+    if (providerState.length > 0 && !providerState.some((provider) => provider.id === selectedProviderId)) {
+      setSelectedProviderId(chooseDefaultProviderId(providerState))
+    }
+  }, [providerState, selectedProviderId])
 
   const testProvider = async () => {
     if (!selectedProvider) {
       return
     }
 
-    setStatus('Testing provider...')
-    const result = await postJson<{ providerId: string; success: boolean; message: string }>(
-      `/api/ai/providers/${selectedProvider.id}/test`,
-      {},
-    )
-    setStatus(result.message)
-    setProviderOverride(
-      providerState.map((provider) =>
-        provider.id === result.providerId ? { ...provider, isEnabled: result.success } : provider,
-      ),
-    )
+    setIsTestingProvider(true)
+    setStatus('Sending a greeting to the provider...')
+    try {
+      const result = await postJson<{ providerId: string; success: boolean; message: string }>(
+        `/api/ai/providers/${selectedProvider.id}/test`,
+        {},
+      )
+      setStatus(result.message)
+      setProviderOverride(
+        providerState.map((provider) =>
+          provider.id === result.providerId ? { ...provider, isEnabled: result.success } : provider,
+        ),
+      )
+    } finally {
+      setIsTestingProvider(false)
+    }
   }
 
   const runReview = async () => {
@@ -101,15 +114,20 @@ export function AiReviewPanel({
       return
     }
 
+    setIsRunningReview(true)
     setStatus('Running advisory AI review...')
-    const review = await postJson<AiReview>('/api/ai/reviews', {
-      profileId,
-      projectId,
-      milestoneId,
-      providerId: selectedProvider.id,
-    })
-    setReviewOverride((current) => [review, ...current])
-    setStatus('Advisory review stored.')
+    try {
+      const review = await postJson<AiReview>('/api/ai/reviews', {
+        profileId,
+        projectId,
+        milestoneId,
+        providerId: selectedProvider.id,
+      })
+      setReviewOverride((current) => [review, ...current])
+      setStatus('Advisory review stored.')
+    } finally {
+      setIsRunningReview(false)
+    }
   }
 
   return (
@@ -122,21 +140,26 @@ export function AiReviewPanel({
             </option>
           ))}
         </select>
-        <button className="secondary-action" type="button" onClick={testProvider}>
-          Test provider
+        <button
+          className="secondary-action"
+          disabled={isTestingProvider}
+          type="button"
+          onClick={testProvider}
+        >
+          {isTestingProvider ? 'Testing...' : 'Test provider'}
         </button>
         <button
           className="primary-action"
-          disabled={!selectedProvider?.isEnabled}
+          disabled={!selectedProvider?.isEnabled || isRunningReview}
           type="button"
           onClick={runReview}
         >
-          Run advisory review
+          {isRunningReview ? 'Running review...' : 'Run advisory review'}
         </button>
       </div>
       {selectedProvider && (
         <p className="body-copy">
-          {selectedProvider.preset} at {selectedProvider.endpoint}. Secret:{' '}
+          {selectedProvider.displayName} using {selectedProvider.model} at {selectedProvider.endpoint}. Secret:{' '}
           {selectedProvider.secretName ?? 'not required'}. Status:{' '}
           {selectedProvider.isEnabled ? 'enabled' : 'not enabled'}.
         </p>
@@ -157,5 +180,14 @@ export function AiReviewPanel({
         ))}
       </div>
     </Panel>
+  )
+}
+
+function chooseDefaultProviderId(providers: AiProvider[]) {
+  return (
+    providers.find((provider) => provider.isEnabled)?.id ??
+    providers.find((provider) => provider.preset === 'LocalOllama')?.id ??
+    providers[0]?.id ??
+    'local-ollama'
   )
 }

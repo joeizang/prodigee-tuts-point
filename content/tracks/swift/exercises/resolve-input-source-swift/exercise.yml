@@ -1,0 +1,56 @@
+id: resolve-input-source-swift
+title: ResolveInputSource
+kind: focused
+workspace:
+  runtime: swiftpm
+  entryPoint: resolveInputSource
+  starter: tracks/swift/exercises/_shared/LogprobeCore.swift
+  visibleTest: |
+    let result = await resolveInputSource(.stdin, readStdin: { "from stdin" }, readFile: { path in "file:\(path)" })
+    XCTAssertEqual(result, .success("from stdin"))
+  hiddenTest: |
+    let fileResult = await resolveInputSource(.file("app.log"), readStdin: { "stdin" }, readFile: { path in "file:\(path)" })
+    XCTAssertEqual(fileResult, .success("file:app.log"))
+    let missing = await resolveInputSource(.file("missing.log"), readStdin: { "stdin" }, readFile: { _ in
+        throw CliParseError.missingPath
+    })
+    XCTAssertEqual(missing, .failure("Could not read input file: missing.log"))
+hints:
+  - id: conceptual
+    level: conceptual
+    title: Choose one edge
+    body: The InputSource value tells you exactly which side-effecting dependency to call, so do not read stdin and the file path speculatively.
+  - id: api-approach
+    level: api-approach
+    title: Catch file errors
+    body: The file branch should catch thrown reader errors and return the controlled FileReadResult failure shape.
+  - id: structural
+    level: structural
+    title: Keep closures injected
+    body: Use the supplied async closures instead of touching real stdin or disk so the package remains deterministic under XCTest.
+solution:
+  title: Model solution
+  body: The model solution switches over InputSource, awaits exactly one injected reader, and maps file failures into an explicit failure result.
+  code: |
+    public func resolveInputSource(
+        _ source: InputSource,
+        readStdin: () async -> String,
+        readFile: (String) async throws -> String
+    ) async -> FileReadResult {
+        switch source {
+        case .stdin:
+            return .success(await readStdin())
+        case .file(let path):
+            do {
+                return .success(try await readFile(path))
+            } catch {
+                return .failure("Could not read input file: \(path)")
+            }
+        }
+    }
+commonWrongApproaches:
+  - Calling both readers before checking the source case, which makes tests and production behavior order-dependent.
+  - Letting file-read errors escape as thrown errors instead of returning the shared failure result.
+expectedSolutionCharacteristics:
+  - Stdin uses only readStdin and file input uses only readFile.
+  - File-read failures include the requested path in a stable failure message.

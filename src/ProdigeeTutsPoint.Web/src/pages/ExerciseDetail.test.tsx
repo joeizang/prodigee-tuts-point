@@ -26,6 +26,7 @@ describe('Exercise detail panels', () => {
           solutionAvailable: false,
           solution: null,
         }}
+        language="swift"
         isUnlockingSolution={false}
         onUnlockSolution={onUnlockSolution}
         onUseHint={onUseHint}
@@ -54,9 +55,10 @@ describe('Exercise detail panels', () => {
           solution: {
             title: 'Model solution',
             body: 'Pure and deterministic.',
-            code: 'return text?.ToLowerInvariant() ?? string.Empty;',
+            code: 'return text.lowercased()',
           },
         }}
+        language="swift"
         isUnlockingSolution={false}
         onUnlockSolution={onUnlockSolution}
         onUseHint={onUseHint}
@@ -65,7 +67,7 @@ describe('Exercise detail panels', () => {
 
     expect(screen.getByText('Decide null behavior first.')).toBeInTheDocument()
     expect(screen.getByText('Model solution')).toBeInTheDocument()
-    expect(screen.getByText(/ToLowerInvariant/)).toBeInTheDocument()
+    expect(screen.getByText('return')).toHaveClass('token', 'keyword')
   })
 
   it('renders static analysis separately with rule and location detail', () => {

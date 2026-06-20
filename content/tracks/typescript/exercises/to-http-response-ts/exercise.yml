@@ -1,0 +1,70 @@
+id: to-http-response-ts
+title: ToHttpResponse
+kind: focused
+workspace:
+  runtime: node-typescript
+  entryPoint: toHttpResponse
+  starter: tracks/typescript/exercises/_shared/HttpHandlers.ts
+  visibleTest: |
+    expect(toHttpResponse({ ok: false, status: 400, message: 'Invalid limit' })).toEqual({
+      status: 400,
+      headers: { 'content-type': 'application/json' },
+      body: '{"error":"Invalid limit"}',
+    })
+  hiddenTest: |
+    expect(toHttpResponse({ ok: false, status: 404, message: 'Route not found' })).toEqual({
+      status: 404,
+      headers: { 'content-type': 'application/json' },
+      body: '{"error":"Route not found"}',
+    })
+    expect(toHttpResponse({ ok: true, value: { limit: 10 } })).toEqual({
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+      body: '{"request":{"limit":10}}',
+    })
+hints:
+  - id: conceptual
+    level: conceptual
+    title: Response shape is contract
+    body: The function owns status, content type, and JSON body shape so every branch responds consistently.
+  - id: api-approach
+    level: api-approach
+    title: Serialize small objects
+    body: Use JSON.stringify on predictable response objects instead of manually constructing JSON strings.
+  - id: structural
+    level: structural
+    title: Map failure status directly
+    body: For route failures, preserve the authored status and put the message under an error property.
+solution:
+  title: Model solution
+  body: The model solution centralizes JSON response shape and converts route success or failure into an HTTP response object.
+  code: |
+    export type LogQueryRequest = {
+      readonly level?: string
+      readonly limit: number
+    }
+
+    export type HttpResponse = {
+      readonly status: number
+      readonly headers: Readonly<Record<string, string>>
+      readonly body: string
+    }
+
+    export type HttpRouteResult =
+      | { readonly ok: true; readonly value: LogQueryRequest }
+      | { readonly ok: false; readonly status: number; readonly message: string }
+
+    export function toHttpResponse(result: HttpRouteResult): HttpResponse {
+      const headers = { 'content-type': 'application/json' }
+      if (!result.ok) {
+        return { status: result.status, headers, body: JSON.stringify({ error: result.message }) }
+      }
+
+      return { status: 200, headers, body: JSON.stringify({ request: result.value }) }
+    }
+commonWrongApproaches:
+  - Returning plain text error bodies for some branches and JSON for others.
+  - Hard-coding every failure to 500, which turns expected client errors into server defects.
+expectedSolutionCharacteristics:
+  - Always returns a JSON content-type header.
+  - Preserves failure status codes and serializes a stable error body.

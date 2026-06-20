@@ -1,0 +1,82 @@
+id: run-streaming-logprobe-ts
+title: RunStreamingLogprobe
+kind: project
+workspace:
+  runtime: node-typescript
+  entryPoint: runStreamingLogprobe
+  starter: tracks/typescript/exercises/_shared/FileAndStreaming.ts
+  visibleTest: |
+    async function* source() {
+      yield '2026-06-19 INFO started'
+      yield '2026-06-19 ERROR failed'
+      yield '2026-06-19 INFO ready'
+    }
+    await expect(runStreamingLogprobe(source(), 2)).resolves.toEqual({
+      exitCode: 0,
+      stdout: 'INFO\t2\nERROR\t1',
+      stderr: '',
+    })
+  hiddenTest: |
+    async function* source() {
+      yield 'bad'
+      yield '2026-06-19 warn lowercase'
+      yield '2026-06-19 ERROR failed'
+      yield '2026-06-19 WARN uppercase'
+    }
+    await expect(runStreamingLogprobe(source(), 10)).resolves.toEqual({
+      exitCode: 0,
+      stdout: 'WARN\t2\nERROR\t1',
+      stderr: '',
+    })
+    async function* empty() {}
+    await expect(runStreamingLogprobe(empty(), 5)).resolves.toEqual({ exitCode: 0, stdout: '', stderr: '' })
+hints:
+  - id: conceptual
+    level: conceptual
+    title: Compose the stages
+    body: The runner should consume lines, summarize counts, format rows, and return an exit result without printing directly.
+  - id: api-approach
+    level: api-approach
+    title: Reuse the same ordering
+    body: Use count descending and key ascending so output remains deterministic for scripts and tests.
+  - id: structural
+    level: structural
+    title: Join rows with newlines
+    body: Format each row as LEVEL tab COUNT, join with newline, and keep stderr empty for successful summaries.
+solution:
+  title: Model solution
+  body: The model solution assembles streaming counting and bounded output into a deterministic command result.
+  code: |
+    export type StreamingRunResult = {
+      readonly exitCode: number
+      readonly stdout: string
+      readonly stderr: string
+    }
+
+    export async function runStreamingLogprobe(
+      lines: AsyncIterable<string>,
+      limit: number,
+    ): Promise<StreamingRunResult> {
+      const counts = new Map<string, number>()
+      for await (const line of lines) {
+        const level = line.trim().split(/\s+/)[1]?.toUpperCase()
+        if (level === undefined) {
+          continue
+        }
+        counts.set(level, (counts.get(level) ?? 0) + 1)
+      }
+
+      const rows = [...counts.entries()]
+        .map(([key, count]) => ({ key, count }))
+        .sort((left, right) => right.count - left.count || left.key.localeCompare(right.key))
+        .slice(0, Math.max(0, limit))
+        .map((row) => `${row.key}\t${row.count}`)
+
+      return { exitCode: 0, stdout: rows.join('\n'), stderr: '' }
+    }
+commonWrongApproaches:
+  - Calling console.log inside the runner, which makes the behavior harder to test and reuse.
+  - Loading every line into an array before counting when the summary can be accumulated incrementally.
+expectedSolutionCharacteristics:
+  - Consumes async lines incrementally and ignores malformed lines.
+  - Returns deterministic tab-separated output with exit code 0 and empty stderr.

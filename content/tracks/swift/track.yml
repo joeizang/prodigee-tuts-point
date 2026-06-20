@@ -1,0 +1,393 @@
+id: swift
+title: Swift and Server-Side Swift
+slug: swift
+description: Project-backed mastery of Swift and server-side Swift through SwiftPM packages, command boundaries, async workflows, HTTP handlers, Vapor services, persistence, concurrency, and operational design.
+language: Swift
+contentVersion: 2026.06.19
+concepts:
+  - id: swift-value-modeling
+    title: Swift Value Modeling
+    description: Using structs, enums, optionals, and explicit initializers to represent trustworthy application data.
+  - id: swift-command-boundaries
+    title: Swift Command Boundaries
+    description: Converting raw command-style input into typed Swift request values before core logic executes.
+  - id: swiftpm-package-structure
+    title: SwiftPM Package Structure
+    description: Organizing exercise code as a real Swift package with library targets and XCTest targets.
+  - id: swift-cli-contracts
+    title: Swift CLI Contracts
+    description: Defining command output formats, controlled parse failures, and process-independent command behavior.
+  - id: swift-file-input
+    title: Swift File Input Boundaries
+    description: Modeling stdin and file input with explicit async reader contracts.
+  - id: swift-async-streaming
+    title: Swift Async Streaming
+    description: Processing line streams incrementally with AsyncSequence and bounded deterministic summaries.
+  - id: swift-cli-composition
+    title: Swift CLI Composition
+    description: Composing typed command requests, injected side effects, streaming cores, and edge renderers into a real command pipeline.
+  - id: swift-http-adapters
+    title: Swift HTTP Adapters
+    description: Translating HTTP-shaped request data into reusable command-core inputs and stable response values.
+  - id: swift-server-hardening
+    title: Swift Server Hardening
+    description: Applying validation, timeout mapping, body-size limits, and telemetry contracts around server request adapters.
+modules:
+  - id: swift-foundation-core
+    title: Swift Foundation Core
+    description: Build the typed package and command boundary that later CLI, async, HTTP, and Vapor milestones will reuse.
+    order: 1
+  - id: swift-cli-core
+    title: Swift CLI Core
+    description: Add output contracts and process-independent command behavior around the typed parser.
+    order: 2
+  - id: swift-file-io
+    title: Swift File I/O
+    description: Resolve stdin and file input through async boundaries before streaming work begins.
+    order: 3
+  - id: swift-streaming-core
+    title: Swift Streaming Core
+    description: Count log levels from async line streams with bounded deterministic output.
+    order: 4
+  - id: swift-command-composition
+    title: Swift Command Composition
+    description: Compose parsing, input, streaming, and rendering into a reusable process-independent command.
+    order: 5
+  - id: swift-server-adapters
+    title: Swift Server Adapters
+    description: Adapt HTTP and future Vapor request boundaries onto the reusable command core.
+    order: 6
+  - id: swift-server-hardening
+    title: Swift Server Hardening
+    description: Harden server request boundaries with validation, limits, timeout mapping, and telemetry.
+    order: 7
+lessons:
+  - id: swiftpm-command-boundaries
+    moduleId: swift-foundation-core
+    title: SwiftPM Command Boundaries
+    summary: Model command-style input as a small Swift value and run it inside a real Swift Package Manager exercise package.
+    markdown: tracks/swift/lessons/swiftpm-command-boundaries.md
+    order: 1
+    concepts:
+      - swift-value-modeling
+      - swift-command-boundaries
+      - swiftpm-package-structure
+    sourceReferences:
+      - book: the-swift-programming-language
+        chapter: Structures, Enumerations, and Error Handling
+        topic: value types, optionals, throwing initializers, and explicit invariants
+        usage: QualityAnchor
+      - book: swift-apprentice-beyond-basics
+        chapter: Swift Package Manager and Testing
+        topic: package structure, XCTest boundaries, and library targets
+        usage: QualityAnchor
+  - id: swift-cli-output-contracts
+    moduleId: swift-cli-core
+    title: Swift CLI Output Contracts
+    summary: Narrow output-format strings into Swift enums and keep command behavior process-independent.
+    markdown: tracks/swift/lessons/swift-cli-output-contracts.md
+    order: 2
+    concepts:
+      - swift-cli-contracts
+      - swift-value-modeling
+      - swift-command-boundaries
+    sourceReferences:
+      - book: the-swift-programming-language
+        chapter: Enumerations and Error Handling
+        topic: enum-backed output formats and typed thrown failures
+        usage: QualityAnchor
+      - book: server-side-swift-vapor
+        chapter: Application Structure
+        topic: keeping framework and process adapters outside reusable core logic
+        usage: QualityAnchor
+  - id: swift-file-input-boundaries
+    moduleId: swift-file-io
+    title: Swift File Input Boundaries
+    summary: Resolve stdin and file input through async injected readers with controlled failure results.
+    markdown: tracks/swift/lessons/swift-file-input-boundaries.md
+    order: 3
+    concepts:
+      - swift-file-input
+      - swift-command-boundaries
+      - swift-value-modeling
+    sourceReferences:
+      - book: the-swift-programming-language
+        chapter: Concurrency and Error Handling
+        topic: async functions, closures, and thrown errors at side-effect boundaries
+        usage: QualityAnchor
+      - book: swift-apprentice-beyond-basics
+        chapter: Error Handling and Protocol-Oriented Boundaries
+        topic: separating file-system work from testable application logic
+        usage: QualityAnchor
+  - id: swift-async-line-streams
+    moduleId: swift-streaming-core
+    title: Swift Async Line Streams
+    summary: Process async line sources incrementally and return deterministic bounded log-level summaries.
+    markdown: tracks/swift/lessons/swift-async-line-streams.md
+    order: 4
+    concepts:
+      - swift-async-streaming
+      - swift-file-input
+      - swift-value-modeling
+    sourceReferences:
+      - book: the-swift-programming-language
+        chapter: Concurrency
+        topic: AsyncSequence, for-await loops, and async error propagation
+        usage: QualityAnchor
+      - book: swift-apprentice-beyond-basics
+        chapter: Collections and Algorithms
+        topic: frequency maps, deterministic ordering, and bounded summaries
+        usage: QualityAnchor
+  - id: swift-cli-composition
+    moduleId: swift-command-composition
+    title: Swift CLI Composition
+    summary: Compose typed command requests, injected input readers, async counting, and output rendering into a real command core.
+    markdown: tracks/swift/lessons/swift-cli-composition.md
+    order: 5
+    concepts:
+      - swift-cli-composition
+      - swift-cli-contracts
+      - swift-async-streaming
+    sourceReferences:
+      - book: the-swift-programming-language
+        chapter: Enumerations, Closures, and Concurrency
+        topic: enum result contracts, injected async closures, and composed async functions
+        usage: QualityAnchor
+      - book: server-side-swift-vapor
+        chapter: Application Structure
+        topic: keeping process adapters thin while reusable application logic owns behavior
+        usage: QualityAnchor
+  - id: swift-vapor-request-adapters
+    moduleId: swift-server-adapters
+    title: Swift Vapor Request Adapters
+    summary: Translate HTTP-shaped request values into the reusable logprobe command core and map outcomes to stable response values.
+    markdown: tracks/swift/lessons/swift-vapor-request-adapters.md
+    order: 6
+    concepts:
+      - swift-http-adapters
+      - swift-cli-composition
+      - swift-command-boundaries
+    sourceReferences:
+      - book: server-side-swift-vapor
+        chapter: Routing and Request Handling
+        topic: Vapor handlers as adapters over reusable application services
+        usage: QualityAnchor
+      - book: the-swift-programming-language
+        chapter: Error Handling and Optionals
+        topic: validating optional query data and mapping failures deliberately
+        usage: QualityAnchor
+  - id: swift-server-hardening
+    moduleId: swift-server-hardening
+    title: Swift Server Hardening
+    summary: Wrap the server adapter with body limits, timeout mapping, stable outcome classification, and telemetry.
+    markdown: tracks/swift/lessons/swift-server-hardening.md
+    order: 7
+    concepts:
+      - swift-server-hardening
+      - swift-http-adapters
+      - swift-cli-composition
+    sourceReferences:
+      - book: server-side-swift-vapor
+        chapter: Middleware, Logging, and Error Handling
+        topic: request lifecycle hardening, stable errors, request IDs, logging, and operational boundaries
+        usage: QualityAnchor
+      - book: the-swift-programming-language
+        chapter: Concurrency and Error Handling
+        topic: explicit async boundaries, value envelopes, and controlled failure contracts
+        usage: QualityAnchor
+exercises:
+  - id: parse-command-request-swift
+    title: ParseCommandRequest
+    summary: Parse command arguments into a typed Swift request value with defaults, validation, and useful thrown errors.
+    directory: tracks/swift/exercises/parse-command-request-swift
+    order: 1
+    concepts:
+      - swift-value-modeling
+      - swift-command-boundaries
+      - swiftpm-package-structure
+  - id: parse-output-format-swift
+    title: ParseOutputFormat
+    summary: Convert an optional output-format string into a Swift enum with a stable default and typed unsupported-format errors.
+    directory: tracks/swift/exercises/parse-output-format-swift
+    order: 2
+    concepts:
+      - swift-cli-contracts
+      - swift-value-modeling
+      - swift-command-boundaries
+  - id: resolve-input-source-swift
+    title: ResolveInputSource
+    summary: Resolve stdin and file input through async injected readers while returning controlled file-read results.
+    directory: tracks/swift/exercises/resolve-input-source-swift
+    order: 3
+    concepts:
+      - swift-file-input
+      - swift-command-boundaries
+      - swift-value-modeling
+  - id: count-levels-swift
+    title: CountLevels
+    summary: Count supported log levels from an async line stream and return a deterministic bounded summary.
+    directory: tracks/swift/exercises/count-levels-swift
+    order: 4
+    concepts:
+      - swift-async-streaming
+      - swift-file-input
+      - swift-value-modeling
+  - id: run-logprobe-command-swift
+    title: RunLogprobeCommand
+    summary: Compose input resolution, async line counting, and table or JSON rendering into a process-independent command core.
+    directory: tracks/swift/exercises/run-logprobe-command-swift
+    order: 5
+    concepts:
+      - swift-cli-composition
+      - swift-cli-contracts
+      - swift-async-streaming
+  - id: handle-logprobe-request-swift
+    title: HandleLogprobeRequest
+    summary: Adapt HTTP-shaped request input into the logprobe command core and map outcomes to stable response values.
+    directory: tracks/swift/exercises/handle-logprobe-request-swift
+    order: 6
+    concepts:
+      - swift-http-adapters
+      - swift-cli-composition
+      - swift-command-boundaries
+  - id: handle-hardened-logprobe-request-swift
+    title: HandleHardenedLogprobeRequest
+    summary: Wrap the HTTP adapter with body-size limits, timeout mapping, telemetry, and stable outcome classification.
+    directory: tracks/swift/exercises/handle-hardened-logprobe-request-swift
+    order: 7
+    concepts:
+      - swift-server-hardening
+      - swift-http-adapters
+      - swift-cli-composition
+projects:
+  - id: logprobe-swift
+    title: logprobe-swift
+    slug: logprobe-swift
+    description: Build a Swift and server-side Swift log investigation tool through typed CLI boundaries, SwiftPM packages, async processing, HTTP handlers, Vapor endpoints, persistence, concurrency, and observability.
+    milestones:
+      - id: swiftpm-command-boundary
+        title: SwiftPM command boundary
+        summary: Create the real Swift package and first typed request parser that the later server-side Swift path can reuse.
+        markdown: tracks/swift/projects/logprobe-swift/swiftpm-command-boundary.md
+        order: 1
+        lessons:
+          - swiftpm-command-boundaries
+        exercises:
+          - parse-command-request-swift
+        sourceReferences:
+          - book: the-swift-programming-language
+            chapter: Error Handling and Enumerations
+            topic: throwing validation, enum-backed levels, and value contracts
+            usage: QualityAnchor
+          - book: server-side-swift-vapor
+            chapter: Project Structure
+            topic: SwiftPM packages as the base for server-side Swift and Vapor applications
+            usage: QualityAnchor
+      - id: swift-cli-contracts
+        title: Swift CLI contracts
+        summary: Add output-format parsing and process-independent command behavior around the package core.
+        markdown: tracks/swift/projects/logprobe-swift/swift-cli-contracts.md
+        order: 2
+        lessons:
+          - swift-cli-output-contracts
+        exercises:
+          - parse-output-format-swift
+        sourceReferences:
+          - book: the-swift-programming-language
+            chapter: Enumerations and Error Handling
+            topic: output format enums and typed unsupported-value errors
+            usage: QualityAnchor
+          - book: server-side-swift-vapor
+            chapter: Application Structure
+            topic: adapters that keep process or framework details outside reusable logic
+            usage: QualityAnchor
+      - id: swift-file-input-boundaries
+        title: Swift file input boundaries
+        summary: Resolve stdin and file input through explicit async reader contracts before streaming begins.
+        markdown: tracks/swift/projects/logprobe-swift/swift-file-input-boundaries.md
+        order: 3
+        lessons:
+          - swift-file-input-boundaries
+        exercises:
+          - resolve-input-source-swift
+        sourceReferences:
+          - book: the-swift-programming-language
+            chapter: Concurrency and Error Handling
+            topic: async closures, throwing readers, and controlled failure values
+            usage: QualityAnchor
+          - book: swift-apprentice-beyond-basics
+            chapter: Error Handling and Protocol-Oriented Boundaries
+            topic: file-system boundaries and testable adapters
+            usage: QualityAnchor
+      - id: swift-streaming-scale
+        title: Swift streaming and scale
+        summary: Process async line streams incrementally and produce deterministic top-level summaries.
+        markdown: tracks/swift/projects/logprobe-swift/swift-streaming-scale.md
+        order: 4
+        lessons:
+          - swift-async-line-streams
+        exercises:
+          - count-levels-swift
+        sourceReferences:
+          - book: the-swift-programming-language
+            chapter: Concurrency
+            topic: AsyncSequence and for-await processing
+            usage: QualityAnchor
+          - book: swift-apprentice-beyond-basics
+            chapter: Collections and Algorithms
+            topic: frequency maps, ordering, and bounded summaries
+            usage: QualityAnchor
+      - id: swift-cli-composition
+        title: Swift CLI composition
+        summary: Compose the parser, input boundary, streaming counter, and renderer into a reusable command pipeline.
+        markdown: tracks/swift/projects/logprobe-swift/swift-cli-composition.md
+        order: 5
+        lessons:
+          - swift-cli-composition
+        exercises:
+          - run-logprobe-command-swift
+        sourceReferences:
+          - book: the-swift-programming-language
+            chapter: Closures, Enumerations, and Concurrency
+            topic: injected dependencies, enum command results, and async composition
+            usage: QualityAnchor
+          - book: server-side-swift-vapor
+            chapter: Application Structure
+            topic: reusable command logic behind thin adapters
+            usage: QualityAnchor
+      - id: swift-vapor-request-adapter
+        title: Swift Vapor request adapter
+        summary: Map HTTP-shaped request data onto the reusable command core before the full Vapor route implementation.
+        markdown: tracks/swift/projects/logprobe-swift/swift-vapor-request-adapter.md
+        order: 6
+        lessons:
+          - swift-vapor-request-adapters
+        exercises:
+          - handle-logprobe-request-swift
+        sourceReferences:
+          - book: server-side-swift-vapor
+            chapter: Routing and Request Handling
+            topic: Vapor routes, request data, response mapping, and service boundaries
+            usage: QualityAnchor
+          - book: the-swift-programming-language
+            chapter: Error Handling and Optionals
+            topic: validation and stable failure mapping at boundaries
+            usage: QualityAnchor
+      - id: swift-server-hardening
+        title: Swift server hardening
+        summary: Add body limits, timeout mapping, stable outcome classification, and telemetry around the server adapter.
+        markdown: tracks/swift/projects/logprobe-swift/swift-server-hardening.md
+        order: 7
+        lessons:
+          - swift-server-hardening
+        exercises:
+          - handle-hardened-logprobe-request-swift
+        sourceReferences:
+          - book: server-side-swift-vapor
+            chapter: Middleware, Logging, and Error Handling
+            topic: request IDs, response classification, timeouts, body limits, and operational visibility
+            usage: QualityAnchor
+          - book: the-swift-programming-language
+            chapter: Concurrency and Error Handling
+            topic: async boundaries and value-based failure envelopes
+            usage: QualityAnchor

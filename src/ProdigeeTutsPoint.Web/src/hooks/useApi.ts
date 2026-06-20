@@ -32,5 +32,9 @@ export function useApi<T>(url: string | null) {
     return () => controller.abort()
   }, [url])
 
-  return { data, error, isLoading }
+  return {
+    data: url === null ? null : data,
+    error: url === null ? null : error,
+    isLoading: url === null ? false : isLoading,
+  }
 }

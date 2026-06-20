@@ -1,0 +1,103 @@
+id: parse-command-request-ts
+title: ParseCommandRequest
+kind: focused
+workspace:
+  runtime: node-typescript
+  starter: tracks/typescript/exercises/_shared/CommandRequest.ts
+  visibleTest: |
+    expect(parseCommandRequest(['--level', 'warn', '--limit', '25'])).toEqual({
+      level: 'warn',
+      limit: 25,
+      includeArchived: false,
+    })
+  hiddenTest: |
+    expect(parseCommandRequest([])).toEqual({
+      level: 'info',
+      limit: 100,
+      includeArchived: false,
+    })
+
+    expect(parseCommandRequest(['--archived', '--level', 'error'])).toEqual({
+      level: 'error',
+      limit: 100,
+      includeArchived: true,
+    })
+
+    expect(() => parseCommandRequest(['--level', 'trace'])).toThrow(/level/i)
+    expect(() => parseCommandRequest(['--limit', '0'])).toThrow(/limit/i)
+hints:
+  - id: conceptual
+    level: conceptual
+    title: Parse once
+    body: Treat the argument array as untrusted boundary data. Convert it into a typed object before any future filtering or file processing logic uses it.
+  - id: api-approach
+    level: api-approach
+    title: Use literal values
+    body: Put the accepted log levels in a small readonly list, then check membership before assigning the value to the narrower LogLevel type.
+  - id: structural
+    level: structural
+    title: Walk pairs carefully
+    body: A simple index-based loop can consume option names and their values. Boolean flags consume only themselves, while value options consume the next argument too.
+solution:
+  title: Model solution
+  body: The model solution keeps defaults at the boundary, validates each option before assignment, and returns a narrow CommandRequest instead of loose strings.
+  code: |
+    export type LogLevel = 'debug' | 'info' | 'warn' | 'error'
+
+    export type CommandRequest = {
+      readonly level: LogLevel
+      readonly limit: number
+      readonly includeArchived: boolean
+    }
+
+    const levels = ['debug', 'info', 'warn', 'error'] as const
+
+    export function parseCommandRequest(args: readonly string[]): CommandRequest {
+      let level: LogLevel = 'info'
+      let limit = 100
+      let includeArchived = false
+
+      for (let index = 0; index < args.length; index++) {
+        const option = args[index]
+
+        if (option === '--archived') {
+          includeArchived = true
+          continue
+        }
+
+        if (option === '--level') {
+          const value = args[++index]
+          if (!isLogLevel(value)) {
+            throw new Error(`Unsupported level: ${value ?? '<missing>'}`)
+          }
+
+          level = value
+          continue
+        }
+
+        if (option === '--limit') {
+          const value = args[++index]
+          const parsed = Number(value)
+          if (!Number.isInteger(parsed) || parsed < 1) {
+            throw new Error(`Invalid limit: ${value ?? '<missing>'}`)
+          }
+
+          limit = parsed
+          continue
+        }
+
+        throw new Error(`Unknown option: ${option}`)
+      }
+
+      return { level, limit, includeArchived }
+    }
+
+    function isLogLevel(value: string | undefined): value is LogLevel {
+      return levels.some((level) => level === value)
+    }
+commonWrongApproaches:
+  - Returning level as a broad string after parsing instead of narrowing it to LogLevel.
+  - Calling Number on the limit without rejecting NaN, zero, negative values, or decimals.
+expectedSolutionCharacteristics:
+  - Applies defaults for missing level, limit, and archive flag at the parser boundary.
+  - Throws meaningful errors for unsupported levels, malformed limits, and unknown options.

@@ -401,7 +401,7 @@ public sealed class ContentIndexingHostedService(
             cancellationToken);
 
         var now = DateTimeOffset.UtcNow;
-        if (!await db.AiReviewProviderSettings.AnyAsync(provider => provider.Id == "hosted-openai", cancellationToken))
+        if (!await db.AiReviewProviderSettings.AsNoTracking().AnyAsync(provider => provider.Id == "hosted-openai", cancellationToken))
         {
             db.AiReviewProviderSettings.Add(new ProdigeeTutsPoint.Domain.Learning.AiReviewProviderSetting
             {
@@ -417,20 +417,70 @@ public sealed class ContentIndexingHostedService(
             });
         }
 
-        if (!await db.AiReviewProviderSettings.AnyAsync(provider => provider.Id == "local-ollama", cancellationToken))
+        var localOllama = await db.AiReviewProviderSettings.FirstOrDefaultAsync(
+            provider => provider.Id == "local-ollama",
+            cancellationToken);
+        if (localOllama is null)
         {
             db.AiReviewProviderSettings.Add(new ProdigeeTutsPoint.Domain.Learning.AiReviewProviderSetting
             {
                 Id = "local-ollama",
-                DisplayName = "Local Ollama",
+                DisplayName = "Local Ollama - Gemma 4 31B MLX",
                 Preset = "LocalOllama",
                 Endpoint = "http://127.0.0.1:11434/v1",
-                Model = "llama3.1",
+                Model = "gemma4:31b-mlx",
                 SecretName = null,
                 IsEnabled = false,
                 CreatedAt = now,
                 UpdatedAt = now,
             });
+        }
+        else if (
+            localOllama.DisplayName != "Local Ollama - Gemma 4 31B MLX"
+            || localOllama.Preset != "LocalOllama"
+            || localOllama.Endpoint != "http://127.0.0.1:11434/v1"
+            || localOllama.Model != "gemma4:31b-mlx"
+            || localOllama.SecretName is not null)
+        {
+            localOllama.DisplayName = "Local Ollama - Gemma 4 31B MLX";
+            localOllama.Preset = "LocalOllama";
+            localOllama.Endpoint = "http://127.0.0.1:11434/v1";
+            localOllama.Model = "gemma4:31b-mlx";
+            localOllama.SecretName = null;
+            localOllama.UpdatedAt = now;
+        }
+
+        var localOllamaQwen = await db.AiReviewProviderSettings.FirstOrDefaultAsync(
+            provider => provider.Id == "local-ollama-qwen",
+            cancellationToken);
+        if (localOllamaQwen is null)
+        {
+            db.AiReviewProviderSettings.Add(new ProdigeeTutsPoint.Domain.Learning.AiReviewProviderSetting
+            {
+                Id = "local-ollama-qwen",
+                DisplayName = "Local Ollama - Qwen 3.6 35B MLX",
+                Preset = "LocalOllama",
+                Endpoint = "http://127.0.0.1:11434/v1",
+                Model = "qwen3.6:35b-mlx",
+                SecretName = null,
+                IsEnabled = false,
+                CreatedAt = now,
+                UpdatedAt = now,
+            });
+        }
+        else if (
+            localOllamaQwen.DisplayName != "Local Ollama - Qwen 3.6 35B MLX"
+            || localOllamaQwen.Preset != "LocalOllama"
+            || localOllamaQwen.Endpoint != "http://127.0.0.1:11434/v1"
+            || localOllamaQwen.Model != "qwen3.6:35b-mlx"
+            || localOllamaQwen.SecretName is not null)
+        {
+            localOllamaQwen.DisplayName = "Local Ollama - Qwen 3.6 35B MLX";
+            localOllamaQwen.Preset = "LocalOllama";
+            localOllamaQwen.Endpoint = "http://127.0.0.1:11434/v1";
+            localOllamaQwen.Model = "qwen3.6:35b-mlx";
+            localOllamaQwen.SecretName = null;
+            localOllamaQwen.UpdatedAt = now;
         }
 
         var reviewCards = new[]
@@ -444,7 +494,7 @@ public sealed class ContentIndexingHostedService(
         };
         foreach (var card in reviewCards)
         {
-            if (!await db.ReviewCards.AnyAsync(existing => existing.Id == card.Id, cancellationToken))
+            if (!await db.ReviewCards.AsNoTracking().AnyAsync(existing => existing.Id == card.Id, cancellationToken))
             {
                 db.ReviewCards.Add(new ProdigeeTutsPoint.Domain.Learning.ReviewCard
                 {

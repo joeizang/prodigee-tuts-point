@@ -1,0 +1,120 @@
+id: parse-result-to-exit-result-ts
+title: ParseResultToExitResult
+kind: focused
+workspace:
+  runtime: node-typescript
+  entryPoint: toExitResult
+  starter: tracks/typescript/exercises/_shared/CliContracts.ts
+  visibleTest: |
+    expect(
+      toExitResult({
+        ok: true,
+        value: {
+          level: 'warn',
+          limit: 20,
+          includeArchived: false,
+          format: 'json',
+        },
+      }),
+    ).toEqual({
+      exitCode: 0,
+      stdout: '{"level":"warn","limit":20,"includeArchived":false,"format":"json"}',
+      stderr: '',
+    })
+  hiddenTest: |
+    expect(
+      toExitResult({
+        ok: false,
+        error: {
+          option: '--level',
+          message: 'Unsupported level: trace',
+        },
+      }),
+    ).toEqual({
+      exitCode: 2,
+      stdout: '',
+      stderr: 'Unsupported level: trace',
+    })
+
+    expect(
+      toExitResult({
+        ok: true,
+        value: {
+          level: 'info',
+          limit: 100,
+          includeArchived: true,
+          format: 'table',
+        },
+      }).stdout,
+    ).toBe('level=info limit=100 archived=true format=table')
+hints:
+  - id: conceptual
+    level: conceptual
+    title: Streams are contract
+    body: Successful command output belongs on stdout, while parse errors belong on stderr with a non-zero exit code.
+  - id: api-approach
+    level: api-approach
+    title: Narrow on ok
+    body: Check result.ok before reading value or error so TypeScript narrows the discriminated union correctly.
+  - id: structural
+    level: structural
+    title: Keep process calls outside
+    body: Return an ExitResult object from this function. Do not call console.log, console.error, or process.exit here.
+solution:
+  title: Model solution
+  body: The model solution converts structured parse results into deterministic exit behavior without touching the real process.
+  code: |
+    export type LogLevel = 'debug' | 'info' | 'warn' | 'error'
+    export type OutputFormat = 'table' | 'json'
+
+    export type CommandRequest = {
+      readonly level: LogLevel
+      readonly limit: number
+      readonly includeArchived: boolean
+      readonly format: OutputFormat
+    }
+
+    export type ParseError = {
+      readonly option: string
+      readonly message: string
+    }
+
+    export type ParseResult =
+      | { readonly ok: true; readonly value: CommandRequest }
+      | { readonly ok: false; readonly error: ParseError }
+
+    export type ExitResult = {
+      readonly exitCode: number
+      readonly stdout: string
+      readonly stderr: string
+    }
+
+    export function toExitResult(result: ParseResult): ExitResult {
+      if (!result.ok) {
+        return {
+          exitCode: 2,
+          stdout: '',
+          stderr: result.error.message,
+        }
+      }
+
+      if (result.value.format === 'json') {
+        return {
+          exitCode: 0,
+          stdout: JSON.stringify(result.value),
+          stderr: '',
+        }
+      }
+
+      return {
+        exitCode: 0,
+        stdout: `level=${result.value.level} limit=${result.value.limit} archived=${result.value.includeArchived} format=${result.value.format}`,
+        stderr: '',
+      }
+    }
+commonWrongApproaches:
+  - Printing directly from the conversion function, which makes behavior hard to test and reuse.
+  - Returning exit code 0 for parse failures, which breaks shell and CI automation.
+expectedSolutionCharacteristics:
+  - Maps successful results to exit code 0 and stdout.
+  - Maps parse failures to exit code 2 and stderr without leaking errors to stdout.

@@ -1,0 +1,77 @@
+id: count-levels-swift
+title: CountLevels
+kind: focused
+workspace:
+  runtime: swiftpm
+  entryPoint: countLevels
+  starter: tracks/swift/exercises/_shared/LogprobeCore.swift
+  visibleTest: |
+    let lines = AsyncStream<String> { continuation in
+        continuation.yield("2026-06-19 INFO started")
+        continuation.yield("2026-06-19 WARN disk")
+        continuation.yield("2026-06-19 INFO ready")
+        continuation.finish()
+    }
+    let result = try await countLevels(from: lines, limit: 2)
+    XCTAssertEqual(result, [LevelCount(level: "INFO", count: 2), LevelCount(level: "WARN", count: 1)])
+  hiddenTest: |
+    let lines = AsyncStream<String> { continuation in
+        continuation.yield("DEBUG boot")
+        continuation.yield("INFO ready")
+        continuation.yield("ERROR failed")
+        continuation.yield("ERROR still-failed")
+        continuation.yield("TRACE ignored")
+        continuation.finish()
+    }
+    let result = try await countLevels(from: lines, limit: 2)
+    XCTAssertEqual(result, [LevelCount(level: "ERROR", count: 2), LevelCount(level: "DEBUG", count: 1)])
+    let none = try await countLevels(from: AsyncStream<String> { $0.finish() }, limit: 5)
+    XCTAssertEqual(none, [])
+hints:
+  - id: conceptual
+    level: conceptual
+    title: Stream records
+    body: Treat the AsyncSequence as a stream of lines that must be consumed incrementally instead of copied into an array first.
+  - id: api-approach
+    level: api-approach
+    title: Recognize levels
+    body: Normalize each line to uppercase tokens and count only DEBUG, INFO, WARN, and ERROR values.
+  - id: structural
+    level: structural
+    title: Sort deterministically
+    body: Sort by count descending and then level ascending so equal counts produce stable output across platforms.
+solution:
+  title: Model solution
+  body: The model solution consumes the async line sequence once, counts supported levels, and returns a deterministic bounded summary.
+  code: |
+    public func countLevels<S: AsyncSequence>(
+        from lines: S,
+        limit: Int
+    ) async throws -> [LevelCount] where S.Element == String {
+        var counts: [String: Int] = [:]
+        let supported = Set(["DEBUG", "INFO", "WARN", "ERROR"])
+
+        for try await line in lines {
+            for token in line.uppercased().split(whereSeparator: { !$0.isLetter }) {
+                let level = String(token)
+                if supported.contains(level) {
+                    counts[level, default: 0] += 1
+                    break
+                }
+            }
+        }
+
+        return counts
+            .map { LevelCount(level: $0.key, count: $0.value) }
+            .sorted { left, right in
+                left.count == right.count ? left.level < right.level : left.count > right.count
+            }
+            .prefix(max(0, limit))
+            .map { $0 }
+    }
+commonWrongApproaches:
+  - Collecting the whole AsyncSequence into an array before counting, which defeats the streaming design.
+  - Sorting only by count and leaving equal-count levels in dictionary iteration order.
+expectedSolutionCharacteristics:
+  - Consumes the async lines with for-await and counts only supported log levels.
+  - Returns at most limit results in count-descending, level-ascending order.

@@ -1,0 +1,73 @@
+id: compose-node-server-handler-ts
+title: ComposeNodeServerHandler
+kind: project
+workspace:
+  runtime: node-typescript
+  entryPoint: composeNodeServerHandler
+  starter: tracks/typescript/exercises/_shared/ServerRuntime.ts
+  visibleTest: |
+    await expect(composeNodeServerHandler(
+      { method: 'GET', url: '/logs', headers: {}, body: '' },
+      {
+        nowMs: () => 100,
+        newRequestId: () => 'req-1',
+        readSummary: async (_request, context) => [{ level: context.requestId, count: 1 }],
+      },
+    )).resolves.toEqual({
+      status: 200,
+      headers: { 'content-type': 'application/json', 'x-request-id': 'req-1' },
+      body: '{"data":[{"level":"req-1","count":1}]}',
+    })
+  hiddenTest: |
+    let called = 0
+    await expect(composeNodeServerHandler(
+      { method: 'POST', url: '/logs', headers: { 'x-request-id': 'client-1' }, body: '' },
+      {
+        nowMs: () => 10,
+        newRequestId: () => 'server-id',
+        readSummary: async () => {
+          called++
+          return []
+        },
+      },
+    )).resolves.toEqual({
+      status: 405,
+      headers: { 'content-type': 'application/json', 'x-request-id': 'client-1' },
+      body: '{"error":"Method not allowed","requestId":"client-1"}',
+    })
+    expect(called).toBe(0)
+hints:
+  - id: conceptual
+    level: conceptual
+    title: Compose context and policy
+    body: The server handler should create request context, validate the method, and only call dependencies for valid requests.
+  - id: api-approach
+    level: api-approach
+    title: Preserve request id
+    body: Use x-request-id from headers when present; otherwise create one with the dependency provider.
+  - id: structural
+    level: structural
+    title: Return JSON responses
+    body: Every branch should return content-type application/json and x-request-id so clients and logs can correlate behavior.
+solution:
+  title: Model solution
+  body: The model solution composes context creation, method validation, summary reading, and response metadata without hidden globals.
+  code: |
+    export async function composeNodeServerHandler(request: RuntimeRequest, dependencies: RuntimeDependencies): Promise<RuntimeResponse> {
+      const requestId = request.headers['x-request-id'] ?? dependencies.newRequestId()
+      const headers = { 'content-type': 'application/json', 'x-request-id': requestId }
+      const context = { requestId, startedAtMs: dependencies.nowMs() }
+
+      if (request.method.toUpperCase() !== 'GET') {
+        return { status: 405, headers, body: JSON.stringify({ error: 'Method not allowed', requestId }) }
+      }
+
+      const data = await dependencies.readSummary(request, context)
+      return { status: 200, headers, body: JSON.stringify({ data }) }
+    }
+commonWrongApproaches:
+  - Calling the summary reader before method validation, which wastes work and can trigger side effects for bad requests.
+  - Generating a new request id even when the caller supplied one.
+expectedSolutionCharacteristics:
+  - Preserves or creates a request id and includes it in every response header.
+  - Calls the summary dependency only for valid GET requests.

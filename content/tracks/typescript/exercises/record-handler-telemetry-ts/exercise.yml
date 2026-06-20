@@ -1,0 +1,69 @@
+id: record-handler-telemetry-ts
+title: RecordHandlerTelemetry
+kind: focused
+workspace:
+  runtime: node-typescript
+  entryPoint: recordHandlerTelemetry
+  starter: tracks/typescript/exercises/_shared/ServerRuntime.ts
+  visibleTest: |
+    const events: Array<{ requestId: string; method: string; url: string; status: number; durationMs: number }> = []
+    const response = { status: 200, headers: {}, body: 'ok' }
+    await expect(recordHandlerTelemetry(
+      { method: 'GET', url: '/logs', headers: {}, body: '' },
+      { requestId: 'req-1', startedAtMs: 10 },
+      async () => response,
+      () => 25,
+      (event) => events.push(event),
+    )).resolves.toBe(response)
+    expect(events).toEqual([{ requestId: 'req-1', method: 'GET', url: '/logs', status: 200, durationMs: 15 }])
+  hiddenTest: |
+    const events: Array<{ requestId: string; method: string; url: string; status: number; durationMs: number }> = []
+    const response = { status: 404, headers: {}, body: 'missing' }
+    await recordHandlerTelemetry(
+      { method: 'POST', url: '/missing', headers: {}, body: '' },
+      { requestId: 'req-2', startedAtMs: 100 },
+      async () => response,
+      () => 100,
+      (event) => events.push(event),
+    )
+    expect(events).toEqual([{ requestId: 'req-2', method: 'POST', url: '/missing', status: 404, durationMs: 0 }])
+hints:
+  - id: conceptual
+    level: conceptual
+    title: Observe without changing behavior
+    body: Telemetry wrapping should record facts about the response while returning the original response unchanged.
+  - id: api-approach
+    level: api-approach
+    title: Measure after handle
+    body: Await the handler, then calculate duration from current time minus context.startedAtMs.
+  - id: structural
+    level: structural
+    title: Emit one event
+    body: Call the sink exactly once with request id, method, URL, status, and duration.
+solution:
+  title: Model solution
+  body: The model solution records one structured telemetry event after the handler completes and returns the same response object.
+  code: |
+    export async function recordHandlerTelemetry(
+      request: RuntimeRequest,
+      context: RequestContext,
+      handle: () => Promise<RuntimeResponse>,
+      nowMs: () => number,
+      sink: TelemetrySink,
+    ): Promise<RuntimeResponse> {
+      const response = await handle()
+      sink({
+        requestId: context.requestId,
+        method: request.method,
+        url: request.url,
+        status: response.status,
+        durationMs: nowMs() - context.startedAtMs,
+      })
+      return response
+    }
+commonWrongApproaches:
+  - Creating a new response object after telemetry, which can accidentally drop headers or body.
+  - Logging a formatted string instead of a structured event that tests and tools can inspect.
+expectedSolutionCharacteristics:
+  - Emits exactly one structured telemetry event after the handler resolves.
+  - Returns the original response object unchanged.

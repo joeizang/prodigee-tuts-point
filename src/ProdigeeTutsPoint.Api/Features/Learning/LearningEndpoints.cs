@@ -84,6 +84,7 @@ public static class LearningEndpoints
         {
             var normalizedTargetType = NormalizeTargetType(targetType);
             var note = await db.PersonalNotes
+                .AsNoTracking()
                 .Where(note =>
                     note.ProfileId == profileId
                     && note.TargetType == normalizedTargetType
@@ -156,6 +157,7 @@ public static class LearningEndpoints
         group.MapGet("/diagnostics/csharp/latest", async (string profileId, AppDbContext db, CancellationToken ct) =>
         {
             var attempts = await db.DiagnosticAttempts
+                .AsNoTracking()
                 .Where(attempt => attempt.ProfileId == profileId && attempt.TrackId == "csharp")
                 .Select(attempt => new DiagnosticAttemptResponse(
                     attempt.Id,
@@ -231,12 +233,23 @@ public static class LearningEndpoints
                 attempt.SubmittedAt));
         });
 
-        group.MapGet("/mastery/concepts", async (string profileId, AppDbContext db, CancellationToken ct) =>
+        group.MapGet("/mastery/concepts", async (string profileId, string? trackId, AppDbContext db, CancellationToken ct) =>
         {
-            var evidenceRows = await db.ConceptMasteryEvidence
-                .Where(evidence => evidence.ProfileId == profileId)
+            var conceptQuery = db.Concepts.AsNoTracking();
+            if (!string.IsNullOrWhiteSpace(trackId))
+            {
+                conceptQuery = conceptQuery.Where(concept => concept.TrackId == trackId);
+            }
+
+            var conceptIds = await conceptQuery
+                .Select(concept => concept.Id)
                 .ToListAsync(ct);
-            var concepts = await db.Concepts
+            var conceptIdSet = conceptIds.ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var evidenceRows = await db.ConceptMasteryEvidence
+                .AsNoTracking()
+                .Where(evidence => evidence.ProfileId == profileId && conceptIdSet.Contains(evidence.ConceptId))
+                .ToListAsync(ct);
+            var concepts = await conceptQuery
                 .Select(concept => new { concept.Id, concept.Title })
                 .ToListAsync(ct);
             var evidenceByConcept = evidenceRows.ToLookup(evidence => evidence.ConceptId);
@@ -262,12 +275,27 @@ public static class LearningEndpoints
             return Results.Ok(evidence);
         });
 
-        group.MapGet("/summary", async (string profileId, AppDbContext db, CancellationToken ct) =>
+        group.MapGet("/summary", async (string profileId, string? trackId, AppDbContext db, CancellationToken ct) =>
         {
-            var masteryRows = await db.ConceptMasteryEvidence
-                .Where(evidence => evidence.ProfileId == profileId)
+            var conceptQuery = db.Concepts.AsNoTracking();
+            var exerciseQuery = db.Exercises.AsNoTracking();
+            var milestoneQuery = db.ProjectMilestones.AsNoTracking();
+            if (!string.IsNullOrWhiteSpace(trackId))
+            {
+                conceptQuery = conceptQuery.Where(concept => concept.TrackId == trackId);
+                exerciseQuery = exerciseQuery.Where(exercise => exercise.TrackId == trackId);
+                milestoneQuery = milestoneQuery.Where(milestone => milestone.Project!.TrackId == trackId);
+            }
+
+            var conceptIds = await conceptQuery
+                .Select(concept => concept.Id)
                 .ToListAsync(ct);
-            var conceptCount = await db.Concepts.CountAsync(ct);
+            var conceptIdSet = conceptIds.ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var masteryRows = await db.ConceptMasteryEvidence
+                .AsNoTracking()
+                .Where(evidence => evidence.ProfileId == profileId && conceptIdSet.Contains(evidence.ConceptId))
+                .ToListAsync(ct);
+            var conceptCount = conceptIds.Count;
             var mastery = masteryRows
                 .GroupBy(evidence => evidence.ConceptId)
                 .Select(group =>
@@ -280,15 +308,23 @@ public static class LearningEndpoints
                 .ToArray();
             var reliableConcepts = mastery.Count(status => status == "Reliable");
             var reviewDueCount = await ReviewDueCountAsync(profileId, db, ct);
-            var exerciseTotal = await db.Exercises.CountAsync(ct);
+            var exerciseIds = await exerciseQuery
+                .Select(exercise => exercise.Id)
+                .ToListAsync(ct);
+            var exerciseTotal = exerciseIds.Count;
             var exercisePassed = await db.ExerciseRunHistory
-                .Where(history => history.ProfileId == profileId && history.Status == "Passed")
+                .AsNoTracking()
+                .Where(history =>
+                    history.ProfileId == profileId
+                    && history.Status == "Passed"
+                    && exerciseIds.Contains(history.ExerciseId))
                 .Select(history => history.ExerciseId)
                 .Distinct()
                 .CountAsync(ct);
-            var milestoneTotal = await db.ProjectMilestones.CountAsync(ct);
+            var milestoneTotal = await milestoneQuery.CountAsync(ct);
             var milestoneCompleted = exerciseTotal > 0 && exercisePassed >= exerciseTotal ? 1 : 0;
             var studyRows = await db.StudyTimeEntries
+                .AsNoTracking()
                 .Where(entry => entry.ProfileId == profileId)
                 .Select(entry => new { entry.StartedAt, entry.ActiveSeconds })
                 .ToListAsync(ct);
@@ -311,10 +347,12 @@ public static class LearningEndpoints
         group.MapGet("/review/cards", async (string profileId, AppDbContext db, CancellationToken ct) =>
         {
             var cards = await db.ReviewCards
+                .AsNoTracking()
                 .Where(card => card.IsActive)
                 .OrderBy(card => card.Order)
                 .ToListAsync(ct);
             var attempts = await db.ReviewCardAttempts
+                .AsNoTracking()
                 .Where(attempt => attempt.ProfileId == profileId)
                 .ToListAsync(ct);
             var attemptsByCard = attempts.ToLookup(attempt => attempt.ReviewCardId);
@@ -343,7 +381,9 @@ public static class LearningEndpoints
             AppDbContext db,
             CancellationToken ct) =>
         {
-            var card = await db.ReviewCards.FirstOrDefaultAsync(card => card.Id == cardId && card.IsActive, ct);
+            var card = await db.ReviewCards
+                .AsNoTracking()
+                .FirstOrDefaultAsync(card => card.Id == cardId && card.IsActive, ct);
             if (card is null)
             {
                 return Results.NotFound();
@@ -438,8 +478,9 @@ public static class LearningEndpoints
 
     private static async Task<int> ReviewDueCountAsync(string profileId, AppDbContext db, CancellationToken ct)
     {
-        var cards = await db.ReviewCards.Where(card => card.IsActive).Select(card => card.Id).ToListAsync(ct);
+        var cards = await db.ReviewCards.AsNoTracking().Where(card => card.IsActive).Select(card => card.Id).ToListAsync(ct);
         var attempts = await db.ReviewCardAttempts
+            .AsNoTracking()
             .Where(attempt => attempt.ProfileId == profileId)
             .ToListAsync(ct);
         var attemptsByCard = attempts.ToLookup(attempt => attempt.ReviewCardId);
@@ -511,14 +552,17 @@ public static class LearningEndpoints
         return targetType switch
         {
             "lesson" => await db.Set<ProdigeeTutsPoint.Domain.Content.LessonConcept>()
+                .AsNoTracking()
                 .Where(link => link.LessonId == targetId)
                 .Select(link => link.ConceptId)
                 .ToListAsync(ct),
             "exercise" => await db.Set<ProdigeeTutsPoint.Domain.Content.ExerciseConcept>()
+                .AsNoTracking()
                 .Where(link => link.ExerciseId == targetId)
                 .Select(link => link.ConceptId)
                 .ToListAsync(ct),
             "project" => await db.ProjectMilestones
+                .AsNoTracking()
                 .Where(milestone => milestone.ProjectId == targetId)
                 .SelectMany(milestone => milestone.Exercises)
                 .SelectMany(link => link.Exercise!.Concepts)
@@ -526,13 +570,14 @@ public static class LearningEndpoints
                 .Distinct()
                 .ToListAsync(ct),
             "milestone" => await db.ProjectMilestones
+                .AsNoTracking()
                 .Where(milestone => milestone.Id == targetId)
                 .SelectMany(milestone => milestone.Exercises)
                 .SelectMany(link => link.Exercise!.Concepts)
                 .Select(link => link.ConceptId)
                 .Distinct()
                 .ToListAsync(ct),
-            "review" => await db.Concepts.Select(concept => concept.Id).ToListAsync(ct),
+            "review" => await db.Concepts.AsNoTracking().Select(concept => concept.Id).ToListAsync(ct),
             _ => [],
         };
     }
@@ -570,13 +615,13 @@ public static class LearningEndpoints
     {
         return targetType switch
         {
-            "track" => db.Tracks.AnyAsync(track => track.Id == targetId, ct),
-            "project" => db.Projects.AnyAsync(project => project.Id == targetId, ct),
-            "milestone" => db.ProjectMilestones.AnyAsync(milestone => milestone.Id == targetId, ct),
-            "lesson" => db.Lessons.AnyAsync(lesson => lesson.Id == targetId, ct),
-            "exercise" => db.Exercises.AnyAsync(exercise => exercise.Id == targetId, ct),
-            "concept" => db.Concepts.AnyAsync(concept => concept.Id == targetId, ct),
-            "sourcereference" => db.SourceReferences.AnyAsync(reference => reference.Id == targetId, ct),
+            "track" => db.Tracks.AsNoTracking().AnyAsync(track => track.Id == targetId, ct),
+            "project" => db.Projects.AsNoTracking().AnyAsync(project => project.Id == targetId, ct),
+            "milestone" => db.ProjectMilestones.AsNoTracking().AnyAsync(milestone => milestone.Id == targetId, ct),
+            "lesson" => db.Lessons.AsNoTracking().AnyAsync(lesson => lesson.Id == targetId, ct),
+            "exercise" => db.Exercises.AsNoTracking().AnyAsync(exercise => exercise.Id == targetId, ct),
+            "concept" => db.Concepts.AsNoTracking().AnyAsync(concept => concept.Id == targetId, ct),
+            "sourcereference" => db.SourceReferences.AsNoTracking().AnyAsync(reference => reference.Id == targetId, ct),
             "review" => Task.FromResult(targetId == "csharp"),
             _ => Task.FromResult(false),
         };

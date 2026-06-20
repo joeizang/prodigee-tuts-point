@@ -1,0 +1,48 @@
+id: parse-process-argv-ts
+title: ParseProcessArgv
+kind: focused
+workspace:
+  runtime: node-typescript
+  entryPoint: parseProcessArgv
+  starter: tracks/typescript/exercises/_shared/CliContracts.ts
+  visibleTest: |
+    expect(parseProcessArgv(['/usr/local/bin/node', '/app/logprobe.js', '--level', 'warn'])).toEqual([
+      '--level',
+      'warn',
+    ])
+  hiddenTest: |
+    expect(parseProcessArgv(['node', 'logprobe.js'])).toEqual([])
+    expect(parseProcessArgv(['node'])).toEqual([])
+    expect(parseProcessArgv([])).toEqual([])
+    expect(parseProcessArgv(['node', 'logprobe.js', '--format', 'json', '--limit', '10'])).toEqual([
+      '--format',
+      'json',
+      '--limit',
+      '10',
+    ])
+hints:
+  - id: conceptual
+    level: conceptual
+    title: Strip runtime arguments
+    body: Node passes the executable and script path before the arguments that belong to your application parser.
+  - id: api-approach
+    level: api-approach
+    title: Keep input immutable
+    body: Use array slicing to return the application arguments without mutating the original argv array from the caller.
+  - id: structural
+    level: structural
+    title: Short arrays are valid
+    body: A short argv array should produce an empty argument list instead of throwing, because tests and wrappers may pass minimal arrays.
+solution:
+  title: Model solution
+  body: The model solution treats process argument normalization as a tiny named boundary policy and returns only application-owned arguments.
+  code: |
+    export function parseProcessArgv(argv: readonly string[]): readonly string[] {
+      return argv.slice(2)
+    }
+commonWrongApproaches:
+  - Passing the entire process.argv array into the command parser.
+  - Mutating the caller's argv array with splice or shift instead of returning a clean slice.
+expectedSolutionCharacteristics:
+  - Returns every argument after the Node executable and script path.
+  - Handles empty and short arrays without throwing.

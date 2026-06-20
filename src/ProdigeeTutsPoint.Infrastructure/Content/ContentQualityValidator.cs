@@ -7,6 +7,33 @@ namespace ProdigeeTutsPoint.Infrastructure.Content;
 public sealed class ContentQualityValidator
 {
     private static readonly Regex MarkdownLinkPattern = new(@"\[[^\]]+\]\((?<target>[^)]+)\)", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+    private static readonly Regex CodeFencePattern = new(@"(?:^|\n)```(?<language>[^\r\n`]*)\r?\n(?<code>[\s\S]*?)\r?\n```", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+    private static readonly HashSet<string> HighlightedCodeFenceLanguages = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "c#",
+        "csharp",
+        "cs",
+        "swift",
+        "ts",
+        "tsx",
+        "typescript",
+        "js",
+        "jsx",
+        "javascript",
+        "json",
+        "bash",
+        "sh",
+        "shell",
+        "console",
+        "text",
+        "txt",
+        "xml",
+        "yaml",
+        "yml",
+        "html",
+        "css",
+        "sql",
+    };
     private readonly IDeserializer deserializer = new DeserializerBuilder()
         .WithNamingConvention(CamelCaseNamingConvention.Instance)
         .IgnoreUnmatchedProperties()
@@ -92,6 +119,7 @@ public sealed class ContentQualityValidator
         RequireHeading(markdown, "Check yourself", path, diagnostics);
         RequireHeading(markdown, "Source reference notes", path, diagnostics);
         RequireCodeFence(markdown, path, diagnostics);
+        ValidateCodeFenceLanguages(markdown, path, diagnostics);
         RequireOccurrences(markdown, "**Term:", 2, path, "key term markers", diagnostics);
         RequireOccurrences(markdown, "?", 3, path, "check-yourself prompts", diagnostics);
         ValidateMarkdownLinks(rootPath, path, markdown, diagnostics);
@@ -156,6 +184,7 @@ public sealed class ContentQualityValidator
             }
         }
 
+        ValidateCodeFenceLanguages(markdown, path, diagnostics);
         ValidateMarkdownLinks(rootPath, path, markdown, diagnostics);
     }
 
@@ -275,6 +304,37 @@ public sealed class ContentQualityValidator
         if (!markdown.Contains("```", StringComparison.Ordinal))
         {
             diagnostics.Add(new ContentQualityDiagnostic("MissingExample", path, "Lesson must include at least one code example."));
+        }
+    }
+
+    private static void ValidateCodeFenceLanguages(string markdown, string path, List<ContentQualityDiagnostic> diagnostics)
+    {
+        foreach (Match match in CodeFencePattern.Matches(markdown))
+        {
+            var language = match.Groups["language"].Value.Trim();
+            var code = match.Groups["code"].Value.Trim();
+            if (string.IsNullOrWhiteSpace(code))
+            {
+                continue;
+            }
+
+            if (string.IsNullOrWhiteSpace(language))
+            {
+                diagnostics.Add(new ContentQualityDiagnostic(
+                    "MissingCodeFenceLanguage",
+                    path,
+                    "Code examples must use a supported fenced language so snippets render with syntax highlighting."));
+                continue;
+            }
+
+            var normalizedLanguage = language.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).FirstOrDefault() ?? language;
+            if (!HighlightedCodeFenceLanguages.Contains(normalizedLanguage))
+            {
+                diagnostics.Add(new ContentQualityDiagnostic(
+                    "UnsupportedCodeFenceLanguage",
+                    path,
+                    $"Unsupported fenced code language '{language}'. Add renderer support before using it in learning content."));
+            }
         }
     }
 

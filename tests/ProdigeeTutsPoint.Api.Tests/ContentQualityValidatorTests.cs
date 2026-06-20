@@ -56,6 +56,33 @@ public sealed class ContentQualityValidatorTests
         }
     }
 
+    [Fact]
+    public void ValidatorRejectsCodeExamplesWithoutFenceLanguage()
+    {
+        var sourceRoot = FindContentRoot();
+        var tempRoot = Path.Combine(Path.GetTempPath(), $"prodigee-content-quality-{Guid.NewGuid():n}");
+        CopyDirectory(sourceRoot, tempRoot);
+        try
+        {
+            var lessonPath = Path.Combine(tempRoot, "tracks", "swift", "lessons", "swiftpm-command-boundaries.md");
+            var lesson = File.ReadAllText(lessonPath);
+            lesson = lesson.Replace("```swift", "```", StringComparison.Ordinal);
+            File.WriteAllText(lessonPath, lesson);
+
+            var result = new ContentQualityValidator().Validate(tempRoot);
+
+            Assert.False(result.IsValid);
+            Assert.Contains(result.Diagnostics, diagnostic => diagnostic.Code == "MissingCodeFenceLanguage");
+        }
+        finally
+        {
+            if (Directory.Exists(tempRoot))
+            {
+                Directory.Delete(tempRoot, recursive: true);
+            }
+        }
+    }
+
     private static string FindContentRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);

@@ -1,0 +1,53 @@
+id: collect-async-lines-ts
+title: CollectAsyncLines
+kind: focused
+workspace:
+  runtime: node-typescript
+  entryPoint: collectAsyncLines
+  starter: tracks/typescript/exercises/_shared/FileAndStreaming.ts
+  visibleTest: |
+    async function* source() {
+      yield 'alpha'
+      yield 'beta'
+    }
+    await expect(collectAsyncLines(source())).resolves.toEqual(['alpha', 'beta'])
+  hiddenTest: |
+    async function* empty() {}
+    async function* delayed() {
+      await Promise.resolve()
+      yield 'one'
+      await Promise.resolve()
+      yield 'two'
+    }
+    await expect(collectAsyncLines(empty())).resolves.toEqual([])
+    await expect(collectAsyncLines(delayed())).resolves.toEqual(['one', 'two'])
+hints:
+  - id: conceptual
+    level: conceptual
+    title: Async source protocol
+    body: An AsyncIterable may not have all values ready, so consume it with for await instead of array methods.
+  - id: api-approach
+    level: api-approach
+    title: Collect deliberately
+    body: Use a local string array as the output buffer and push each line as it arrives from the async iterable.
+  - id: structural
+    level: structural
+    title: Return readonly-compatible array
+    body: A normal array can satisfy a readonly string array return type because callers receive it through a readonly contract.
+solution:
+  title: Model solution
+  body: The model solution demonstrates the basic async iteration protocol before later exercises process lines incrementally.
+  code: |
+    export async function collectAsyncLines(lines: AsyncIterable<string>): Promise<readonly string[]> {
+      const collected: string[] = []
+      for await (const line of lines) {
+        collected.push(line)
+      }
+      return collected
+    }
+commonWrongApproaches:
+  - Casting the async iterable to an array and calling map or filter on it.
+  - Forgetting await in the loop, which means delayed sources are not consumed correctly.
+expectedSolutionCharacteristics:
+  - Uses for await...of to consume every yielded line.
+  - Handles empty and delayed async generators without special cases.

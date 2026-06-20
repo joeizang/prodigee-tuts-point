@@ -1,0 +1,50 @@
+id: reject-unsupported-method-ts
+title: RejectUnsupportedMethod
+kind: focused
+workspace:
+  runtime: node-typescript
+  entryPoint: rejectUnsupportedMethod
+  starter: tracks/typescript/exercises/_shared/HttpHandlers.ts
+  visibleTest: |
+    expect(rejectUnsupportedMethod('GET')).toBeNull()
+    expect(rejectUnsupportedMethod('POST')).toEqual({
+      ok: false,
+      status: 405,
+      message: 'Method not allowed',
+    })
+  hiddenTest: |
+    expect(rejectUnsupportedMethod('get')).toBeNull()
+    expect(rejectUnsupportedMethod('DELETE')).toEqual({ ok: false, status: 405, message: 'Method not allowed' })
+    expect(rejectUnsupportedMethod('PATCH')).toEqual({ ok: false, status: 405, message: 'Method not allowed' })
+hints:
+  - id: conceptual
+    level: conceptual
+    title: Method validation is transport policy
+    body: The HTTP adapter owns allowed methods, so invalid methods should stop before route parsing or summary logic.
+  - id: api-approach
+    level: api-approach
+    title: Normalize method case
+    body: Convert the method to uppercase before comparing so clients that pass lowercase get the same policy.
+  - id: structural
+    level: structural
+    title: Null means continue
+    body: Return null for allowed methods and a route failure object for unsupported methods so the handler can compose the check.
+solution:
+  title: Model solution
+  body: The model solution accepts GET only and returns a controlled 405 route result for every other method.
+  code: |
+    export type HttpRouteResult =
+      | { readonly ok: true; readonly value: unknown }
+      | { readonly ok: false; readonly status: number; readonly message: string }
+
+    export function rejectUnsupportedMethod(method: string): HttpRouteResult | null {
+      return method.toUpperCase() === 'GET'
+        ? null
+        : { ok: false, status: 405, message: 'Method not allowed' }
+    }
+commonWrongApproaches:
+  - Treating unsupported methods as 404 route misses, which hides that the route exists but the method is wrong.
+  - Throwing an exception for expected client behavior instead of returning a controlled route result.
+expectedSolutionCharacteristics:
+  - Accepts GET regardless of method casing.
+  - Returns a 405 route failure for unsupported methods without invoking downstream logic.

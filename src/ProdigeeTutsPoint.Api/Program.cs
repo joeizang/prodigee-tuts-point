@@ -12,15 +12,16 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddOpenApi();
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddScoped<IExerciseRunner, DotnetExerciseRunner>();
+builder.Services.AddScoped<ITypeScriptExerciseRunner, TypeScriptExerciseRunner>();
+builder.Services.AddScoped<ISwiftExerciseRunner, SwiftExerciseRunner>();
 builder.Services.AddScoped<ExerciseWorkspaceService>();
 builder.Services.AddSingleton<CSharpLspBridge>();
+builder.Services.AddSingleton<SwiftLspBridge>();
 builder.Services.AddScoped<ExerciseLanguageService>();
 builder.Services.AddScoped<ExportImportService>();
+builder.Services.AddSingleton<IAiChatClientFactory, AiChatClientFactory>();
 builder.Services.AddHostedService<ExerciseLanguageServiceWarmupHostedService>();
-builder.Services.AddHttpClient<AiReviewService>(client =>
-{
-    client.Timeout = TimeSpan.FromSeconds(30);
-});
+builder.Services.AddScoped<AiReviewService>();
 
 var app = builder.Build();
 var webDistPath = Path.GetFullPath(Path.Combine(app.Environment.ContentRootPath, "..", "ProdigeeTutsPoint.Web", "dist"));

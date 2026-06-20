@@ -1,7 +1,6 @@
-using System.Net;
 using System.Net.Http.Json;
-using System.Text;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 using ProdigeeTutsPoint.Api.Features.AiReview;
 using ProdigeeTutsPoint.Infrastructure.Content;
@@ -29,7 +28,12 @@ public sealed class AiReviewTests
             && !provider.SecretName.StartsWith("sk-", StringComparison.Ordinal));
         Assert.Contains(providers, provider =>
             provider.Id == "local-ollama"
-            && provider.Preset == "LocalOllama");
+            && provider.Preset == "LocalOllama"
+            && provider.Model == "gemma4:31b-mlx");
+        Assert.Contains(providers, provider =>
+            provider.Id == "local-ollama-qwen"
+            && provider.Preset == "LocalOllama"
+            && provider.Model == "qwen3.6:35b-mlx");
     }
 
     [Fact]
@@ -91,11 +95,10 @@ public sealed class AiReviewTests
             provider.Model = "fake-review-model";
             await db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
-            using var http = new HttpClient(new FakeOpenAiHandler())
-            {
-                BaseAddress = new Uri("http://127.0.0.1:11434"),
-            };
-            var service = new AiReviewService(db, reader, http);
+            var service = new AiReviewService(db, reader, new FakeAiChatClientFactory(
+                """
+                {"score":82,"maxScore":100,"summary":"Solid advisory review.","strengths":["Good pure function boundary"],"risks":["Some edge cases need more proof"],"nextSteps":["Add more edge-case evidence"]}
+                """));
 
             var review = await service.RunReviewAsync(
                 new AiReviewRequest(
@@ -123,7 +126,7 @@ public sealed class AiReviewTests
     }
 
     [Fact]
-    public async Task ProviderTestRequiresChatAndJsonObjectCapabilityBeforeEnabling()
+    public async Task ProviderTestEnablesProviderWhenGreetingReturnsText()
     {
         await using var factory = new WebApplicationFactory<Program>();
         await using var scope = factory.Services.CreateAsyncScope();
@@ -141,14 +144,128 @@ public sealed class AiReviewTests
             provider.IsEnabled = false;
             await db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
-            using var http = new HttpClient(new FakeOpenAiHandler());
-            var service = new AiReviewService(db, reader, http);
+            var service = new AiReviewService(db, reader, new FakeAiChatClientFactory("Hi, I am ready."));
 
             var result = await service.TestProviderAsync("local-ollama", TestContext.Current.CancellationToken);
 
             Assert.NotNull(result);
             Assert.True(result.Success);
             Assert.True(provider.IsEnabled);
+        }
+        finally
+        {
+            provider.Endpoint = originalEndpoint;
+            provider.Model = originalModel;
+            provider.IsEnabled = originalEnabled;
+            await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+    }
+
+    [Fact]
+    public async Task ProviderTestAcceptsTextContentWhenResponseTextIsEmpty()
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var reader = scope.ServiceProvider.GetRequiredService<ContentFileReader>();
+        var provider = await db.AiReviewProviderSettings.FindAsync(["local-ollama-qwen"], TestContext.Current.CancellationToken);
+        Assert.NotNull(provider);
+        var originalEndpoint = provider.Endpoint;
+        var originalModel = provider.Model;
+        var originalEnabled = provider.IsEnabled;
+        try
+        {
+            provider.Endpoint = "http://127.0.0.1:11434/v1";
+            provider.Model = "qwen3.6:35b-mlx";
+            provider.IsEnabled = false;
+            await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+            var response = new ChatResponse(new ChatMessage(
+                ChatRole.Assistant,
+                new List<AIContent> { new TextContent("OK") }));
+            var service = new AiReviewService(db, reader, new FakeAiChatClientFactory(response));
+
+            var result = await service.TestProviderAsync("local-ollama-qwen", TestContext.Current.CancellationToken);
+
+            Assert.NotNull(result);
+            Assert.True(result.Success);
+            Assert.True(provider.IsEnabled);
+        }
+        finally
+        {
+            provider.Endpoint = originalEndpoint;
+            provider.Model = originalModel;
+            provider.IsEnabled = originalEnabled;
+            await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+    }
+
+    [Fact]
+    public async Task ProviderTestFailsClosedWhenGreetingReturnsEmptyText()
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var reader = scope.ServiceProvider.GetRequiredService<ContentFileReader>();
+        var provider = await db.AiReviewProviderSettings.FindAsync(["local-ollama"], TestContext.Current.CancellationToken);
+        Assert.NotNull(provider);
+        var originalEndpoint = provider.Endpoint;
+        var originalModel = provider.Model;
+        var originalEnabled = provider.IsEnabled;
+        try
+        {
+            provider.Endpoint = "http://127.0.0.1:11434/v1";
+            provider.Model = "fake-review-model";
+            provider.IsEnabled = true;
+            await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+            var service = new AiReviewService(db, reader, new FakeAiChatClientFactory(string.Empty));
+
+            var result = await service.TestProviderAsync("local-ollama", TestContext.Current.CancellationToken);
+
+            Assert.NotNull(result);
+            Assert.False(result.Success);
+            Assert.False(provider.IsEnabled);
+            Assert.Contains("empty response", result.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            provider.Endpoint = originalEndpoint;
+            provider.Model = originalModel;
+            provider.IsEnabled = originalEnabled;
+            await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+    }
+
+    [Fact]
+    public async Task ProviderTestReturnsFailureWhenProviderTimesOut()
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var reader = scope.ServiceProvider.GetRequiredService<ContentFileReader>();
+        var provider = await db.AiReviewProviderSettings.FindAsync(["local-ollama"], TestContext.Current.CancellationToken);
+        Assert.NotNull(provider);
+        var originalEndpoint = provider.Endpoint;
+        var originalModel = provider.Model;
+        var originalEnabled = provider.IsEnabled;
+        try
+        {
+            provider.Endpoint = "http://127.0.0.1:11434/v1";
+            provider.Model = "fake-review-model";
+            provider.IsEnabled = true;
+            await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+            var service = new AiReviewService(db, reader, new FakeAiChatClientFactory(
+                responseText: null,
+                exception: new TaskCanceledException("Simulated provider timeout.")));
+
+            var result = await service.TestProviderAsync("local-ollama", TestContext.Current.CancellationToken);
+
+            Assert.NotNull(result);
+            Assert.False(result.Success);
+            Assert.False(provider.IsEnabled);
+            Assert.Contains("timed out", result.Message, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {
@@ -180,8 +297,7 @@ public sealed class AiReviewTests
             milestone.MarkdownPath = $"missing-rubric-{Guid.NewGuid():n}.md";
             await db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
-            using var http = new HttpClient(new FakeOpenAiHandler());
-            var service = new AiReviewService(db, reader, http);
+            var service = new AiReviewService(db, reader, new FakeAiChatClientFactory("unused"));
 
             var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
                 service.RunReviewAsync(
@@ -203,46 +319,59 @@ public sealed class AiReviewTests
         }
     }
 
-    private sealed class FakeOpenAiHandler : HttpMessageHandler
+    private sealed class FakeAiChatClientFactory : IAiChatClientFactory
     {
-        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        private readonly ChatResponse? response;
+        private readonly string? responseText;
+        private readonly Exception? exception;
+
+        public FakeAiChatClientFactory(string? responseText, Exception? exception = null)
         {
-            var requestBody = request.Content is null
-                ? string.Empty
-                : await request.Content.ReadAsStringAsync(cancellationToken);
-            if (requestBody.Contains("Reply with exactly OK", StringComparison.Ordinal))
-            {
-                return JsonChatResponse("OK");
-            }
-
-            if (requestBody.Contains("\"ok\":true", StringComparison.Ordinal))
-            {
-                return JsonChatResponse("""{"ok":true}""");
-            }
-
-            const string reviewJson = """
-            {"score":82,"maxScore":100,"summary":"Solid advisory review.","strengths":["Good pure function boundary"],"risks":["Some edge cases need more proof"],"nextSteps":["Add more edge-case evidence"]}
-            """;
-            return JsonChatResponse(reviewJson);
+            this.responseText = responseText;
+            this.exception = exception;
         }
 
-        private static HttpResponseMessage JsonChatResponse(string content)
+        public FakeAiChatClientFactory(ChatResponse response)
         {
-            var responseJson = $$"""
+            this.response = response;
+        }
+
+        public AiChatClientLease Create(ProdigeeTutsPoint.Domain.Learning.AiReviewProviderSetting provider, string? secret)
+        {
+            return new AiChatClientLease(new FakeAiChatClient(response, responseText, exception));
+        }
+    }
+
+    private sealed class FakeAiChatClient(ChatResponse? response, string? responseText, Exception? exception) : IChatClient
+    {
+        public Task<ChatResponse> GetResponseAsync(
+            IEnumerable<ChatMessage> messages,
+            ChatOptions? options = null,
+            CancellationToken cancellationToken = default)
+        {
+            if (exception is not null)
             {
-              "choices": [
-                {
-                  "message": {
-                    "content": {{System.Text.Json.JsonSerializer.Serialize(content)}}
-                  }
-                }
-              ]
+                return Task.FromException<ChatResponse>(exception);
             }
-            """;
-            return new HttpResponseMessage(HttpStatusCode.OK)
-            {
-                Content = new StringContent(responseJson, Encoding.UTF8, "application/json"),
-            };
+
+            return Task.FromResult(response ?? new ChatResponse(new ChatMessage(ChatRole.Assistant, responseText ?? string.Empty)));
+        }
+
+        public IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
+            IEnumerable<ChatMessage> messages,
+            ChatOptions? options = null,
+            CancellationToken cancellationToken = default)
+        {
+            throw new NotSupportedException();
+        }
+
+        public object? GetService(Type serviceType, object? serviceKey = null)
+        {
+            return null;
+        }
+
+        public void Dispose()
+        {
         }
     }
 

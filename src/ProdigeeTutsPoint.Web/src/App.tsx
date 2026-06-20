@@ -20,6 +20,7 @@ import './App.css'
 
 const themeKey = 'prodigee.theme'
 const profileKey = 'prodigee.localProfile'
+const selectedTrackKey = 'prodigee.selectedTrack'
 const defaultProfile: LocalProfile = {
   id: 'default-profile',
   displayName: 'Default Profile',
@@ -47,12 +48,19 @@ function App() {
   })
   const [isCommandOpen, setIsCommandOpen] = useState(false)
   const [query, setQuery] = useState('')
+  const [selectedTrackId, setSelectedTrackId] = useState(
+    () => localStorage.getItem(profileSelectedTrackKey(profile.id)) ?? 'csharp',
+  )
   const { data: navigationItems } = useApi<NavigationItem[]>('/api/curriculum/navigation')
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme
     localStorage.setItem(profileThemeKey(profile.id), theme)
   }, [profile.id, theme])
+
+  useEffect(() => {
+    localStorage.setItem(profileSelectedTrackKey(profile.id), selectedTrackId)
+  }, [profile.id, selectedTrackId])
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -93,9 +101,9 @@ function App() {
       <main className="content-shell">
         <Header profile={profile} onCommandOpen={() => setIsCommandOpen(true)} />
         <Routes>
-          <Route path="/" element={<Dashboard profile={profile} />} />
-          <Route path="/tracks" element={<Tracks />} />
-          <Route path="/tracks/:trackId" element={<TrackDetail />} />
+          <Route path="/" element={<Dashboard profile={profile} selectedTrackId={selectedTrackId} />} />
+          <Route path="/tracks" element={<Tracks selectedTrackId={selectedTrackId} />} />
+          <Route path="/tracks/:trackId" element={<TrackDetail onTrackSelected={setSelectedTrackId} />} />
           <Route path="/projects/:projectId" element={<ProjectDetail profile={profile} />} />
           <Route
             path="/projects/:projectId/milestones/:milestoneId"
@@ -133,6 +141,10 @@ export default App
 
 function profileThemeKey(profileId: string) {
   return `${themeKey}.${profileId}`
+}
+
+function profileSelectedTrackKey(profileId: string) {
+  return `${selectedTrackKey}.${profileId}`
 }
 
 const fallbackNavigationItems: NavigationItem[] = [

@@ -6,7 +6,7 @@ namespace ProdigeeTutsPoint.Api.Tests;
 public sealed class CurriculumEndpointTests
 {
     [Fact]
-    public async Task TracksEndpointReturnsIndexedCSharpTrack()
+    public async Task TracksEndpointReturnsIndexedTracks()
     {
         await using var factory = new WebApplicationFactory<Program>();
         using var client = factory.CreateClient();
@@ -15,9 +15,10 @@ public sealed class CurriculumEndpointTests
             "/api/curriculum/tracks",
             TestContext.Current.CancellationToken);
 
-        var track = Assert.Single(tracks ?? []);
-        Assert.Equal("csharp", track.Id);
-        Assert.Equal("C# Language", track.Title);
+        Assert.NotNull(tracks);
+        Assert.Contains(tracks, track => track.Id == "csharp" && track.Title == "C# Language");
+        Assert.Contains(tracks, track => track.Id == "typescript" && track.Title == "TypeScript and Node.js Servers");
+        Assert.Contains(tracks, track => track.Id == "swift" && track.Title == "Swift and Server-Side Swift");
     }
 
     [Fact]
@@ -148,6 +149,251 @@ public sealed class CurriculumEndpointTests
         Assert.Equal("logquery-csharp", project.Id);
         var milestone = Assert.Single(project.Milestones);
         Assert.Equal("parse-filter-summarize", milestone.Id);
+    }
+
+    [Fact]
+    public async Task TypeScriptProjectEndpointReturnsFileIoAndStreamingMilestones()
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+
+        var project = await client.GetFromJsonAsync<ProjectDetailTestResponse>(
+            "/api/curriculum/projects/logprobe-typescript",
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(project);
+        Assert.Equal("logprobe-typescript", project.Id);
+        Assert.Equal(7, project.Milestones.Count);
+        Assert.Contains(project.Milestones, milestone => milestone.Id == "logprobe-file-io");
+        Assert.Contains(project.Milestones, milestone => milestone.Id == "logprobe-streaming-scale");
+    }
+
+    [Fact]
+    public async Task TypeScriptFileIoAndStreamingMilestonesReturnLessonsExercisesAndSources()
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+
+        var fileIo = await client.GetFromJsonAsync<MilestoneDetailTestResponse>(
+            "/api/curriculum/projects/logprobe-typescript/milestones/logprobe-file-io",
+            TestContext.Current.CancellationToken);
+        var streaming = await client.GetFromJsonAsync<MilestoneDetailTestResponse>(
+            "/api/curriculum/projects/logprobe-typescript/milestones/logprobe-streaming-scale",
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(fileIo);
+        Assert.Equal("File I/O boundaries", fileIo.Title);
+        Assert.Equal(2, fileIo.Lessons.Count);
+        Assert.Equal(3, fileIo.Exercises.Count);
+        Assert.Contains(fileIo.Lessons, lesson => lesson.Id == "file-io-boundaries-node");
+        Assert.Contains(fileIo.Exercises, exercise => exercise.Id == "resolve-input-source-ts");
+        Assert.NotEmpty(fileIo.Sources);
+
+        Assert.NotNull(streaming);
+        Assert.Equal("Streaming and scale", streaming.Title);
+        Assert.Equal(2, streaming.Lessons.Count);
+        Assert.Equal(4, streaming.Exercises.Count);
+        Assert.Contains(streaming.Lessons, lesson => lesson.Id == "async-iterables-for-lines");
+        Assert.Contains(streaming.Exercises, exercise => exercise.Id == "run-streaming-logprobe-ts");
+        Assert.NotEmpty(streaming.Sources);
+    }
+
+    [Fact]
+    public async Task TypeScriptHttpAdapterMilestoneReturnsLessonsExercisesAndSources()
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+
+        var project = await client.GetFromJsonAsync<ProjectDetailTestResponse>(
+            "/api/curriculum/projects/logprobe-typescript",
+            TestContext.Current.CancellationToken);
+        var milestone = await client.GetFromJsonAsync<MilestoneDetailTestResponse>(
+            "/api/curriculum/projects/logprobe-typescript/milestones/logprobe-http-adapter",
+            TestContext.Current.CancellationToken);
+        var cluster = await client.GetFromJsonAsync<TheoryClusterTestResponse>(
+            "/api/curriculum/projects/logprobe-typescript/milestones/logprobe-http-adapter/theory-cluster",
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(project);
+        Assert.Equal(7, project.Milestones.Count);
+        Assert.Contains(project.Milestones, item => item.Id == "logprobe-http-adapter");
+
+        Assert.NotNull(milestone);
+        Assert.Equal("HTTP adapter", milestone.Title);
+        Assert.Equal(2, milestone.Lessons.Count);
+        Assert.Equal(4, milestone.Exercises.Count);
+        Assert.Contains(milestone.Lessons, lesson => lesson.Id == "http-boundaries-node");
+        Assert.Contains(milestone.Lessons, lesson => lesson.Id == "response-contracts-and-errors");
+        Assert.Contains(milestone.Exercises, exercise => exercise.Id == "handle-logprobe-request-ts");
+        Assert.NotEmpty(milestone.Sources);
+        Assert.Contains("JSON response", milestone.Markdown, StringComparison.OrdinalIgnoreCase);
+
+        Assert.NotNull(cluster);
+        Assert.Equal(2, cluster.Items.Count);
+        Assert.All(cluster.Items, item => Assert.NotEmpty(item.Sources));
+    }
+
+    [Fact]
+    public async Task TypeScriptNativeRuntimeAndHardeningMilestonesReturnLessonsExercisesAndSources()
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+
+        var runtime = await client.GetFromJsonAsync<MilestoneDetailTestResponse>(
+            "/api/curriculum/projects/logprobe-typescript/milestones/logprobe-node-runtime",
+            TestContext.Current.CancellationToken);
+        var hardening = await client.GetFromJsonAsync<MilestoneDetailTestResponse>(
+            "/api/curriculum/projects/logprobe-typescript/milestones/logprobe-server-hardening",
+            TestContext.Current.CancellationToken);
+        var hardeningCluster = await client.GetFromJsonAsync<TheoryClusterTestResponse>(
+            "/api/curriculum/projects/logprobe-typescript/milestones/logprobe-server-hardening/theory-cluster",
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(runtime);
+        Assert.Equal("Native Node runtime", runtime.Title);
+        Assert.Equal(2, runtime.Lessons.Count);
+        Assert.Equal(4, runtime.Exercises.Count);
+        Assert.Contains(runtime.Lessons, lesson => lesson.Id == "native-node-http-runtime");
+        Assert.Contains(runtime.Exercises, exercise => exercise.Id == "compose-node-server-handler-ts");
+        Assert.NotEmpty(runtime.Sources);
+
+        Assert.NotNull(hardening);
+        Assert.Equal("Server hardening", hardening.Title);
+        Assert.Equal(2, hardening.Lessons.Count);
+        Assert.Equal(4, hardening.Exercises.Count);
+        Assert.Contains(hardening.Lessons, lesson => lesson.Id == "error-boundaries-timeouts");
+        Assert.Contains(hardening.Exercises, exercise => exercise.Id == "record-handler-telemetry-ts");
+        Assert.NotEmpty(hardening.Sources);
+
+        Assert.NotNull(hardeningCluster);
+        Assert.Equal(2, hardeningCluster.Items.Count);
+        Assert.All(hardeningCluster.Items, item => Assert.NotEmpty(item.Sources));
+    }
+
+    [Fact]
+    public async Task SwiftFoundationMilestoneReturnsLessonsExercisesAndSources()
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+
+        var project = await client.GetFromJsonAsync<ProjectDetailTestResponse>(
+            "/api/curriculum/projects/logprobe-swift",
+            TestContext.Current.CancellationToken);
+        var milestone = await client.GetFromJsonAsync<MilestoneDetailTestResponse>(
+            "/api/curriculum/projects/logprobe-swift/milestones/swiftpm-command-boundary",
+            TestContext.Current.CancellationToken);
+        var cluster = await client.GetFromJsonAsync<TheoryClusterTestResponse>(
+            "/api/curriculum/projects/logprobe-swift/milestones/swiftpm-command-boundary/theory-cluster",
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(project);
+        Assert.Equal("logprobe-swift", project.Id);
+        Assert.Equal(7, project.Milestones.Count);
+        Assert.Contains(project.Milestones, item => item.Id == "swiftpm-command-boundary");
+        Assert.Contains(project.Milestones, item => item.Id == "swift-cli-contracts");
+        Assert.Contains(project.Milestones, item => item.Id == "swift-file-input-boundaries");
+        Assert.Contains(project.Milestones, item => item.Id == "swift-streaming-scale");
+        Assert.Contains(project.Milestones, item => item.Id == "swift-cli-composition");
+        Assert.Contains(project.Milestones, item => item.Id == "swift-vapor-request-adapter");
+        Assert.Contains(project.Milestones, item => item.Id == "swift-server-hardening");
+
+        Assert.NotNull(milestone);
+        Assert.Equal("SwiftPM command boundary", milestone.Title);
+        var lesson = Assert.Single(milestone.Lessons);
+        Assert.Equal("swiftpm-command-boundaries", lesson.Id);
+        var exercise = Assert.Single(milestone.Exercises);
+        Assert.Equal("parse-command-request-swift", exercise.Id);
+        Assert.Equal("Swift", exercise.Language);
+        Assert.NotEmpty(milestone.Sources);
+        Assert.Contains("SwiftPM package", milestone.Markdown, StringComparison.OrdinalIgnoreCase);
+
+        Assert.NotNull(cluster);
+        var clusterItem = Assert.Single(cluster.Items);
+        Assert.Equal("swiftpm-command-boundaries", clusterItem.LessonId);
+        Assert.NotEmpty(clusterItem.Sources);
+    }
+
+    [Theory]
+    [InlineData(
+        "swift-cli-contracts",
+        "Swift CLI contracts",
+        "swift-cli-output-contracts",
+        "parse-output-format-swift")]
+    [InlineData(
+        "swift-file-input-boundaries",
+        "Swift file input boundaries",
+        "swift-file-input-boundaries",
+        "resolve-input-source-swift")]
+    [InlineData(
+        "swift-streaming-scale",
+        "Swift streaming and scale",
+        "swift-async-line-streams",
+        "count-levels-swift")]
+    [InlineData(
+        "swift-cli-composition",
+        "Swift CLI composition",
+        "swift-cli-composition",
+        "run-logprobe-command-swift")]
+    [InlineData(
+        "swift-vapor-request-adapter",
+        "Swift Vapor request adapter",
+        "swift-vapor-request-adapters",
+        "handle-logprobe-request-swift")]
+    [InlineData(
+        "swift-server-hardening",
+        "Swift server hardening",
+        "swift-server-hardening",
+        "handle-hardened-logprobe-request-swift")]
+    public async Task SwiftLogprobeMilestonesReturnLessonsExercisesAndSourceBackedTheory(
+        string milestoneId,
+        string title,
+        string lessonId,
+        string exerciseId)
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+
+        var milestone = await client.GetFromJsonAsync<MilestoneDetailTestResponse>(
+            $"/api/curriculum/projects/logprobe-swift/milestones/{milestoneId}",
+            TestContext.Current.CancellationToken);
+        var cluster = await client.GetFromJsonAsync<TheoryClusterTestResponse>(
+            $"/api/curriculum/projects/logprobe-swift/milestones/{milestoneId}/theory-cluster",
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(milestone);
+        Assert.Equal(title, milestone.Title);
+        var lesson = Assert.Single(milestone.Lessons);
+        Assert.Equal(lessonId, lesson.Id);
+        var exercise = Assert.Single(milestone.Exercises);
+        Assert.Equal(exerciseId, exercise.Id);
+        Assert.Equal("Swift", exercise.Language);
+        Assert.NotEmpty(milestone.Sources);
+
+        Assert.NotNull(cluster);
+        var clusterItem = Assert.Single(cluster.Items);
+        Assert.Equal(lessonId, clusterItem.LessonId);
+        Assert.NotEmpty(clusterItem.Sources);
+    }
+
+    [Fact]
+    public async Task TheoryClusterEndpointReturnsTypeScriptFileIoAndStreamingStudyLinks()
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+
+        var fileIo = await client.GetFromJsonAsync<TheoryClusterTestResponse>(
+            "/api/curriculum/projects/logprobe-typescript/milestones/logprobe-file-io/theory-cluster",
+            TestContext.Current.CancellationToken);
+        var streaming = await client.GetFromJsonAsync<TheoryClusterTestResponse>(
+            "/api/curriculum/projects/logprobe-typescript/milestones/logprobe-streaming-scale/theory-cluster",
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(fileIo);
+        Assert.Equal(2, fileIo.Items.Count);
+        Assert.All(fileIo.Items, item => Assert.NotEmpty(item.Sources));
+        Assert.NotNull(streaming);
+        Assert.Equal(2, streaming.Items.Count);
+        Assert.All(streaming.Items, item => Assert.NotEmpty(item.Sources));
     }
 
     [Fact]

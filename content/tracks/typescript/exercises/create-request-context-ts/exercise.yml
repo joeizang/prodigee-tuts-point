@@ -1,0 +1,48 @@
+id: create-request-context-ts
+title: CreateRequestContext
+kind: focused
+workspace:
+  runtime: node-typescript
+  entryPoint: createRequestContext
+  starter: tracks/typescript/exercises/_shared/ServerRuntime.ts
+  visibleTest: |
+    expect(createRequestContext({ 'x-request-id': 'client-42' }, () => 1234)).toEqual({
+      requestId: 'client-42',
+      startedAtMs: 1234,
+    })
+  hiddenTest: |
+    expect(createRequestContext({}, () => 50).requestId).toMatch(/^req-50$/)
+    expect(createRequestContext({ 'X-Request-Id': 'wrong-case' }, () => 70)).toEqual({
+      requestId: 'req-70',
+      startedAtMs: 70,
+    })
+hints:
+  - id: conceptual
+    level: conceptual
+    title: Context is operational
+    body: Request context carries trace metadata such as request id and start time, not domain query data.
+  - id: api-approach
+    level: api-approach
+    title: Use normalized headers
+    body: This function expects headers already normalized to lowercase, so read x-request-id exactly.
+  - id: structural
+    level: structural
+    title: Deterministic fallback
+    body: For the exercise, build fallback ids from the clock value so tests can assert the exact request id.
+solution:
+  title: Model solution
+  body: The model solution preserves a normalized incoming request id and otherwise creates a deterministic fallback from time.
+  code: |
+    export function createRequestContext(headers: Readonly<Record<string, string>>, nowMs: () => number): RequestContext {
+      const startedAtMs = nowMs()
+      return {
+        requestId: headers['x-request-id'] ?? `req-${startedAtMs}`,
+        startedAtMs,
+      }
+    }
+commonWrongApproaches:
+  - Reading X-Request-Id with mixed casing after the adapter has normalized headers to lowercase.
+  - Calling nowMs twice, which can make request id and start time disagree in tests.
+expectedSolutionCharacteristics:
+  - Preserves normalized x-request-id when supplied.
+  - Calls the clock once and uses that value for startedAtMs and fallback request id.

@@ -1,0 +1,58 @@
+id: wrap-handler-errors-ts
+title: WrapHandlerErrors
+kind: focused
+workspace:
+  runtime: node-typescript
+  entryPoint: wrapHandlerErrors
+  starter: tracks/typescript/exercises/_shared/ServerRuntime.ts
+  visibleTest: |
+    const wrapped = wrapHandlerErrors(async () => {
+      throw new Error('database password leaked')
+    })
+    await expect(wrapped({ method: 'GET', url: '/logs', headers: {}, body: '' }, { requestId: 'req-7', startedAtMs: 0 })).resolves.toEqual({
+      status: 500,
+      headers: { 'content-type': 'application/json', 'x-request-id': 'req-7' },
+      body: '{"error":"Internal server error","requestId":"req-7"}',
+    })
+  hiddenTest: |
+    const success = { status: 204, headers: { ok: 'true' }, body: '' }
+    const wrapped = wrapHandlerErrors(async () => success)
+    await expect(wrapped({ method: 'GET', url: '/', headers: {}, body: '' }, { requestId: 'req-ok', startedAtMs: 0 })).resolves.toBe(success)
+hints:
+  - id: conceptual
+    level: conceptual
+    title: Last line of defense
+    body: The wrapper catches unexpected defects and turns them into safe server responses without leaking exception details.
+  - id: api-approach
+    level: api-approach
+    title: Preserve success
+    body: Return the handler result unchanged when it succeeds so the boundary does not alter normal behavior.
+  - id: structural
+    level: structural
+    title: Include request id
+    body: The error response should include x-request-id and a JSON body with the same request id for log correlation.
+solution:
+  title: Model solution
+  body: The model solution returns a higher-order handler that preserves success and converts thrown errors into safe JSON.
+  code: |
+    export function wrapHandlerErrors(
+      handler: (request: RuntimeRequest, context: RequestContext) => Promise<RuntimeResponse>,
+    ): (request: RuntimeRequest, context: RequestContext) => Promise<RuntimeResponse> {
+      return async (request, context) => {
+        try {
+          return await handler(request, context)
+        } catch {
+          return {
+            status: 500,
+            headers: { 'content-type': 'application/json', 'x-request-id': context.requestId },
+            body: JSON.stringify({ error: 'Internal server error', requestId: context.requestId }),
+          }
+        }
+      }
+    }
+commonWrongApproaches:
+  - Returning the thrown error message to the client, which can leak secrets or internal state.
+  - Wrapping successful responses in a new object, which can break callers relying on exact response metadata.
+expectedSolutionCharacteristics:
+  - Preserves successful handler responses exactly.
+  - Converts thrown errors to status 500 with safe JSON and request-id metadata.

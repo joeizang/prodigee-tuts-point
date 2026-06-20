@@ -1,0 +1,62 @@
+id: take-top-counts-ts
+title: TakeTopCounts
+kind: focused
+workspace:
+  runtime: node-typescript
+  entryPoint: takeTopCounts
+  starter: tracks/typescript/exercises/_shared/FileAndStreaming.ts
+  visibleTest: |
+    expect(takeTopCounts(new Map([
+      ['INFO', 4],
+      ['ERROR', 2],
+      ['WARN', 3],
+    ]), 2)).toEqual([
+      { key: 'INFO', count: 4 },
+      { key: 'WARN', count: 3 },
+    ])
+  hiddenTest: |
+    expect(takeTopCounts(new Map([
+      ['WARN', 2],
+      ['ERROR', 2],
+      ['INFO', 2],
+    ]), 3)).toEqual([
+      { key: 'ERROR', count: 2 },
+      { key: 'INFO', count: 2 },
+      { key: 'WARN', count: 2 },
+    ])
+    expect(takeTopCounts(new Map([['INFO', 1]]), 0)).toEqual([])
+    expect(takeTopCounts(new Map([['INFO', 1]]), -5)).toEqual([])
+hints:
+  - id: conceptual
+    level: conceptual
+    title: Determinism is correctness
+    body: Equal counts need a tie-breaker so repeated runs and tests produce the same order.
+  - id: api-approach
+    level: api-approach
+    title: Convert map entries
+    body: Spread the map into entries, project them to objects, sort them, and slice to a non-negative limit.
+  - id: structural
+    level: structural
+    title: Limit after sorting
+    body: Sort all distinct counts first, then slice, so the returned subset is actually the top N rows.
+solution:
+  title: Model solution
+  body: The model solution sorts by count descending and key ascending, then applies a safe non-negative limit.
+  code: |
+    export type CountEntry = {
+      readonly key: string
+      readonly count: number
+    }
+
+    export function takeTopCounts(counts: ReadonlyMap<string, number>, limit: number): readonly CountEntry[] {
+      return [...counts.entries()]
+        .map(([key, count]) => ({ key, count }))
+        .sort((left, right) => right.count - left.count || left.key.localeCompare(right.key))
+        .slice(0, Math.max(0, limit))
+    }
+commonWrongApproaches:
+  - Sorting only by count, which makes equal-count rows depend on map insertion order.
+  - Applying the limit before sorting, which can discard the real highest-count rows.
+expectedSolutionCharacteristics:
+  - Orders by count descending and then key ascending.
+  - Treats zero and negative limits as an empty result.

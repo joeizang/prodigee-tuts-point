@@ -1,0 +1,79 @@
+id: write-node-response-ts
+title: WriteNodeResponse
+kind: focused
+workspace:
+  runtime: node-typescript
+  entryPoint: writeNodeResponse
+  starter: tracks/typescript/exercises/_shared/ServerRuntime.ts
+  visibleTest: |
+    const headers: Record<string, string> = {}
+    let body = ''
+    const writable = {
+      statusCode: 0,
+      setHeader(name: string, value: string) {
+        headers[name] = value
+      },
+      end(value: string) {
+        body = value
+      },
+    }
+    writeNodeResponse({ status: 201, headers: { 'content-type': 'application/json' }, body: '{"ok":true}' }, writable)
+    expect(writable.statusCode).toBe(201)
+    expect(headers).toEqual({ 'content-type': 'application/json' })
+    expect(body).toBe('{"ok":true}')
+  hiddenTest: |
+    const calls: string[] = []
+    const writable = {
+      statusCode: 0,
+      setHeader(name: string, value: string) {
+        calls.push(`${name}:${value}`)
+      },
+      end(value: string) {
+        calls.push(`body:${value}`)
+      },
+    }
+    writeNodeResponse({ status: 404, headers: { 'x-request-id': 'abc', 'content-type': 'application/json' }, body: '{"error":"no"}' }, writable)
+    expect(writable.statusCode).toBe(404)
+    expect(calls).toEqual(['x-request-id:abc', 'content-type:application/json', 'body:{"error":"no"}'])
+hints:
+  - id: conceptual
+    level: conceptual
+    title: Mutation belongs here
+    body: This function is the boundary where immutable response data is applied to a mutable server response object.
+  - id: api-approach
+    level: api-approach
+    title: Set status first
+    body: Assign the status code, then set every header, then end the response with the body.
+  - id: structural
+    level: structural
+    title: Preserve all headers
+    body: Iterate over Object.entries so adding new response headers later does not require changing this writer.
+solution:
+  title: Model solution
+  body: The model solution writes status, headers, and body to the mutable response object in one predictable place.
+  code: |
+    export type RuntimeResponse = {
+      readonly status: number
+      readonly headers: Readonly<Record<string, string>>
+      readonly body: string
+    }
+
+    export type WritableResponse = {
+      statusCode: number
+      setHeader(name: string, value: string): void
+      end(body: string): void
+    }
+
+    export function writeNodeResponse(response: RuntimeResponse, writable: WritableResponse): void {
+      writable.statusCode = response.status
+      for (const [name, value] of Object.entries(response.headers)) {
+        writable.setHeader(name, value)
+      }
+      writable.end(response.body)
+    }
+commonWrongApproaches:
+  - Hard-coding only content-type and dropping operational headers such as request id.
+  - Calling end before headers are applied, which makes the writer order hard to reason about.
+expectedSolutionCharacteristics:
+  - Applies the response status code exactly once.
+  - Writes every header and ends with the authored response body.

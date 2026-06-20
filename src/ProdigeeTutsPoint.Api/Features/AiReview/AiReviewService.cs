@@ -1,8 +1,7 @@
-using System.Net.Http.Headers;
-using System.Net.Http.Json;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using Microsoft.Extensions.AI;
 using Microsoft.EntityFrameworkCore;
 using ProdigeeTutsPoint.Domain.Learning;
 using ProdigeeTutsPoint.Infrastructure.Content;
@@ -13,13 +12,13 @@ namespace ProdigeeTutsPoint.Api.Features.AiReview;
 public sealed class AiReviewService(
     AppDbContext db,
     ContentFileReader contentFiles,
-    HttpClient httpClient)
+    IAiChatClientFactory chatClientFactory)
 {
     private const string PromptVersion = "ai-review-v1";
 
     public async Task<IReadOnlyCollection<AiProviderResponse>> GetProvidersAsync(CancellationToken cancellationToken)
     {
-        return await db.AiReviewProviderSettings
+        return await db.AiReviewProviderSettings.AsNoTracking()
             .OrderBy(provider => provider.DisplayName)
             .Select(provider => new AiProviderResponse(
                 provider.Id,
@@ -54,41 +53,42 @@ public sealed class AiReviewService(
         try
         {
             EnsureAllowedEndpoint(provider.Endpoint);
-            using var pingRequest = BuildChatRequest(
-                provider,
-                secret,
-                "Reply with exactly OK.",
-                responseFormatJson: false);
-            using var pingResponse = await httpClient.SendAsync(pingRequest, cancellationToken);
-            var pingBody = await pingResponse.Content.ReadAsStringAsync(cancellationToken);
-
-            using var jsonRequest = BuildChatRequest(
-                provider,
-                secret,
-                "Return JSON with exactly this shape: {\"ok\":true}",
-                responseFormatJson: true);
-            using var jsonResponse = await httpClient.SendAsync(jsonRequest, cancellationToken);
-            var jsonBody = await jsonResponse.Content.ReadAsStringAsync(cancellationToken);
-
-            provider.IsEnabled = pingResponse.IsSuccessStatusCode
-                && jsonResponse.IsSuccessStatusCode
-                && ChatContentContains(pingBody, "OK")
-                && ChatContentParsesAsJsonObject(jsonBody);
+            using var chatClient = chatClientFactory.Create(provider, secret);
+            var response = await chatClient.Client.GetResponseAsync(
+                BuildMessages(provider, "Reply with exactly OK."),
+                new ChatOptions
+                {
+                    Temperature = 0.2f,
+                    MaxOutputTokens = 256,
+                },
+                cancellationToken);
+            var responseText = GetResponseText(response);
+            provider.IsEnabled = !string.IsNullOrWhiteSpace(responseText);
             provider.UpdatedAt = DateTimeOffset.UtcNow;
             await db.SaveChangesAsync(cancellationToken);
             return new AiProviderTestResponse(
                 provider.Id,
                 provider.IsEnabled,
                 provider.IsEnabled
-                    ? "Provider responded successfully."
-                    : $"Provider test failed: chat {(int)pingResponse.StatusCode} {pingResponse.ReasonPhrase}; JSON {(int)jsonResponse.StatusCode} {jsonResponse.ReasonPhrase}");
+                    ? $"Provider test passed: the model answered the greeting using {provider.Model}."
+                    : "Provider test failed: the model returned an empty response to the greeting.");
+        }
+        catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            provider.IsEnabled = false;
+            provider.UpdatedAt = DateTimeOffset.UtcNow;
+            await db.SaveChangesAsync(cancellationToken);
+            return new AiProviderTestResponse(
+                provider.Id,
+                false,
+                "Provider test timed out before the model answered the greeting.");
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
             provider.IsEnabled = false;
             provider.UpdatedAt = DateTimeOffset.UtcNow;
             await db.SaveChangesAsync(cancellationToken);
-            return new AiProviderTestResponse(provider.Id, false, $"Provider test failed: {exception.Message}");
+            return new AiProviderTestResponse(provider.Id, false, $"Provider test failed before completion: {exception.Message}");
         }
     }
 
@@ -96,7 +96,9 @@ public sealed class AiReviewService(
         AiReviewRequest request,
         CancellationToken cancellationToken)
     {
-        var provider = await db.AiReviewProviderSettings.FirstOrDefaultAsync(provider => provider.Id == request.ProviderId, cancellationToken);
+        var provider = await db.AiReviewProviderSettings
+            .AsNoTracking()
+            .FirstOrDefaultAsync(provider => provider.Id == request.ProviderId, cancellationToken);
         if (provider is null)
         {
             return null;
@@ -108,6 +110,7 @@ public sealed class AiReviewService(
         }
 
         var milestone = await db.ProjectMilestones
+            .AsNoTracking()
             .Where(milestone => milestone.ProjectId == request.ProjectId && milestone.Id == request.MilestoneId)
             .Select(milestone => new
             {
@@ -145,6 +148,7 @@ public sealed class AiReviewService(
 
         EnsureAllowedEndpoint(provider.Endpoint);
         var attempts = await db.ExerciseRunHistory
+            .AsNoTracking()
             .Where(history => history.ProfileId == request.ProfileId)
             .Select(history => new
             {
@@ -163,13 +167,17 @@ public sealed class AiReviewService(
         var rubricVersion = RubricVersionFor(milestone.MarkdownPath, rubric);
         var prompt = BuildReviewPrompt(milestone.Title, milestone.Summary, rubric, milestone.Lessons, milestone.Exercises, attempts);
 
-        using var aiRequest = BuildChatRequest(provider, secret, prompt, responseFormatJson: true);
-        using var response = await httpClient.SendAsync(aiRequest, cancellationToken);
-        var raw = await response.Content.ReadAsStringAsync(cancellationToken);
-        if (!response.IsSuccessStatusCode)
-        {
-            throw new InvalidOperationException($"AI review failed: {(int)response.StatusCode} {response.ReasonPhrase}");
-        }
+        using var chatClient = chatClientFactory.Create(provider, secret);
+        var response = await chatClient.Client.GetResponseAsync(
+            BuildMessages(provider, prompt),
+            new ChatOptions
+            {
+                Temperature = 0.2f,
+                MaxOutputTokens = 900,
+                ResponseFormat = ChatResponseFormat.Json,
+            },
+            cancellationToken);
+        var raw = GetResponseText(response);
 
         var parsed = ParseReview(raw);
         var now = DateTimeOffset.UtcNow;
@@ -207,6 +215,7 @@ public sealed class AiReviewService(
         CancellationToken cancellationToken)
     {
         var reviews = await db.AiReviewResults
+            .AsNoTracking()
             .Where(review => review.ProfileId == profileId && review.ProjectId == projectId && review.MilestoneId == milestoneId)
             .ToListAsync(cancellationToken);
         return reviews
@@ -214,47 +223,6 @@ public sealed class AiReviewService(
             .Take(10)
             .Select(ToResponse)
             .ToArray();
-    }
-
-    private static HttpRequestMessage BuildChatRequest(
-        AiReviewProviderSetting provider,
-        string? secret,
-        string prompt,
-        bool responseFormatJson)
-    {
-        var endpoint = provider.Endpoint.TrimEnd('/');
-        var request = new HttpRequestMessage(HttpMethod.Post, $"{endpoint}/chat/completions");
-        if (!string.IsNullOrWhiteSpace(secret))
-        {
-            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", secret);
-        }
-
-        object payload = responseFormatJson
-            ? new
-            {
-                model = provider.Model,
-                messages = new[]
-                {
-                    new { role = "system", content = "You are a strict senior software engineering reviewer. Return concise, practical feedback." },
-                    new { role = "user", content = prompt },
-                },
-                temperature = 0.2,
-                max_tokens = 900,
-                response_format = new { type = "json_object" },
-            }
-            : new
-            {
-                model = provider.Model,
-                messages = new[]
-                {
-                    new { role = "system", content = "You are a strict senior software engineering reviewer. Return concise, practical feedback." },
-                    new { role = "user", content = prompt },
-                },
-                temperature = 0.2,
-                max_tokens = 16,
-            };
-        request.Content = JsonContent.Create(payload);
-        return request;
     }
 
     private static void EnsureAllowedEndpoint(string endpoint)
@@ -279,46 +247,72 @@ public sealed class AiReviewService(
         return $"{markdownPath}:{hash[..12]}";
     }
 
-    private static bool ChatContentContains(string rawResponse, string expected)
+    private static IReadOnlyList<ChatMessage> BuildMessages(AiReviewProviderSetting provider, string prompt)
     {
-        return TryReadChatContent(rawResponse, out var content)
-            && content.Trim().Equals(expected, StringComparison.OrdinalIgnoreCase);
+        var userPrompt = ShouldSuppressReasoning(provider) ? $"/no_think\n{prompt}" : prompt;
+        return
+        [
+            new(ChatRole.System, "You are a strict senior software engineering reviewer. Return concise, practical feedback."),
+            new(ChatRole.User, userPrompt),
+        ];
     }
 
-    private static bool ChatContentParsesAsJsonObject(string rawResponse)
+    private static bool ShouldSuppressReasoning(AiReviewProviderSetting provider)
     {
-        if (!TryReadChatContent(rawResponse, out var content))
-        {
-            return false;
-        }
-
-        try
-        {
-            using var document = JsonDocument.Parse(content);
-            return document.RootElement.ValueKind == JsonValueKind.Object;
-        }
-        catch (JsonException)
-        {
-            return false;
-        }
+        return provider.Preset.Equals("LocalOllama", StringComparison.OrdinalIgnoreCase)
+            && (provider.Model.Contains("qwen", StringComparison.OrdinalIgnoreCase)
+                || provider.Model.Contains("deepseek-r1", StringComparison.OrdinalIgnoreCase));
     }
 
-    private static bool TryReadChatContent(string rawResponse, out string content)
+    private static string GetResponseText(ChatResponse response)
     {
-        content = string.Empty;
+        var responseText = response.Text?.Trim();
+        if (!string.IsNullOrWhiteSpace(responseText))
+        {
+            return responseText;
+        }
+
+        foreach (var message in response.Messages)
+        {
+            var messageText = message.Text?.Trim();
+            if (!string.IsNullOrWhiteSpace(messageText))
+            {
+                return messageText;
+            }
+
+            foreach (var textContent in message.Contents.OfType<TextContent>())
+            {
+                var contentText = textContent.Text?.Trim();
+                if (!string.IsNullOrWhiteSpace(contentText))
+                {
+                    return contentText;
+                }
+            }
+        }
+
+        return string.Empty;
+    }
+
+    private static string ExtractReviewJson(string rawResponse)
+    {
+        var trimmed = rawResponse.Trim();
+        if (trimmed.StartsWith('{') || trimmed.StartsWith('['))
+        {
+            return trimmed;
+        }
+
         try
         {
             using var envelope = JsonDocument.Parse(rawResponse);
-            content = envelope.RootElement
+            return envelope.RootElement
                 .GetProperty("choices")[0]
                 .GetProperty("message")
                 .GetProperty("content")
-                .GetString() ?? string.Empty;
-            return !string.IsNullOrWhiteSpace(content);
+                .GetString() ?? "{}";
         }
         catch (Exception exception) when (exception is JsonException or KeyNotFoundException or InvalidOperationException)
         {
-            return false;
+            return trimmed;
         }
     }
 
@@ -357,12 +351,7 @@ public sealed class AiReviewService(
     {
         try
         {
-            using var envelope = JsonDocument.Parse(rawResponse);
-            var content = envelope.RootElement
-                .GetProperty("choices")[0]
-                .GetProperty("message")
-                .GetProperty("content")
-                .GetString() ?? "{}";
+            var content = ExtractReviewJson(rawResponse);
             using var document = JsonDocument.Parse(content);
             var root = document.RootElement;
             return new ParsedAiReview(
@@ -420,6 +409,7 @@ public sealed class AiReviewService(
         IReadOnlyCollection<string> Strengths,
         IReadOnlyCollection<string> Risks,
         IReadOnlyCollection<string> NextSteps);
+
 }
 
 public static class AiSecretLoader

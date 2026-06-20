@@ -135,11 +135,11 @@ public sealed class ExportImportService(AppDbContext db)
             conflicts.Add(new ImportConflict("AppId", $"Unsupported app id '{document.AppId}'."));
         }
 
-        await CheckVersionsAsync("track", document.Content.Tracks, db.Tracks.Select(track => new ContentItemVersion("track", track.Id, track.ContentVersion)), conflicts, cancellationToken);
-        await CheckVersionsAsync("project", document.Content.Projects, db.Projects.Select(project => new ContentItemVersion("project", project.Id, project.ContentVersion)), conflicts, cancellationToken);
-        await CheckVersionsAsync("milestone", document.Content.Milestones, db.ProjectMilestones.Select(milestone => new ContentItemVersion("milestone", milestone.Id, milestone.ContentVersion)), conflicts, cancellationToken);
-        await CheckVersionsAsync("lesson", document.Content.Lessons, db.Lessons.Select(lesson => new ContentItemVersion("lesson", lesson.Id, lesson.ContentVersion)), conflicts, cancellationToken);
-        await CheckVersionsAsync("exercise", document.Content.Exercises, db.Exercises.Select(exercise => new ContentItemVersion("exercise", exercise.Id, exercise.ContentVersion)), conflicts, cancellationToken);
+        await CheckVersionsAsync("track", document.Content.Tracks, db.Tracks.AsNoTracking().Select(track => new ContentItemVersion("track", track.Id, track.ContentVersion)), conflicts, cancellationToken);
+        await CheckVersionsAsync("project", document.Content.Projects, db.Projects.AsNoTracking().Select(project => new ContentItemVersion("project", project.Id, project.ContentVersion)), conflicts, cancellationToken);
+        await CheckVersionsAsync("milestone", document.Content.Milestones, db.ProjectMilestones.AsNoTracking().Select(milestone => new ContentItemVersion("milestone", milestone.Id, milestone.ContentVersion)), conflicts, cancellationToken);
+        await CheckVersionsAsync("lesson", document.Content.Lessons, db.Lessons.AsNoTracking().Select(lesson => new ContentItemVersion("lesson", lesson.Id, lesson.ContentVersion)), conflicts, cancellationToken);
+        await CheckVersionsAsync("exercise", document.Content.Exercises, db.Exercises.AsNoTracking().Select(exercise => new ContentItemVersion("exercise", exercise.Id, exercise.ContentVersion)), conflicts, cancellationToken);
 
         if (document.ProviderSettings.Any(provider => provider.SecretValuePresent))
         {

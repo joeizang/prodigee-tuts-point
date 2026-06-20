@@ -17,9 +17,17 @@ export function Page({
   )
 }
 
-export function Panel({ children, title }: { children: ReactNode; title: string }) {
+export function Panel({
+  children,
+  className = '',
+  title,
+}: {
+  children: ReactNode
+  className?: string
+  title: string
+}) {
   return (
-    <section className="panel">
+    <section className={className ? `panel ${className}` : 'panel'}>
       <h3>{title}</h3>
       {children}
     </section>

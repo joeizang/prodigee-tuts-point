@@ -1,0 +1,720 @@
+id: typescript
+title: TypeScript and Node.js Servers
+slug: typescript
+description: Project-backed mastery of TypeScript for server-side Node.js through typed boundaries, parsing, testing, CLIs, APIs, persistence, concurrency, and operational design.
+language: TypeScript
+contentVersion: 2026.06.19
+concepts:
+  - id: ts-type-boundaries
+    title: Typed Boundaries
+    description: Modeling external input as unknown data and converting it into explicit application types.
+  - id: ts-unions
+    title: Unions and Narrowing
+    description: Using literal unions, discriminants, and control-flow narrowing to make invalid states difficult to represent.
+  - id: node-cli-contracts
+    title: Node CLI Contracts
+    description: Defining process-like request boundaries with arguments, environment, output, errors, and exit-code behavior.
+  - id: node-process-argv
+    title: Node Process Arguments
+    description: Normalizing process.argv into application-owned arguments before parsing domain options.
+  - id: ts-parse-results
+    title: Typed Parse Results
+    description: Representing expected command failures as discriminated data instead of uncontrolled exceptions.
+  - id: node-output-contracts
+    title: Node Output Contracts
+    description: Mapping command outcomes to stdout, stderr, and exit codes without hiding operational failures.
+  - id: node-file-io
+    title: Node File I/O Boundaries
+    description: Reading files and stdin through explicit async contracts that keep side effects at the edge.
+  - id: ts-async-boundaries
+    title: Async Boundary Design
+    description: Modeling asynchronous work with Promise-returning functions, injected dependencies, and controlled failures.
+  - id: node-input-sources
+    title: Input Source Contracts
+    description: Representing stdin and file input as precise unions instead of ambiguous flags or magic strings.
+  - id: node-streaming
+    title: Streaming Line Processing
+    description: Consuming line sources incrementally so memory does not grow with the whole input.
+  - id: ts-async-iterables
+    title: Async Iterables
+    description: Using AsyncIterable and for-await loops for sources that produce values over time.
+  - id: ts-bounded-summaries
+    title: Bounded Summaries
+    description: Producing deterministic top-N output with explicit complexity and ordering rules.
+  - id: node-http-boundaries
+    title: Node HTTP Boundaries
+    description: Translating HTTP methods, URLs, and query strings into application request contracts.
+  - id: ts-request-adapters
+    title: Request Adapters
+    description: Keeping transport-specific request parsing separate from reusable application logic.
+  - id: node-response-contracts
+    title: HTTP Response Contracts
+    description: Returning deterministic status codes, headers, and JSON bodies for success and client errors.
+  - id: node-runtime-adapters
+    title: Node Runtime Adapters
+    description: Translating native Node request and response objects into plain application contracts.
+  - id: node-server-composition
+    title: Server Composition
+    description: Assembling handlers, dependencies, clocks, and request context at the server boundary.
+  - id: node-error-boundaries
+    title: Error Boundaries
+    description: Converting unexpected handler failures into safe server responses without leaking internals.
+  - id: node-timeouts
+    title: Timeout Policies
+    description: Bounding slow asynchronous work with explicit fallback behavior and later cancellation paths.
+  - id: node-observability
+    title: Request Observability
+    description: Capturing request ids, durations, statuses, and route facts as structured operational telemetry.
+modules:
+  - id: ts-node-cli-core
+    title: Node CLI Core
+    description: Build typed request parsing before introducing file I/O, streaming, or HTTP handlers.
+    order: 1
+  - id: ts-node-file-io
+    title: Node File I/O
+    description: Add file and stdin input boundaries while keeping parsing and summaries testable.
+    order: 2
+  - id: ts-node-streaming
+    title: Node Streaming Core
+    description: Process async line sources incrementally and produce bounded deterministic summaries.
+    order: 3
+  - id: ts-node-http-adapter
+    title: Node HTTP Adapter
+    description: Reuse the logprobe core behind HTTP request and response boundaries.
+    order: 4
+  - id: ts-node-runtime
+    title: Native Node Runtime
+    description: Wire framework-neutral handlers to native Node-shaped request and response boundaries.
+    order: 5
+  - id: ts-node-server-hardening
+    title: Node Server Hardening
+    description: Add error boundaries, timeout fallbacks, request context, and structured telemetry.
+    order: 6
+lessons:
+  - id: typed-command-boundaries
+    moduleId: ts-node-cli-core
+    title: Typed Command Boundaries
+    summary: Convert raw command inputs into a small TypeScript command request that later CLI and server handlers can trust.
+    markdown: tracks/typescript/lessons/typed-command-boundaries.md
+    order: 1
+    concepts:
+      - ts-type-boundaries
+      - ts-unions
+      - node-cli-contracts
+    sourceReferences:
+      - book: effective-typescript-2
+        chapter: Type Design
+        topic: precise types, narrowing, and avoiding broad stringly-typed APIs
+        usage: QualityAnchor
+      - book: nodejs-cookbook-5
+        chapter: Command-line Applications
+        topic: process arguments and Node runtime boundaries
+        usage: QualityAnchor
+  - id: node-process-argv-contracts
+    moduleId: ts-node-cli-core
+    title: Node Process Argv Contracts
+    summary: Normalize Node runtime arguments into application-owned command arguments before option parsing begins.
+    markdown: tracks/typescript/lessons/node-process-argv-contracts.md
+    order: 2
+    concepts:
+      - node-process-argv
+      - node-cli-contracts
+      - ts-type-boundaries
+    sourceReferences:
+      - book: nodejs-cookbook-5
+        chapter: Command-line Applications
+        topic: process.argv, stdout, stderr, and exit codes
+        usage: QualityAnchor
+      - book: essential-typescript-5
+        chapter: Advanced Types
+        topic: readonly arrays and explicit function contracts
+        usage: QualityAnchor
+  - id: typed-cli-failures
+    moduleId: ts-node-cli-core
+    title: Typed CLI Failures
+    summary: Turn expected command-line parse failures into explicit result types that can drive stderr and exit-code behavior.
+    markdown: tracks/typescript/lessons/typed-cli-failures.md
+    order: 3
+    concepts:
+      - ts-parse-results
+      - node-output-contracts
+      - ts-unions
+    sourceReferences:
+      - book: effective-typescript-2
+        chapter: Type Design
+        topic: discriminated unions and precise API boundaries
+        usage: QualityAnchor
+      - book: nodejs-cookbook-5
+        chapter: Command-line Applications
+        topic: process output and exit behavior
+        usage: QualityAnchor
+  - id: file-io-boundaries-node
+    moduleId: ts-node-file-io
+    title: File I/O Boundaries in Node
+    summary: Read file input through explicit async boundaries without contaminating parser or summary logic.
+    markdown: tracks/typescript/lessons/file-io-boundaries-node.md
+    order: 4
+    concepts:
+      - node-file-io
+      - ts-async-boundaries
+      - node-output-contracts
+    sourceReferences:
+      - book: nodejs-cookbook-5
+        chapter: File System
+        topic: fs/promises, error handling, and command input
+        usage: QualityAnchor
+      - book: effective-typescript-2
+        chapter: Type Design
+        topic: modeling external uncertainty with precise result types
+        usage: QualityAnchor
+  - id: input-source-contracts
+    moduleId: ts-node-file-io
+    title: Input Source Contracts
+    summary: Represent stdin and file input as a discriminated union that resolves through injected readers.
+    markdown: tracks/typescript/lessons/input-source-contracts.md
+    order: 5
+    concepts:
+      - node-input-sources
+      - node-file-io
+      - ts-unions
+    sourceReferences:
+      - book: essential-typescript-5
+        chapter: Advanced Types
+        topic: discriminated unions and async function signatures
+        usage: QualityAnchor
+      - book: nodejs-cookbook-5
+        chapter: Command-line Applications
+        topic: stdin and file-based command input
+        usage: QualityAnchor
+  - id: async-iterables-for-lines
+    moduleId: ts-node-streaming
+    title: Async Iterables for Lines
+    summary: Consume line sources with AsyncIterable so streaming logic remains independent from concrete Node streams.
+    markdown: tracks/typescript/lessons/async-iterables-for-lines.md
+    order: 6
+    concepts:
+      - ts-async-iterables
+      - node-streaming
+      - ts-async-boundaries
+    sourceReferences:
+      - book: nodejs-cookbook-5
+        chapter: Streams
+        topic: incremental reads and stream processing
+        usage: QualityAnchor
+      - book: essential-typescript-5
+        chapter: Asynchronous JavaScript
+        topic: promises, async iteration, and async functions
+        usage: QualityAnchor
+  - id: bounded-streaming-summaries
+    moduleId: ts-node-streaming
+    title: Bounded Streaming Summaries
+    summary: Convert streaming counts into deterministic top-N output with explicit complexity tradeoffs.
+    markdown: tracks/typescript/lessons/bounded-streaming-summaries.md
+    order: 7
+    concepts:
+      - ts-bounded-summaries
+      - node-streaming
+      - node-output-contracts
+    sourceReferences:
+      - book: grokking-algorithms
+        chapter: Sorting and Hash Tables
+        topic: counting, sorting, and top-N reasoning
+        usage: QualityAnchor
+      - book: effective-typescript-2
+        chapter: Type Design
+        topic: small output types and stable interfaces
+        usage: QualityAnchor
+  - id: http-boundaries-node
+    moduleId: ts-node-http-adapter
+    title: HTTP Boundaries in Node
+    summary: Adapt HTTP methods, paths, and query parameters into a small reusable log query request.
+    markdown: tracks/typescript/lessons/http-boundaries-node.md
+    order: 8
+    concepts:
+      - node-http-boundaries
+      - ts-request-adapters
+      - ts-type-boundaries
+    sourceReferences:
+      - book: nodejs-cookbook-5
+        chapter: Web Servers
+        topic: HTTP request routing and response handling
+        usage: QualityAnchor
+      - book: effective-typescript-2
+        chapter: Type Design
+        topic: precise request types and boundary adapters
+        usage: QualityAnchor
+  - id: response-contracts-and-errors
+    moduleId: ts-node-http-adapter
+    title: Response Contracts and Errors
+    summary: Convert route results and expected client errors into stable JSON HTTP responses.
+    markdown: tracks/typescript/lessons/response-contracts-and-errors.md
+    order: 9
+    concepts:
+      - node-response-contracts
+      - ts-parse-results
+      - node-http-boundaries
+    sourceReferences:
+      - book: full-stack-javascript-strategies
+        chapter: API Design
+        topic: stable JSON responses and server boundary contracts
+        usage: QualityAnchor
+      - book: effective-typescript-2
+        chapter: Type Design
+        topic: result unions and response surface design
+        usage: QualityAnchor
+  - id: native-node-http-runtime
+    moduleId: ts-node-runtime
+    title: Native Node HTTP Runtime
+    summary: Adapt native Node-shaped requests and responses to the plain contracts used by the logprobe core.
+    markdown: tracks/typescript/lessons/native-node-http-runtime.md
+    order: 10
+    concepts:
+      - node-runtime-adapters
+      - node-http-boundaries
+      - ts-async-boundaries
+    sourceReferences:
+      - book: nodejs-cookbook-5
+        chapter: Web Servers
+        topic: request streams, headers, and response writing
+        usage: QualityAnchor
+      - book: effective-typescript-2
+        chapter: Type Design
+        topic: boundary types and runtime narrowing
+        usage: QualityAnchor
+  - id: server-composition-dependencies
+    moduleId: ts-node-runtime
+    title: Server Composition and Dependencies
+    summary: Assemble summary readers, clocks, request-id providers, and handler context without hidden globals.
+    markdown: tracks/typescript/lessons/server-composition-dependencies.md
+    order: 11
+    concepts:
+      - node-server-composition
+      - ts-request-adapters
+      - node-observability
+    sourceReferences:
+      - book: full-stack-javascript-strategies
+        chapter: Server Architecture
+        topic: dependency wiring and route handler organization
+        usage: QualityAnchor
+      - book: code-that-fits-in-your-head
+        chapter: API Design
+        topic: small interfaces and explicit seams
+        usage: QualityAnchor
+  - id: error-boundaries-timeouts
+    moduleId: ts-node-server-hardening
+    title: Error Boundaries and Timeouts
+    summary: Wrap handlers so unexpected defects and slow dependencies become controlled server outcomes.
+    markdown: tracks/typescript/lessons/error-boundaries-timeouts.md
+    order: 12
+    concepts:
+      - node-error-boundaries
+      - node-timeouts
+      - node-response-contracts
+    sourceReferences:
+      - book: nodejs-cookbook-5
+        chapter: Error Handling
+        topic: async errors, timeouts, and server reliability
+        usage: QualityAnchor
+      - book: code-that-fits-in-your-head
+        chapter: Error Handling
+        topic: safe failures and maintainable boundaries
+        usage: QualityAnchor
+  - id: observability-request-context
+    moduleId: ts-node-server-hardening
+    title: Observability and Request Context
+    summary: Preserve request ids and emit structured telemetry without polluting core handler logic.
+    markdown: tracks/typescript/lessons/observability-request-context.md
+    order: 13
+    concepts:
+      - node-observability
+      - node-server-composition
+      - node-response-contracts
+    sourceReferences:
+      - book: full-stack-javascript-strategies
+        chapter: Operations
+        topic: request tracing, logging, and operational signals
+        usage: QualityAnchor
+      - book: code-that-fits-in-your-head
+        chapter: Diagnostics
+        topic: observable behavior and maintainability
+        usage: QualityAnchor
+exercises:
+  - id: parse-command-request-ts
+    moduleId: ts-node-cli-core
+    title: ParseCommandRequest
+    summary: Parse a small server-side TypeScript command request with literal unions, defaults, and explicit validation.
+    directory: tracks/typescript/exercises/parse-command-request-ts
+    order: 1
+    concepts:
+      - ts-type-boundaries
+      - ts-unions
+      - node-cli-contracts
+  - id: parse-process-argv-ts
+    moduleId: ts-node-cli-core
+    title: ParseProcessArgv
+    summary: Strip Node executable and script arguments so the command parser only receives application options.
+    directory: tracks/typescript/exercises/parse-process-argv-ts
+    order: 2
+    concepts:
+      - node-process-argv
+      - node-cli-contracts
+  - id: parse-output-format-ts
+    moduleId: ts-node-cli-core
+    title: ParseOutputFormat
+    summary: Convert an optional raw string into a safe table/json output-format union with boundary defaults.
+    directory: tracks/typescript/exercises/parse-output-format-ts
+    order: 3
+    concepts:
+      - ts-type-boundaries
+      - node-output-contracts
+  - id: parse-command-safely-ts
+    moduleId: ts-node-cli-core
+    title: ParseCommandSafely
+    summary: Return a discriminated parse result for valid command options and expected user mistakes.
+    directory: tracks/typescript/exercises/parse-command-safely-ts
+    order: 4
+    concepts:
+      - ts-parse-results
+      - ts-unions
+      - node-cli-contracts
+  - id: parse-result-to-exit-result-ts
+    moduleId: ts-node-cli-core
+    title: ParseResultToExitResult
+    summary: Map typed parse outcomes to deterministic stdout, stderr, and exit-code results.
+    directory: tracks/typescript/exercises/parse-result-to-exit-result-ts
+    order: 5
+    concepts:
+      - ts-parse-results
+      - node-output-contracts
+  - id: read-text-file-safely-ts
+    moduleId: ts-node-file-io
+    title: ReadTextFileSafely
+    summary: Convert an injected async file read into a controlled success-or-failure result.
+    directory: tracks/typescript/exercises/read-text-file-safely-ts
+    order: 6
+    concepts:
+      - node-file-io
+      - ts-async-boundaries
+  - id: load-log-lines-ts
+    moduleId: ts-node-file-io
+    title: LoadLogLines
+    summary: Read log text and normalize it into meaningful lines with explicit newline behavior.
+    directory: tracks/typescript/exercises/load-log-lines-ts
+    order: 7
+    concepts:
+      - node-file-io
+      - node-input-sources
+  - id: resolve-input-source-ts
+    moduleId: ts-node-file-io
+    title: ResolveInputSource
+    summary: Resolve stdin or file input through a discriminated union and injected async readers.
+    directory: tracks/typescript/exercises/resolve-input-source-ts
+    order: 8
+    concepts:
+      - node-input-sources
+      - ts-unions
+      - ts-async-boundaries
+  - id: collect-async-lines-ts
+    moduleId: ts-node-streaming
+    title: CollectAsyncLines
+    summary: Consume an AsyncIterable of strings correctly with for-await before moving to incremental summaries.
+    directory: tracks/typescript/exercises/collect-async-lines-ts
+    order: 9
+    concepts:
+      - ts-async-iterables
+      - node-streaming
+  - id: count-levels-from-lines-ts
+    moduleId: ts-node-streaming
+    title: CountLevelsFromLines
+    summary: Count log levels while consuming lines incrementally from an async source.
+    directory: tracks/typescript/exercises/count-levels-from-lines-ts
+    order: 10
+    concepts:
+      - node-streaming
+      - ts-async-iterables
+      - ts-bounded-summaries
+  - id: take-top-counts-ts
+    moduleId: ts-node-streaming
+    title: TakeTopCounts
+    summary: Produce deterministic top-N rows from a count map with stable tie-breaking.
+    directory: tracks/typescript/exercises/take-top-counts-ts
+    order: 11
+    concepts:
+      - ts-bounded-summaries
+      - node-output-contracts
+  - id: run-streaming-logprobe-ts
+    moduleId: ts-node-streaming
+    title: RunStreamingLogprobe
+    summary: Assemble async line consumption, level counting, top-N ordering, and CLI-style output.
+    directory: tracks/typescript/exercises/run-streaming-logprobe-ts
+    order: 12
+    concepts:
+      - node-streaming
+      - ts-bounded-summaries
+      - node-output-contracts
+  - id: parse-log-query-url-ts
+    moduleId: ts-node-http-adapter
+    title: ParseLogQueryUrl
+    summary: Parse GET-style log query URLs into application request objects or controlled route failures.
+    directory: tracks/typescript/exercises/parse-log-query-url-ts
+    order: 13
+    concepts:
+      - node-http-boundaries
+      - ts-request-adapters
+      - ts-type-boundaries
+  - id: reject-unsupported-method-ts
+    moduleId: ts-node-http-adapter
+    title: RejectUnsupportedMethod
+    summary: Reject unsupported HTTP methods before the request reaches application logic.
+    directory: tracks/typescript/exercises/reject-unsupported-method-ts
+    order: 14
+    concepts:
+      - node-http-boundaries
+      - node-response-contracts
+  - id: to-http-response-ts
+    moduleId: ts-node-http-adapter
+    title: ToHttpResponse
+    summary: Convert route success and failure results into deterministic JSON HTTP responses.
+    directory: tracks/typescript/exercises/to-http-response-ts
+    order: 15
+    concepts:
+      - node-response-contracts
+      - ts-parse-results
+  - id: handle-logprobe-request-ts
+    moduleId: ts-node-http-adapter
+    title: HandleLogprobeRequest
+    summary: Compose method validation, URL parsing, summary reading, and JSON response mapping.
+    directory: tracks/typescript/exercises/handle-logprobe-request-ts
+    order: 16
+    concepts:
+      - node-http-boundaries
+      - ts-request-adapters
+      - node-response-contracts
+  - id: adapt-node-request-ts
+    moduleId: ts-node-runtime
+    title: AdaptNodeRequest
+    summary: Normalize Node-shaped method, URL, headers, and async body chunks into a RuntimeRequest.
+    directory: tracks/typescript/exercises/adapt-node-request-ts
+    order: 17
+    concepts:
+      - node-runtime-adapters
+      - ts-async-boundaries
+  - id: write-node-response-ts
+    moduleId: ts-node-runtime
+    title: WriteNodeResponse
+    summary: Apply plain RuntimeResponse data to a mutable Node-style writable response object.
+    directory: tracks/typescript/exercises/write-node-response-ts
+    order: 18
+    concepts:
+      - node-runtime-adapters
+      - node-response-contracts
+  - id: compose-node-server-handler-ts
+    moduleId: ts-node-runtime
+    title: ComposeNodeServerHandler
+    summary: Compose request context, dependency use, method policy, and JSON response metadata.
+    directory: tracks/typescript/exercises/compose-node-server-handler-ts
+    order: 19
+    concepts:
+      - node-server-composition
+      - node-runtime-adapters
+      - node-observability
+  - id: create-route-dependencies-ts
+    moduleId: ts-node-runtime
+    title: CreateRouteDependencies
+    summary: Build a small dependency object with summary reader, clock, and request-id provider.
+    directory: tracks/typescript/exercises/create-route-dependencies-ts
+    order: 20
+    concepts:
+      - node-server-composition
+      - node-observability
+  - id: wrap-handler-errors-ts
+    moduleId: ts-node-server-hardening
+    title: WrapHandlerErrors
+    summary: Convert unexpected handler exceptions into safe JSON 500 responses with request-id metadata.
+    directory: tracks/typescript/exercises/wrap-handler-errors-ts
+    order: 21
+    concepts:
+      - node-error-boundaries
+      - node-response-contracts
+  - id: apply-request-timeout-ts
+    moduleId: ts-node-server-hardening
+    title: ApplyRequestTimeout
+    summary: Race an asynchronous operation with a timeout fallback while preserving the operation type.
+    directory: tracks/typescript/exercises/apply-request-timeout-ts
+    order: 22
+    concepts:
+      - node-timeouts
+      - ts-async-boundaries
+  - id: create-request-context-ts
+    moduleId: ts-node-server-hardening
+    title: CreateRequestContext
+    summary: Preserve request ids and start time in a small per-request context object.
+    directory: tracks/typescript/exercises/create-request-context-ts
+    order: 23
+    concepts:
+      - node-observability
+      - node-server-composition
+  - id: record-handler-telemetry-ts
+    moduleId: ts-node-server-hardening
+    title: RecordHandlerTelemetry
+    summary: Emit structured request telemetry while preserving the handler response exactly.
+    directory: tracks/typescript/exercises/record-handler-telemetry-ts
+    order: 24
+    concepts:
+      - node-observability
+      - node-error-boundaries
+projects:
+  - id: logprobe-typescript
+    title: logprobe-typescript
+    slug: logprobe-typescript
+    description: Build a production-minded Node.js command-line log investigation tool with typed parsing, streaming input, deterministic summaries, and testable operational behavior.
+    milestones:
+      - id: logprobe-typed-command-boundary
+        title: Typed command boundary
+        summary: Create the typed request parser that later log querying and server-side handlers will reuse.
+        markdown: tracks/typescript/projects/logprobe-typed-command-boundary.md
+        order: 1
+        lessons:
+          - typed-command-boundaries
+        exercises:
+          - parse-command-request-ts
+        sourceReferences:
+          - book: effective-typescript-2
+            chapter: Type Design
+            topic: literal unions and boundary types
+            usage: QualityAnchor
+          - book: nodejs-cookbook-5
+            chapter: Command-line Applications
+            topic: command arguments and process contracts
+            usage: QualityAnchor
+      - id: logprobe-cli-contracts
+        title: Node CLI contracts
+        summary: Normalize Node runtime arguments, output formats, typed parse failures, and exit behavior.
+        markdown: tracks/typescript/projects/logprobe-cli-contracts.md
+        order: 2
+        lessons:
+          - node-process-argv-contracts
+          - typed-cli-failures
+        exercises:
+          - parse-process-argv-ts
+          - parse-output-format-ts
+          - parse-command-safely-ts
+          - parse-result-to-exit-result-ts
+        sourceReferences:
+          - book: nodejs-cookbook-5
+            chapter: Command-line Applications
+            topic: process.argv, stdout, stderr, and exit codes
+            usage: QualityAnchor
+          - book: effective-typescript-2
+            chapter: Type Design
+            topic: discriminated unions and typed failure results
+            usage: QualityAnchor
+      - id: logprobe-file-io
+        title: File I/O boundaries
+        summary: Add file and stdin input resolution while keeping real I/O behind testable async contracts.
+        markdown: tracks/typescript/projects/logprobe-file-io.md
+        order: 3
+        lessons:
+          - file-io-boundaries-node
+          - input-source-contracts
+        exercises:
+          - read-text-file-safely-ts
+          - load-log-lines-ts
+          - resolve-input-source-ts
+        sourceReferences:
+          - book: nodejs-cookbook-5
+            chapter: File System
+            topic: fs/promises, stdin, and command input handling
+            usage: QualityAnchor
+          - book: effective-typescript-2
+            chapter: Type Design
+            topic: result types and boundary modeling
+            usage: QualityAnchor
+      - id: logprobe-streaming-scale
+        title: Streaming and scale
+        summary: Process async log-line sources incrementally and render bounded deterministic summaries.
+        markdown: tracks/typescript/projects/logprobe-streaming-scale.md
+        order: 4
+        lessons:
+          - async-iterables-for-lines
+          - bounded-streaming-summaries
+        exercises:
+          - collect-async-lines-ts
+          - count-levels-from-lines-ts
+          - take-top-counts-ts
+          - run-streaming-logprobe-ts
+        sourceReferences:
+          - book: nodejs-cookbook-5
+            chapter: Streams
+            topic: stream processing and line-oriented input
+            usage: QualityAnchor
+          - book: grokking-algorithms
+            chapter: Sorting and Hash Tables
+            topic: counting, ordering, and top-N summaries
+            usage: QualityAnchor
+      - id: logprobe-http-adapter
+        title: HTTP adapter
+        summary: Reuse the logprobe core behind HTTP request parsing, route validation, and JSON response contracts.
+        markdown: tracks/typescript/projects/logprobe-http-adapter.md
+        order: 5
+        lessons:
+          - http-boundaries-node
+          - response-contracts-and-errors
+        exercises:
+          - parse-log-query-url-ts
+          - reject-unsupported-method-ts
+          - to-http-response-ts
+          - handle-logprobe-request-ts
+        sourceReferences:
+          - book: nodejs-cookbook-5
+            chapter: Web Servers
+            topic: HTTP routing, requests, and responses
+            usage: QualityAnchor
+          - book: full-stack-javascript-strategies
+            chapter: API Design
+            topic: stable JSON contracts and server boundaries
+            usage: QualityAnchor
+      - id: logprobe-node-runtime
+        title: Native Node runtime
+        summary: Wire framework-neutral handler contracts to native Node-shaped request and response adapters.
+        markdown: tracks/typescript/projects/logprobe-node-runtime.md
+        order: 6
+        lessons:
+          - native-node-http-runtime
+          - server-composition-dependencies
+        exercises:
+          - adapt-node-request-ts
+          - write-node-response-ts
+          - compose-node-server-handler-ts
+          - create-route-dependencies-ts
+        sourceReferences:
+          - book: nodejs-cookbook-5
+            chapter: Web Servers
+            topic: native HTTP requests, response writing, and server composition
+            usage: QualityAnchor
+          - book: full-stack-javascript-strategies
+            chapter: Server Architecture
+            topic: dependency wiring and handler organization
+            usage: QualityAnchor
+      - id: logprobe-server-hardening
+        title: Server hardening
+        summary: Add safe error boundaries, timeout fallbacks, request context, and structured telemetry.
+        markdown: tracks/typescript/projects/logprobe-server-hardening.md
+        order: 7
+        lessons:
+          - error-boundaries-timeouts
+          - observability-request-context
+        exercises:
+          - wrap-handler-errors-ts
+          - apply-request-timeout-ts
+          - create-request-context-ts
+          - record-handler-telemetry-ts
+        sourceReferences:
+          - book: nodejs-cookbook-5
+            chapter: Error Handling
+            topic: async server failures, timeouts, and reliability
+            usage: QualityAnchor
+          - book: code-that-fits-in-your-head
+            chapter: Diagnostics
+            topic: safe failures and observable behavior
+            usage: QualityAnchor

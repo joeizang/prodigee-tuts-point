@@ -71,6 +71,756 @@ public sealed class ExerciseEndpointTests
     }
 
     [Fact]
+    public async Task WorkspaceEndpointGeneratesTypeScriptNodeWorkspace()
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+
+        var workspace = await client.GetFromJsonAsync<ExerciseWorkspaceTestResponse>(
+            $"/api/exercises/parse-command-request-ts/workspace?profileId=typescript-{Guid.NewGuid():n}",
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(workspace);
+        Assert.Equal("TypeScript", workspace.Language);
+        Assert.Equal("node-typescript", workspace.Runtime);
+        Assert.True(File.Exists(Path.Combine(workspace.WorkspacePath, "package.json")));
+        Assert.True(File.Exists(Path.Combine(workspace.WorkspacePath, "tsconfig.json")));
+        Assert.True(File.Exists(Path.Combine(workspace.WorkspacePath, "src", "exercise.ts")));
+        Assert.True(File.Exists(Path.Combine(workspace.WorkspacePath, "tests", "visible.test.ts")));
+        Assert.True(File.Exists(Path.Combine(workspace.WorkspacePath, "tests", "hidden.test.ts")));
+        Assert.Contains(workspace.Files, file => file.Path == "src/exercise.ts" && file.Editable);
+        Assert.Contains(workspace.Files, file => file.Path == "tests/visible.test.ts" && file.Role == "visible-test" && file.Content is not null);
+        Assert.Contains(workspace.Files, file => file.Path == "tests/hidden.test.ts" && file.Role == "hidden-test" && file.Content is null);
+    }
+
+    [Fact]
+    public async Task WorkspaceEndpointGeneratesTypeScriptWorkspaceWithExerciseSpecificEntryPoint()
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+
+        var workspace = await client.GetFromJsonAsync<ExerciseWorkspaceTestResponse>(
+            $"/api/exercises/parse-output-format-ts/workspace?profileId=typescript-entrypoint-{Guid.NewGuid():n}",
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(workspace);
+        Assert.Equal("TypeScript", workspace.Language);
+        Assert.Contains(workspace.Files, file =>
+            file.Path == "tests/visible.test.ts"
+            && file.Content is not null
+            && file.Content.Contains("import { parseOutputFormat } from '../src/exercise'", StringComparison.Ordinal));
+        Assert.Contains(workspace.Files, file =>
+            file.Path == "tests/visible.test.ts"
+            && file.Content is not null
+            && file.Content.Contains("async () =>", StringComparison.Ordinal));
+        Assert.Contains(workspace.Files, file =>
+            file.Path == "src/exercise.ts"
+            && file.Editable
+            && file.Content is not null
+            && file.Content.Contains("export function parseOutputFormat", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task WorkspaceEndpointGeneratesSwiftPackageWorkspace()
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+        var profileId = $"swift-workspace-{Guid.NewGuid():n}";
+
+        var workspace = await client.GetFromJsonAsync<ExerciseWorkspaceTestResponse>(
+            $"/api/exercises/parse-command-request-swift/workspace?profileId={profileId}",
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(workspace);
+        Assert.Equal("Swift", workspace.Language);
+        Assert.Equal("swiftpm", workspace.Runtime);
+        Assert.Contains("swift test execution are active", workspace.LanguageServiceMessage);
+        Assert.True(File.Exists(Path.Combine(workspace.WorkspacePath, "Package.swift")));
+        Assert.True(File.Exists(Path.Combine(workspace.WorkspacePath, "Sources", "Exercise", "Exercise.swift")));
+        Assert.True(File.Exists(Path.Combine(workspace.WorkspacePath, "Tests", "ExerciseVisibleTests", "VisibleTests.swift")));
+        Assert.True(File.Exists(Path.Combine(workspace.WorkspacePath, "Tests", "ExerciseHiddenTests", "HiddenTests.swift")));
+        Assert.Contains(workspace.Files, file =>
+            file.Path == "Sources/Exercise/Exercise.swift"
+            && file.Editable
+            && file.Content is not null
+            && file.Content.Contains("parseCommandRequest", StringComparison.Ordinal));
+        Assert.Contains(workspace.Files, file =>
+            file.Path == "Tests/ExerciseVisibleTests/VisibleTests.swift"
+            && file.Role == "visible-test"
+            && file.Content is not null
+            && file.Content.Contains("XCTAssertEqual", StringComparison.Ordinal));
+        Assert.Contains(workspace.Files, file =>
+            file.Path == "Tests/ExerciseHiddenTests/HiddenTests.swift"
+            && file.Role == "hidden-test"
+            && file.Content is null);
+        Assert.Contains(workspace.Files, file =>
+            file.Path == "Package.swift"
+            && file.Role == "readonly"
+            && file.Content is not null
+            && file.Content.Contains(".testTarget", StringComparison.Ordinal));
+
+        var sourcePath = Path.Combine(workspace.WorkspacePath, "Sources", "Exercise", "Exercise.swift");
+        await File.WriteAllTextAsync(sourcePath, "public func learnerEdit() {}", TestContext.Current.CancellationToken);
+
+        workspace = await client.GetFromJsonAsync<ExerciseWorkspaceTestResponse>(
+            $"/api/exercises/parse-command-request-swift/workspace?profileId={profileId}",
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(workspace);
+        Assert.Contains(workspace.Files, file =>
+            file.Path == "Sources/Exercise/Exercise.swift"
+            && file.Content == "public func learnerEdit() {}");
+    }
+
+    [Fact]
+    public async Task RunEndpointExecutesTypeScriptVisibleAndHiddenTests()
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+        var profileId = $"typescript-runner-test-{Guid.NewGuid():n}";
+
+        var response = await client.PostAsJsonAsync(
+            "/api/exercises/parse-command-request-ts/run",
+            new ExerciseRunTestRequest(
+                profileId,
+                [
+                    new(
+                        "src/exercise.ts",
+                        """
+                        export type LogLevel = 'debug' | 'info' | 'warn' | 'error'
+
+                        export type CommandRequest = {
+                          readonly level: LogLevel
+                          readonly limit: number
+                          readonly includeArchived: boolean
+                        }
+
+                        const levels = ['debug', 'info', 'warn', 'error'] as const
+
+                        export function parseCommandRequest(args: readonly string[]): CommandRequest {
+                          let level: LogLevel = 'info'
+                          let limit = 100
+                          let includeArchived = false
+
+                          for (let index = 0; index < args.length; index++) {
+                            const option = args[index]
+
+                            if (option === '--archived') {
+                              includeArchived = true
+                              continue
+                            }
+
+                            if (option === '--level') {
+                              const value = args[++index]
+                              if (!isLogLevel(value)) {
+                                throw new Error(`Unsupported level: ${value ?? '<missing>'}`)
+                              }
+
+                              level = value
+                              continue
+                            }
+
+                            if (option === '--limit') {
+                              const value = args[++index]
+                              const parsed = Number(value)
+                              if (!Number.isInteger(parsed) || parsed < 1) {
+                                throw new Error(`Invalid limit: ${value ?? '<missing>'}`)
+                              }
+
+                              limit = parsed
+                              continue
+                            }
+
+                            throw new Error(`Unknown option: ${option}`)
+                          }
+
+                          return { level, limit, includeArchived }
+                        }
+
+                        function isLogLevel(value: string | undefined): value is LogLevel {
+                          return levels.some((level) => level === value)
+                        }
+                        """)
+                ]),
+            TestContext.Current.CancellationToken);
+
+        var result = await response.Content.ReadFromJsonAsync<ExerciseRunTestResponse>(
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(result);
+        Assert.Equal("Passed", result.Status);
+        Assert.True(result.VisiblePassed);
+        Assert.True(result.HiddenPassed);
+        Assert.DoesNotContain("hidden.test.ts", result.Output);
+        Assert.Empty(result.StaticAnalysis);
+    }
+
+    [Fact]
+    public async Task RunEndpointExecutesTypeScriptCliContractsVisibleAndHiddenTests()
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+        var profileId = $"typescript-cli-contracts-test-{Guid.NewGuid():n}";
+
+        var response = await client.PostAsJsonAsync(
+            "/api/exercises/parse-output-format-ts/run",
+            new ExerciseRunTestRequest(
+                profileId,
+                [
+                    new(
+                        "src/exercise.ts",
+                        """
+                        export type OutputFormat = 'table' | 'json'
+
+                        export function parseOutputFormat(value: string | undefined): OutputFormat {
+                          if (value === undefined) {
+                            return 'table'
+                          }
+
+                          if (value === 'table' || value === 'json') {
+                            return value
+                          }
+
+                          throw new Error(`Unsupported format: ${value}`)
+                        }
+                        """)
+                ]),
+            TestContext.Current.CancellationToken);
+
+        var result = await response.Content.ReadFromJsonAsync<ExerciseRunTestResponse>(
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(result);
+        Assert.Equal("Passed", result.Status);
+        Assert.True(result.VisiblePassed);
+        Assert.True(result.HiddenPassed);
+        Assert.Empty(result.StaticAnalysis);
+    }
+
+    [Fact]
+    public async Task RunEndpointExecutesAsyncTypeScriptFileIoVisibleAndHiddenTests()
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+        var profileId = $"typescript-file-io-test-{Guid.NewGuid():n}";
+
+        var response = await client.PostAsJsonAsync(
+            "/api/exercises/resolve-input-source-ts/run",
+            new ExerciseRunTestRequest(
+                profileId,
+                [
+                    new(
+                        "src/exercise.ts",
+                        """
+                        export type FileReadResult =
+                          | { readonly ok: true; readonly text: string }
+                          | { readonly ok: false; readonly message: string }
+
+                        export type InputSource =
+                          | { readonly kind: 'stdin' }
+                          | { readonly kind: 'file'; readonly path: string }
+
+                        export type TextFileReader = (path: string) => Promise<string>
+
+                        export async function resolveInputSource(
+                          source: InputSource,
+                          readStdin: () => Promise<string>,
+                          readFile: TextFileReader,
+                        ): Promise<FileReadResult> {
+                          if (source.kind === 'stdin') {
+                            return { ok: true, text: await readStdin() }
+                          }
+
+                          try {
+                            return { ok: true, text: await readFile(source.path) }
+                          } catch {
+                            return { ok: false, message: `Could not read input file: ${source.path}` }
+                          }
+                        }
+                        """)
+                ]),
+            TestContext.Current.CancellationToken);
+
+        var result = await response.Content.ReadFromJsonAsync<ExerciseRunTestResponse>(
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(result);
+        Assert.Equal("Passed", result.Status);
+        Assert.True(result.VisiblePassed);
+        Assert.True(result.HiddenPassed);
+        Assert.Empty(result.StaticAnalysis);
+    }
+
+    [Fact]
+    public async Task RunEndpointExecutesTypeScriptStreamingVisibleAndHiddenTests()
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+        var profileId = $"typescript-streaming-test-{Guid.NewGuid():n}";
+
+        var response = await client.PostAsJsonAsync(
+            "/api/exercises/run-streaming-logprobe-ts/run",
+            new ExerciseRunTestRequest(
+                profileId,
+                [
+                    new(
+                        "src/exercise.ts",
+                        """
+                        export type StreamingRunResult = {
+                          readonly exitCode: number
+                          readonly stdout: string
+                          readonly stderr: string
+                        }
+
+                        export async function runStreamingLogprobe(
+                          lines: AsyncIterable<string>,
+                          limit: number,
+                        ): Promise<StreamingRunResult> {
+                          const counts = new Map<string, number>()
+
+                          for await (const line of lines) {
+                            const level = line.trim().split(/\s+/)[1]?.toUpperCase()
+                            if (level === undefined) {
+                              continue
+                            }
+
+                            counts.set(level, (counts.get(level) ?? 0) + 1)
+                          }
+
+                          const stdout = [...counts.entries()]
+                            .map(([key, count]) => ({ key, count }))
+                            .sort((left, right) => right.count - left.count || left.key.localeCompare(right.key))
+                            .slice(0, Math.max(0, limit))
+                            .map((row) => `${row.key}\t${row.count}`)
+                            .join('\n')
+
+                          return { exitCode: 0, stdout, stderr: '' }
+                        }
+                        """)
+                ]),
+            TestContext.Current.CancellationToken);
+
+        var result = await response.Content.ReadFromJsonAsync<ExerciseRunTestResponse>(
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(result);
+        Assert.Equal("Passed", result.Status);
+        Assert.True(result.VisiblePassed);
+        Assert.True(result.HiddenPassed);
+        Assert.Empty(result.StaticAnalysis);
+    }
+
+    [Fact]
+    public async Task RunEndpointExecutesTypeScriptHttpAdapterVisibleAndHiddenTests()
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+        var profileId = $"typescript-http-adapter-test-{Guid.NewGuid():n}";
+
+        var response = await client.PostAsJsonAsync(
+            "/api/exercises/handle-logprobe-request-ts/run",
+            new ExerciseRunTestRequest(
+                profileId,
+                [
+                    new(
+                        "src/exercise.ts",
+                        """
+                        export type LogQueryHttpRequest = {
+                          readonly method: string
+                          readonly url: string
+                        }
+
+                        export type LogQueryRequest = {
+                          readonly level?: string
+                          readonly limit: number
+                        }
+
+                        export type HttpResponse = {
+                          readonly status: number
+                          readonly headers: Readonly<Record<string, string>>
+                          readonly body: string
+                        }
+
+                        export type LogSummaryReader = (
+                          request: LogQueryRequest,
+                        ) => Promise<readonly { readonly level: string; readonly count: number }[]>
+
+                        export async function handleLogprobeRequest(
+                          request: LogQueryHttpRequest,
+                          readSummary: LogSummaryReader,
+                        ): Promise<HttpResponse> {
+                          const headers = { 'content-type': 'application/json' }
+                          if (request.method.toUpperCase() !== 'GET') {
+                            return { status: 405, headers, body: JSON.stringify({ error: 'Method not allowed' }) }
+                          }
+
+                          const parsed = new URL(request.url, 'http://localhost')
+                          if (parsed.pathname !== '/logs') {
+                            return { status: 404, headers, body: JSON.stringify({ error: 'Route not found' }) }
+                          }
+
+                          const rawLimit = parsed.searchParams.get('limit')
+                          const limit = rawLimit === null ? 100 : Number(rawLimit)
+                          if (!Number.isInteger(limit) || limit < 1) {
+                            return { status: 400, headers, body: JSON.stringify({ error: 'Invalid limit' }) }
+                          }
+
+                          const level = parsed.searchParams.get('level') ?? undefined
+                          const query = level === undefined ? { limit } : { level, limit }
+                          const data = await readSummary(query)
+                          return { status: 200, headers, body: JSON.stringify({ data }) }
+                        }
+                        """)
+                ]),
+            TestContext.Current.CancellationToken);
+
+        var result = await response.Content.ReadFromJsonAsync<ExerciseRunTestResponse>(
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(result);
+        Assert.Equal("Passed", result.Status);
+        Assert.True(result.VisiblePassed);
+        Assert.True(result.HiddenPassed);
+        Assert.Empty(result.StaticAnalysis);
+    }
+
+    [Fact]
+    public async Task RunEndpointExecutesTypeScriptNodeRuntimeVisibleAndHiddenTests()
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+        var profileId = $"typescript-node-runtime-test-{Guid.NewGuid():n}";
+
+        var response = await client.PostAsJsonAsync(
+            "/api/exercises/adapt-node-request-ts/run",
+            new ExerciseRunTestRequest(
+                profileId,
+                [
+                    new(
+                        "src/exercise.ts",
+                        """
+                        export type RuntimeRequest = {
+                          readonly method: string
+                          readonly url: string
+                          readonly headers: Readonly<Record<string, string>>
+                          readonly body: string
+                        }
+
+                        export async function adaptNodeRequest(input: {
+                          readonly method?: string
+                          readonly url?: string
+                          readonly headers: Readonly<Record<string, string | readonly string[] | undefined>>
+                          readonly bodyChunks: AsyncIterable<string | Buffer>
+                        }): Promise<RuntimeRequest> {
+                          const headers: Record<string, string> = {}
+                          for (const [name, value] of Object.entries(input.headers)) {
+                            if (value === undefined) {
+                              continue
+                            }
+
+                            headers[name.toLowerCase()] = typeof value === 'string' ? value : value.join(', ')
+                          }
+
+                          let body = ''
+                          for await (const chunk of input.bodyChunks) {
+                            body += typeof chunk === 'string' ? chunk : chunk.toString('utf8')
+                          }
+
+                          return {
+                            method: input.method ?? 'GET',
+                            url: input.url ?? '/',
+                            headers,
+                            body,
+                          }
+                        }
+                        """)
+                ]),
+            TestContext.Current.CancellationToken);
+
+        var result = await response.Content.ReadFromJsonAsync<ExerciseRunTestResponse>(
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(result);
+        Assert.Equal("Passed", result.Status);
+        Assert.True(result.VisiblePassed);
+        Assert.True(result.HiddenPassed);
+        Assert.Empty(result.StaticAnalysis);
+    }
+
+    [Fact]
+    public async Task RunEndpointExecutesTypeScriptServerHardeningVisibleAndHiddenTests()
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+        var profileId = $"typescript-server-hardening-test-{Guid.NewGuid():n}";
+
+        var response = await client.PostAsJsonAsync(
+            "/api/exercises/record-handler-telemetry-ts/run",
+            new ExerciseRunTestRequest(
+                profileId,
+                [
+                    new(
+                        "src/exercise.ts",
+                        """
+                        export type RuntimeRequest = {
+                          readonly method: string
+                          readonly url: string
+                          readonly headers: Readonly<Record<string, string>>
+                          readonly body: string
+                        }
+
+                        export type RuntimeResponse = {
+                          readonly status: number
+                          readonly headers: Readonly<Record<string, string>>
+                          readonly body: string
+                        }
+
+                        export type RequestContext = {
+                          readonly requestId: string
+                          readonly startedAtMs: number
+                        }
+
+                        export type TelemetryEvent = {
+                          readonly requestId: string
+                          readonly method: string
+                          readonly url: string
+                          readonly status: number
+                          readonly durationMs: number
+                        }
+
+                        export type TelemetrySink = (event: TelemetryEvent) => void
+
+                        export async function recordHandlerTelemetry(
+                          request: RuntimeRequest,
+                          context: RequestContext,
+                          handle: () => Promise<RuntimeResponse>,
+                          nowMs: () => number,
+                          sink: TelemetrySink,
+                        ): Promise<RuntimeResponse> {
+                          const response = await handle()
+                          sink({
+                            requestId: context.requestId,
+                            method: request.method,
+                            url: request.url,
+                            status: response.status,
+                            durationMs: nowMs() - context.startedAtMs,
+                          })
+                          return response
+                        }
+                        """)
+                ]),
+            TestContext.Current.CancellationToken);
+
+        var result = await response.Content.ReadFromJsonAsync<ExerciseRunTestResponse>(
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(result);
+        Assert.Equal("Passed", result.Status);
+        Assert.True(result.VisiblePassed);
+        Assert.True(result.HiddenPassed);
+        Assert.Empty(result.StaticAnalysis);
+    }
+
+    [Fact]
+    public async Task RunEndpointExecutesSwiftVisibleAndHiddenTests()
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+        var profileId = $"swift-runner-test-{Guid.NewGuid():n}";
+
+        var response = await client.PostAsJsonAsync(
+            "/api/exercises/parse-command-request-swift/run",
+            new ExerciseRunTestRequest(
+                profileId,
+                [
+                    new(
+                        "Sources/Exercise/Exercise.swift",
+                        SwiftParserSolution())
+                ]),
+            TestContext.Current.CancellationToken);
+
+        var result = await response.Content.ReadFromJsonAsync<ExerciseRunTestResponse>(
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(result);
+        Assert.Equal("Passed", result.Status);
+        Assert.True(result.VisiblePassed);
+        Assert.True(result.HiddenPassed);
+        Assert.DoesNotContain("ExerciseHiddenTests", result.Output, StringComparison.Ordinal);
+        Assert.Empty(result.StaticAnalysis);
+    }
+
+    [Fact]
+    public async Task RunEndpointSkipsSwiftHiddenTestsWhenVisibleTestsFail()
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+        var profileId = $"swift-visible-fail-test-{Guid.NewGuid():n}";
+
+        var response = await client.PostAsJsonAsync(
+            "/api/exercises/parse-command-request-swift/run",
+            new ExerciseRunTestRequest(
+                profileId,
+                [
+                    new(
+                        "Sources/Exercise/Exercise.swift",
+                        SwiftParserSolution().Replace("var limit = 100", "var limit = 1", StringComparison.Ordinal))
+                ]),
+            TestContext.Current.CancellationToken);
+
+        var result = await response.Content.ReadFromJsonAsync<ExerciseRunTestResponse>(
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(result);
+        Assert.Equal("FailedVisible", result.Status);
+        Assert.False(result.VisiblePassed);
+        Assert.False(result.HiddenPassed);
+        Assert.Contains("Hidden tests were not run because visible tests failed.", result.Output);
+    }
+
+    [Fact]
+    public async Task RunEndpointMasksSwiftHiddenTestDetailsWhenHiddenTestsFail()
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+        var profileId = $"swift-hidden-fail-test-{Guid.NewGuid():n}";
+
+        var response = await client.PostAsJsonAsync(
+            "/api/exercises/parse-command-request-swift/run",
+            new ExerciseRunTestRequest(
+                profileId,
+                [
+                    new(
+                        "Sources/Exercise/Exercise.swift",
+                        SwiftParserSolution().Replace(
+                            "throw CommandRequestError.invalidLevel(value)",
+                            "throw CommandRequestError.unknownOption(value)",
+                            StringComparison.Ordinal))
+                ]),
+            TestContext.Current.CancellationToken);
+
+        var result = await response.Content.ReadFromJsonAsync<ExerciseRunTestResponse>(
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(result);
+        Assert.Equal("FailedHidden", result.Status);
+        Assert.True(result.VisiblePassed);
+        Assert.False(result.HiddenPassed);
+        Assert.Contains("One or more hidden tests failed.", result.Output);
+        Assert.DoesNotContain("trace", result.Output, StringComparison.Ordinal);
+        Assert.Equal("Hidden tests failed.", result.Diagnostics);
+    }
+
+    [Fact]
+    public async Task RunEndpointReturnsSwiftStaticAnalysisDiagnostics()
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+        var profileId = $"swift-analysis-test-{Guid.NewGuid():n}";
+
+        var response = await client.PostAsJsonAsync(
+            "/api/exercises/parse-command-request-swift/run",
+            new ExerciseRunTestRequest(
+                profileId,
+                [
+                    new(
+                        "Sources/Exercise/Exercise.swift",
+                        SwiftParserSolution().Replace("return CommandRequest(", "return MissingType(", StringComparison.Ordinal))
+                ]),
+            TestContext.Current.CancellationToken);
+
+        var result = await response.Content.ReadFromJsonAsync<ExerciseRunTestResponse>(
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(result);
+        Assert.Equal("FailedVisible", result.Status);
+        Assert.Contains(result.StaticAnalysis, diagnostic =>
+            diagnostic.RuleId == "SWIFT"
+            && diagnostic.Severity == "error"
+            && diagnostic.FilePath == "Sources/Exercise/Exercise.swift"
+            && diagnostic.Line is not null
+            && diagnostic.Column is not null);
+    }
+
+    [Theory]
+    [InlineData("parse-output-format-swift")]
+    [InlineData("resolve-input-source-swift")]
+    [InlineData("count-levels-swift")]
+    [InlineData("run-logprobe-command-swift")]
+    [InlineData("handle-logprobe-request-swift")]
+    [InlineData("handle-hardened-logprobe-request-swift")]
+    public async Task RunEndpointExecutesSwiftLogprobeMilestoneExercises(string exerciseId)
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+        var profileId = $"swift-logprobe-{exerciseId}-{Guid.NewGuid():n}";
+
+        var response = await client.PostAsJsonAsync(
+            $"/api/exercises/{exerciseId}/run",
+            new ExerciseRunTestRequest(
+                profileId,
+                [
+                    new(
+                        "Sources/Exercise/Exercise.swift",
+                        SwiftLogprobeCoreSolution())
+                ]),
+            TestContext.Current.CancellationToken);
+
+        var result = await response.Content.ReadFromJsonAsync<ExerciseRunTestResponse>(
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(result);
+        Assert.Equal("Passed", result.Status);
+        Assert.True(result.VisiblePassed);
+        Assert.True(result.HiddenPassed);
+        Assert.Empty(result.StaticAnalysis);
+    }
+
+    [Fact]
+    public async Task RunEndpointReturnsTypeScriptStaticAnalysisDiagnostics()
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+        var profileId = $"typescript-analysis-test-{Guid.NewGuid():n}";
+
+        var response = await client.PostAsJsonAsync(
+            "/api/exercises/parse-command-request-ts/run",
+            new ExerciseRunTestRequest(
+                profileId,
+                [
+                    new(
+                        "src/exercise.ts",
+                        """
+                        export type LogLevel = 'debug' | 'info' | 'warn' | 'error'
+
+                        export type CommandRequest = {
+                          readonly level: LogLevel
+                          readonly limit: number
+                          readonly includeArchived: boolean
+                        }
+
+                        export function parseCommandRequest(): CommandRequest {
+                          return {
+                            level: 'trace',
+                            limit: 'many',
+                            includeArchived: false,
+                          }
+                        }
+                        """)
+                ]),
+            TestContext.Current.CancellationToken);
+
+        var result = await response.Content.ReadFromJsonAsync<ExerciseRunTestResponse>(
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(result);
+        Assert.Equal("FailedVisible", result.Status);
+        Assert.Contains(result.StaticAnalysis, diagnostic =>
+            diagnostic.RuleId.StartsWith("TS", StringComparison.Ordinal)
+            && diagnostic.FilePath == "src/exercise.ts");
+    }
+
+    [Fact]
     public async Task RunEndpointExecutesVisibleAndHiddenTests()
     {
         await using var factory = new WebApplicationFactory<Program>();
@@ -1216,6 +1966,91 @@ public sealed class ExerciseEndpointTests
     }
 
     [Fact]
+    public async Task SwiftDiagnosticsEndpointReturnsSourceKitErrorsForCurrentContent()
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+        var profileId = $"swift-diagnostics-test-{Guid.NewGuid():n}";
+        var starter = await GetSwiftExerciseContentAsync(client, profileId);
+        var content = starter + "\npublic let =\n";
+
+        var response = await client.PostAsJsonAsync(
+            "/api/exercises/parse-command-request-swift/language/diagnostics",
+            new ExerciseLanguageTestRequest(
+                profileId,
+                "Sources/Exercise/Exercise.swift",
+                content),
+            TestContext.Current.CancellationToken);
+
+        response.EnsureSuccessStatusCode();
+        var result = await response.Content.ReadFromJsonAsync<ExerciseDiagnosticsTestResponse>(
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(result);
+        Assert.Contains(result.Diagnostics, diagnostic => diagnostic.Severity == "Error");
+    }
+
+    [Fact]
+    public async Task SwiftCompletionsEndpointReturnsSourceKitEnumCases()
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+        var profileId = $"swift-completion-test-{Guid.NewGuid():n}";
+        var content = await GetSwiftExerciseContentAsync(client, profileId) + """
+
+            public func chooseLogLevel() -> LogLevel {
+                return LogLevel.
+            }
+            """;
+        var position = PositionOf(content, "    return LogLevel.", "    return LogLevel.".Length);
+
+        var response = await client.PostAsJsonAsync(
+            "/api/exercises/parse-command-request-swift/language/completions",
+            new ExerciseCompletionTestRequest(
+                profileId,
+                "Sources/Exercise/Exercise.swift",
+                content,
+                position.Line,
+                position.Column),
+            TestContext.Current.CancellationToken);
+
+        response.EnsureSuccessStatusCode();
+        var result = await response.Content.ReadFromJsonAsync<ExerciseCompletionsTestResponse>(
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(result);
+        Assert.Contains(result.Items, item => item.Label.Contains("debug", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(result.Items, item => item.Label.Contains("info", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task SwiftHoverEndpointReturnsSourceKitSymbolInformation()
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+        var profileId = $"swift-hover-test-{Guid.NewGuid():n}";
+        var content = await GetSwiftExerciseContentAsync(client, profileId);
+        var position = PositionOf(content, "LogLevel");
+
+        var response = await client.PostAsJsonAsync(
+            "/api/exercises/parse-command-request-swift/language/hover",
+            new ExercisePositionTestRequest(
+                profileId,
+                "Sources/Exercise/Exercise.swift",
+                content,
+                position.Line,
+                position.Column),
+            TestContext.Current.CancellationToken);
+
+        response.EnsureSuccessStatusCode();
+        var result = await response.Content.ReadFromJsonAsync<ExerciseHoverTestResponse>(
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(result);
+        Assert.Contains(result.Contents, content => content.Contains("enum LogLevel", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task LanguageServiceReusesCachedProjectSnapshotForRepeatedRequests()
     {
         ExerciseLanguageService.ResetProjectSnapshotCacheForTests();
@@ -1306,6 +2141,8 @@ public sealed class ExerciseEndpointTests
     private sealed record ExerciseWorkspaceTestResponse(
         string ExerciseId,
         string Title,
+        string Language,
+        string Runtime,
         string WorkspacePath,
         string LanguageServiceMessage,
         IReadOnlyCollection<ExerciseWorkspaceFileTestResponse> Files,
@@ -1500,6 +2337,363 @@ public sealed class ExerciseEndpointTests
         }
 
         return (line, column);
+    }
+
+    private static async Task<string> GetSwiftExerciseContentAsync(HttpClient client, string profileId)
+    {
+        var workspace = await client.GetFromJsonAsync<ExerciseWorkspaceTestResponse>(
+            $"/api/exercises/parse-command-request-swift/workspace?profileId={profileId}",
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(workspace);
+        var editableFile = Assert.Single(workspace.Files, file => file.Path == "Sources/Exercise/Exercise.swift");
+        Assert.NotNull(editableFile.Content);
+        return editableFile.Content;
+    }
+
+    private static string SwiftParserSolution()
+    {
+        return """
+        public enum LogLevel: String, Equatable {
+            case debug
+            case info
+            case warn
+            case error
+        }
+
+        public struct CommandRequest: Equatable {
+            public let level: LogLevel
+            public let limit: Int
+            public let includeArchived: Bool
+
+            public init(level: LogLevel, limit: Int, includeArchived: Bool) {
+                self.level = level
+                self.limit = limit
+                self.includeArchived = includeArchived
+            }
+        }
+
+        public enum CommandRequestError: Error, Equatable {
+            case unknownOption(String)
+            case missingValue(String)
+            case invalidLevel(String)
+            case invalidLimit(String)
+        }
+
+        public func parseCommandRequest(_ args: [String]) throws -> CommandRequest {
+            var level = LogLevel.info
+            var limit = 100
+            var includeArchived = false
+            var index = 0
+
+            while index < args.count {
+                let option = args[index]
+                switch option {
+                case "--archived":
+                    includeArchived = true
+                    index += 1
+                case "--level":
+                    guard index + 1 < args.count else { throw CommandRequestError.missingValue(option) }
+                    let value = args[index + 1]
+                    guard let parsed = LogLevel(rawValue: value) else { throw CommandRequestError.invalidLevel(value) }
+                    level = parsed
+                    index += 2
+                case "--limit":
+                    guard index + 1 < args.count else { throw CommandRequestError.missingValue(option) }
+                    let value = args[index + 1]
+                    guard let parsed = Int(value), parsed > 0 else { throw CommandRequestError.invalidLimit(value) }
+                    limit = parsed
+                    index += 2
+                case "--unknown":
+                    throw CommandRequestError.unknownOption(option)
+                default:
+                    throw CommandRequestError.unknownOption(option)
+                }
+            }
+
+            return CommandRequest(level: level, limit: limit, includeArchived: includeArchived)
+        }
+        """;
+    }
+
+    private static string SwiftLogprobeCoreSolution()
+    {
+        return """
+        public enum LogLevel: String, Equatable {
+            case debug
+            case info
+            case warn
+            case error
+        }
+
+        public enum OutputFormat: String, Equatable {
+            case table
+            case json
+        }
+
+        public enum CliParseError: Error, Equatable {
+            case unsupportedFormat(String)
+            case missingPath
+        }
+
+        public enum FileReadResult: Equatable {
+            case success(String)
+            case failure(String)
+        }
+
+        public enum InputSource: Equatable {
+            case stdin
+            case file(String)
+        }
+
+        public struct LevelCount: Equatable {
+            public let level: String
+            public let count: Int
+
+            public init(level: String, count: Int) {
+                self.level = level
+                self.count = count
+            }
+        }
+
+        public struct LogprobeCommandRequest: Equatable {
+            public let source: InputSource
+            public let format: OutputFormat
+            public let limit: Int
+
+            public init(source: InputSource, format: OutputFormat, limit: Int) {
+                self.source = source
+                self.format = format
+                self.limit = limit
+            }
+        }
+
+        public enum LogprobeCommandResult: Equatable {
+            case rendered(String)
+            case failed(String)
+        }
+
+        public struct HttpLogprobeRequest: Equatable {
+            public let query: [String: String]
+            public let body: String?
+
+            public init(query: [String: String], body: String?) {
+                self.query = query
+                self.body = body
+            }
+        }
+
+        public struct HttpLogprobeResponse: Equatable {
+            public let status: Int
+            public let contentType: String
+            public let body: String
+
+            public init(status: Int, contentType: String, body: String) {
+                self.status = status
+                self.contentType = contentType
+                self.body = body
+            }
+        }
+
+        public struct LogprobeTelemetry: Equatable {
+            public let requestId: String
+            public let status: Int
+            public let durationMs: Int
+            public let outcome: String
+
+            public init(requestId: String, status: Int, durationMs: Int, outcome: String) {
+                self.requestId = requestId
+                self.status = status
+                self.durationMs = durationMs
+                self.outcome = outcome
+            }
+        }
+
+        public struct HardenedLogprobeResponse: Equatable {
+            public let response: HttpLogprobeResponse
+            public let telemetry: LogprobeTelemetry
+
+            public init(response: HttpLogprobeResponse, telemetry: LogprobeTelemetry) {
+                self.response = response
+                self.telemetry = telemetry
+            }
+        }
+
+        public func parseOutputFormat(_ value: String?) throws -> OutputFormat {
+            switch value {
+            case nil:
+                return .table
+            case "table":
+                return .table
+            case "json":
+                return .json
+            case let unsupported?:
+                throw CliParseError.unsupportedFormat(unsupported)
+            }
+        }
+
+        public func resolveInputSource(
+            _ source: InputSource,
+            readStdin: () async -> String,
+            readFile: (String) async throws -> String
+        ) async -> FileReadResult {
+            switch source {
+            case .stdin:
+                return .success(await readStdin())
+            case .file(let path):
+                do {
+                    return .success(try await readFile(path))
+                } catch {
+                    return .failure("Could not read input file: \(path)")
+                }
+            }
+        }
+
+        public func countLevels<S: AsyncSequence>(
+            from lines: S,
+            limit: Int
+        ) async throws -> [LevelCount] where S.Element == String {
+            var counts: [String: Int] = [:]
+            let supported = Set(["DEBUG", "INFO", "WARN", "ERROR"])
+
+            for try await line in lines {
+                for token in line.uppercased().split(whereSeparator: { !$0.isLetter }) {
+                    let level = String(token)
+                    if supported.contains(level) {
+                        counts[level, default: 0] += 1
+                        break
+                    }
+                }
+            }
+
+            return counts
+                .map { LevelCount(level: $0.key, count: $0.value) }
+                .sorted { left, right in
+                    left.count == right.count ? left.level < right.level : left.count > right.count
+                }
+                .prefix(max(0, limit))
+                .map { $0 }
+        }
+
+        public func renderLevelCounts(_ counts: [LevelCount], format: OutputFormat) -> String {
+            switch format {
+            case .table:
+                return counts.map { "\($0.level) \($0.count)" }.joined(separator: "\n")
+            case .json:
+                let objects = counts.map { "{\"level\":\"\($0.level)\",\"count\":\($0.count)}" }
+                return "[\(objects.joined(separator: ","))]"
+            }
+        }
+
+        public func runLogprobeCommand(
+            _ request: LogprobeCommandRequest,
+            readStdin: () async -> String,
+            readFile: (String) async throws -> String
+        ) async throws -> LogprobeCommandResult {
+            let input = await resolveInputSource(request.source, readStdin: readStdin, readFile: readFile)
+            switch input {
+            case .failure(let message):
+                return .failed(message)
+            case .success(let text):
+                let lines = AsyncStream<String> { continuation in
+                    for line in text.split(whereSeparator: \.isNewline) {
+                        continuation.yield(String(line))
+                    }
+                    continuation.finish()
+                }
+                let counts = try await countLevels(from: lines, limit: request.limit)
+                return .rendered(renderLevelCounts(counts, format: request.format))
+            }
+        }
+
+        public func handleLogprobeRequest(_ request: HttpLogprobeRequest) async -> HttpLogprobeResponse {
+            let format: OutputFormat
+            do {
+                format = try parseOutputFormat(request.query["format"])
+            } catch CliParseError.unsupportedFormat(let value) {
+                return HttpLogprobeResponse(status: 400, contentType: "text/plain", body: "unsupported format: \(value)")
+            } catch {
+                return HttpLogprobeResponse(status: 400, contentType: "text/plain", body: "invalid request")
+            }
+
+            let limitText = request.query["limit"] ?? "10"
+            guard let limit = Int(limitText), limit > 0 else {
+                return HttpLogprobeResponse(status: 400, contentType: "text/plain", body: "limit must be a positive integer")
+            }
+
+            do {
+                let result = try await runLogprobeCommand(
+                    LogprobeCommandRequest(source: .stdin, format: format, limit: limit),
+                    readStdin: { request.body ?? "" },
+                    readFile: { _ in throw CliParseError.missingPath }
+                )
+
+                switch result {
+                case .rendered(let body):
+                    return HttpLogprobeResponse(
+                        status: 200,
+                        contentType: format == .json ? "application/json" : "text/plain",
+                        body: body
+                    )
+                case .failed(let message):
+                    return HttpLogprobeResponse(status: 400, contentType: "text/plain", body: message)
+                }
+            } catch {
+                return HttpLogprobeResponse(status: 500, contentType: "text/plain", body: "internal server error")
+            }
+        }
+
+        public func handleHardenedLogprobeRequest(
+            _ request: HttpLogprobeRequest,
+            requestId: String,
+            startedAtMs: Int,
+            deadlineMs: Int,
+            maxBodyBytes: Int,
+            nowMs: () async -> Int
+        ) async -> HardenedLogprobeResponse {
+            let now = await nowMs()
+            let duration = max(0, now - startedAtMs)
+
+            func envelope(_ response: HttpLogprobeResponse, outcome: String) -> HardenedLogprobeResponse {
+                HardenedLogprobeResponse(
+                    response: response,
+                    telemetry: LogprobeTelemetry(
+                        requestId: requestId,
+                        status: response.status,
+                        durationMs: duration,
+                        outcome: outcome
+                    )
+                )
+            }
+
+            if duration > deadlineMs {
+                return envelope(
+                    HttpLogprobeResponse(status: 504, contentType: "text/plain", body: "request timed out"),
+                    outcome: "timed-out"
+                )
+            }
+
+            if let body = request.body, body.utf8.count > maxBodyBytes {
+                return envelope(
+                    HttpLogprobeResponse(status: 413, contentType: "text/plain", body: "request body too large"),
+                    outcome: "rejected"
+                )
+            }
+
+            let response = await handleLogprobeRequest(request)
+            let outcome: String
+            switch response.status {
+            case 200..<300:
+                outcome = "ok"
+            case 400..<500:
+                outcome = "validation-failed"
+            default:
+                outcome = "failed"
+            }
+
+            return envelope(response, outcome: outcome)
+        }
+        """;
     }
 
     private static async Task<ExerciseCompletionsTestResponse> RequestCompletionsAsync(

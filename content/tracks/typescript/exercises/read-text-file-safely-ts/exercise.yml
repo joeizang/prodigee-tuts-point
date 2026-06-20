@@ -1,0 +1,56 @@
+id: read-text-file-safely-ts
+title: ReadTextFileSafely
+kind: focused
+workspace:
+  runtime: node-typescript
+  entryPoint: readTextFileSafely
+  starter: tracks/typescript/exercises/_shared/FileAndStreaming.ts
+  visibleTest: |
+    await expect(readTextFileSafely('app.log', async () => 'INFO ready')).resolves.toEqual({
+      ok: true,
+      text: 'INFO ready',
+    })
+  hiddenTest: |
+    await expect(readTextFileSafely('missing.log', async () => {
+      throw new Error('ENOENT')
+    })).resolves.toEqual({
+      ok: false,
+      message: 'Could not read input file: missing.log',
+    })
+    await expect(readTextFileSafely('empty.log', async () => '')).resolves.toEqual({ ok: true, text: '' })
+hints:
+  - id: conceptual
+    level: conceptual
+    title: Boundary returns data
+    body: Treat a missing file as expected boundary data so the command runner can later choose stderr and exit code.
+  - id: api-approach
+    level: api-approach
+    title: Await the injected reader
+    body: The reader returns a Promise, so await it inside a try block and return the successful text explicitly.
+  - id: structural
+    level: structural
+    title: Catch read failures only
+    body: Keep the catch block small and return a stable message that includes the path the user tried to read.
+solution:
+  title: Model solution
+  body: The model solution keeps file access injectable and converts expected read failures into a small result object.
+  code: |
+    export type FileReadResult =
+      | { readonly ok: true; readonly text: string }
+      | { readonly ok: false; readonly message: string }
+
+    export type TextFileReader = (path: string) => Promise<string>
+
+    export async function readTextFileSafely(path: string, readFile: TextFileReader): Promise<FileReadResult> {
+      try {
+        return { ok: true, text: await readFile(path) }
+      } catch {
+        return { ok: false, message: `Could not read input file: ${path}` }
+      }
+    }
+commonWrongApproaches:
+  - Importing fs/promises directly inside the core function and making the exercise depend on the local disk.
+  - Returning an empty string for missing files, which hides an operational failure from the command runner.
+expectedSolutionCharacteristics:
+  - Awaits the injected reader and preserves successful file text exactly.
+  - Returns a controlled failure result with the attempted path when the reader throws.

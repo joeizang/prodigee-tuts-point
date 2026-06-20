@@ -1,0 +1,98 @@
+id: handle-logprobe-request-ts
+title: HandleLogprobeRequest
+kind: project
+workspace:
+  runtime: node-typescript
+  entryPoint: handleLogprobeRequest
+  starter: tracks/typescript/exercises/_shared/HttpHandlers.ts
+  visibleTest: |
+    await expect(handleLogprobeRequest({ method: 'GET', url: '/logs?level=ERROR&limit=2' }, async (request) => [
+      { level: request.level ?? 'ALL', count: request.limit },
+    ])).resolves.toEqual({
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+      body: '{"data":[{"level":"ERROR","count":2}]}',
+    })
+  hiddenTest: |
+    let called = false
+    await expect(handleLogprobeRequest({ method: 'DELETE', url: '/logs' }, async () => {
+      called = true
+      return []
+    })).resolves.toEqual({
+      status: 405,
+      headers: { 'content-type': 'application/json' },
+      body: '{"error":"Method not allowed"}',
+    })
+    expect(called).toBe(false)
+
+    await expect(handleLogprobeRequest({ method: 'GET', url: '/logs?limit=bad' }, async () => [])).resolves.toEqual({
+      status: 400,
+      headers: { 'content-type': 'application/json' },
+      body: '{"error":"Invalid limit"}',
+    })
+hints:
+  - id: conceptual
+    level: conceptual
+    title: Handler composes boundaries
+    body: A handler should validate method, parse the URL, call the core dependency only on success, and map the result to HTTP.
+  - id: api-approach
+    level: api-approach
+    title: Do not call summary on errors
+    body: If method or URL parsing fails, return the error response immediately so bad requests never reach the core.
+  - id: structural
+    level: structural
+    title: Keep success body small
+    body: On success, await the injected summary reader and return JSON with a data property containing the rows.
+solution:
+  title: Model solution
+  body: The model solution keeps HTTP validation at the edge and invokes the summary dependency only for valid application requests.
+  code: |
+    export type LogQueryHttpRequest = {
+      readonly method: string
+      readonly url: string
+    }
+
+    export type LogQueryRequest = {
+      readonly level?: string
+      readonly limit: number
+    }
+
+    export type HttpResponse = {
+      readonly status: number
+      readonly headers: Readonly<Record<string, string>>
+      readonly body: string
+    }
+
+    export type LogSummaryReader = (request: LogQueryRequest) => Promise<readonly { readonly level: string; readonly count: number }[]>
+
+    export async function handleLogprobeRequest(
+      request: LogQueryHttpRequest,
+      readSummary: LogSummaryReader,
+    ): Promise<HttpResponse> {
+      const headers = { 'content-type': 'application/json' }
+      if (request.method.toUpperCase() !== 'GET') {
+        return { status: 405, headers, body: JSON.stringify({ error: 'Method not allowed' }) }
+      }
+
+      const parsed = new URL(request.url, 'http://localhost')
+      if (parsed.pathname !== '/logs') {
+        return { status: 404, headers, body: JSON.stringify({ error: 'Route not found' }) }
+      }
+
+      const rawLimit = parsed.searchParams.get('limit')
+      const limit = rawLimit === null ? 100 : Number(rawLimit)
+      if (!Number.isInteger(limit) || limit < 1) {
+        return { status: 400, headers, body: JSON.stringify({ error: 'Invalid limit' }) }
+      }
+
+      const level = parsed.searchParams.get('level') ?? undefined
+      const applicationRequest = level === undefined ? { limit } : { level, limit }
+      const data = await readSummary(applicationRequest)
+      return { status: 200, headers, body: JSON.stringify({ data }) }
+    }
+commonWrongApproaches:
+  - Calling the summary reader before validating the method and URL.
+  - Returning a 200 response with an error body for malformed requests.
+expectedSolutionCharacteristics:
+  - Validates method and URL before invoking the injected summary reader.
+  - Returns deterministic JSON responses for success and expected client errors.

@@ -1,0 +1,89 @@
+id: handle-logprobe-request-swift
+title: HandleLogprobeRequest
+kind: project
+workspace:
+  runtime: swiftpm
+  entryPoint: handleLogprobeRequest
+  starter: tracks/swift/exercises/_shared/LogprobeCore.swift
+  visibleTest: |
+    let response = await handleLogprobeRequest(HttpLogprobeRequest(
+        query: ["format": "json", "limit": "2"],
+        body: """
+        INFO ready
+        ERROR failed
+        ERROR failed again
+        """
+    ))
+    XCTAssertEqual(response.status, 200)
+    XCTAssertEqual(response.contentType, "application/json")
+    XCTAssertEqual(response.body, "[{\"level\":\"ERROR\",\"count\":2},{\"level\":\"INFO\",\"count\":1}]")
+  hiddenTest: |
+    let badFormat = await handleLogprobeRequest(HttpLogprobeRequest(query: ["format": "yaml"], body: "INFO ready"))
+    XCTAssertEqual(badFormat, HttpLogprobeResponse(status: 400, contentType: "text/plain", body: "unsupported format: yaml"))
+
+    let badLimit = await handleLogprobeRequest(HttpLogprobeRequest(query: ["limit": "0"], body: "INFO ready"))
+    XCTAssertEqual(badLimit, HttpLogprobeResponse(status: 400, contentType: "text/plain", body: "limit must be a positive integer"))
+
+    let empty = await handleLogprobeRequest(HttpLogprobeRequest(query: [:], body: nil))
+    XCTAssertEqual(empty, HttpLogprobeResponse(status: 200, contentType: "text/plain", body: ""))
+hints:
+  - id: conceptual
+    level: conceptual
+    title: Adapt, do not rewrite
+    body: A server request adapter should translate HTTP-shaped input into the existing command model, not duplicate parsing and counting rules.
+  - id: api-approach
+    level: api-approach
+    title: Validate query values
+    body: Parse format and limit at the boundary so the core receives trusted OutputFormat and positive Int values.
+  - id: structural
+    level: structural
+    title: Map responses deliberately
+    body: Successful JSON responses should use application/json, table responses should use text/plain, and client mistakes should return 400.
+solution:
+  title: Model solution
+  body: The model solution is a Vapor-shaped adapter over the command core. It validates query input, maps the request body to stdin, and translates results into HTTP response values.
+  code: |
+    public func handleLogprobeRequest(_ request: HttpLogprobeRequest) async -> HttpLogprobeResponse {
+        let format: OutputFormat
+        do {
+            format = try parseOutputFormat(request.query["format"])
+        } catch CliParseError.unsupportedFormat(let value) {
+            return HttpLogprobeResponse(status: 400, contentType: "text/plain", body: "unsupported format: \(value)")
+        } catch {
+            return HttpLogprobeResponse(status: 400, contentType: "text/plain", body: "invalid request")
+        }
+
+        let limitText = request.query["limit"] ?? "10"
+        guard let limit = Int(limitText), limit > 0 else {
+            return HttpLogprobeResponse(status: 400, contentType: "text/plain", body: "limit must be a positive integer")
+        }
+
+        do {
+            let commandResult = try await runLogprobeCommand(
+                LogprobeCommandRequest(source: .stdin, format: format, limit: limit),
+                readStdin: { request.body ?? "" },
+                readFile: { _ in throw CliParseError.missingPath }
+            )
+
+            switch commandResult {
+            case .rendered(let body):
+                return HttpLogprobeResponse(
+                    status: 200,
+                    contentType: format == .json ? "application/json" : "text/plain",
+                    body: body
+                )
+            case .failed(let message):
+                return HttpLogprobeResponse(status: 400, contentType: "text/plain", body: message)
+            }
+        } catch {
+            return HttpLogprobeResponse(status: 500, contentType: "text/plain", body: "internal server error")
+        }
+    }
+commonWrongApproaches:
+  - Importing Vapor or building framework-specific response values inside reusable core code.
+  - Reimplementing counting logic inside the request handler.
+  - Treating malformed query values as defaults instead of returning client errors.
+expectedSolutionCharacteristics:
+  - Converts query and body data into a LogprobeCommandRequest.
+  - Maps validation failures to stable 400 responses and unexpected failures to a stable 500 response.
+  - Preserves content-type behavior for JSON and table output.

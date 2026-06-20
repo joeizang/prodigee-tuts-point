@@ -1,0 +1,62 @@
+id: count-levels-from-lines-ts
+title: CountLevelsFromLines
+kind: focused
+workspace:
+  runtime: node-typescript
+  entryPoint: countLevelsFromLines
+  starter: tracks/typescript/exercises/_shared/FileAndStreaming.ts
+  visibleTest: |
+    async function* source() {
+      yield '2026-06-19 INFO started'
+      yield '2026-06-19 ERROR failed'
+      yield '2026-06-19 INFO ready'
+    }
+    await expect(countLevelsFromLines(source())).resolves.toEqual(new Map([
+      ['INFO', 2],
+      ['ERROR', 1],
+    ]))
+  hiddenTest: |
+    async function* source() {
+      yield ''
+      yield 'malformed'
+      yield '2026-06-19 warn lowercase'
+      yield '2026-06-19 WARN uppercase'
+    }
+    await expect(countLevelsFromLines(source())).resolves.toEqual(new Map([
+      ['WARN', 2],
+    ]))
+hints:
+  - id: conceptual
+    level: conceptual
+    title: Count incrementally
+    body: Update the map as each line arrives so memory depends on distinct levels rather than total lines.
+  - id: api-approach
+    level: api-approach
+    title: Parse the second field
+    body: For this milestone, treat the whitespace-separated second token as the level and normalize it to uppercase.
+  - id: structural
+    level: structural
+    title: Ignore malformed lines
+    body: Empty lines and lines without a second token should not create undefined keys or crash the stream.
+solution:
+  title: Model solution
+  body: The model solution consumes async lines once, extracts the level token, and updates a map in place.
+  code: |
+    export async function countLevelsFromLines(lines: AsyncIterable<string>): Promise<ReadonlyMap<string, number>> {
+      const counts = new Map<string, number>()
+      for await (const line of lines) {
+        const level = line.trim().split(/\s+/)[1]?.toUpperCase()
+        if (level === undefined) {
+          continue
+        }
+
+        counts.set(level, (counts.get(level) ?? 0) + 1)
+      }
+      return counts
+    }
+commonWrongApproaches:
+  - Collecting all lines into an array before counting when no later operation needs the full array.
+  - Using the raw level token without normalization, which splits warn and WARN into different buckets.
+expectedSolutionCharacteristics:
+  - Consumes an async iterable with for await and updates a Map incrementally.
+  - Ignores malformed lines while normalizing valid level tokens to uppercase.
