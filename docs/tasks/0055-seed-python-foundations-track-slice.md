@@ -6,7 +6,7 @@ Content
 
 ## Status
 
-Planned
+In Progress
 
 ## Outcome
 
@@ -24,9 +24,17 @@ The content catalog gains the first serious Python beginner slice: a Python trac
 
 ## Verification
 
-- Content validator passes.
-- API curriculum endpoint returns the Python track, module, lesson, project, milestone, and exercise.
-- Python workspace generation and pytest runner tests pass once 0054 implementation tasks land.
+- Added `content/tracks/python/track.yml` with the first Python module, concept map, lesson, exercise, project, and milestone.
+- Added `Text as Data in Python` with beginner mental models, production transfer, testing/debugging strategy, common mistakes, exercise connection, project connection, review prompts, and source anchors.
+- Added `normalize-note-title-py` with starter code, visible tests, hidden tests, hints, model solution, common wrong approaches, and expected solution characteristics.
+- Added API tests for Python track/milestone visibility and Python pytest workspace generation.
+- Content validator and API tests are currently blocked by the existing .NET NuGet audit failure for `SQLitePCLRaw.lib.e_sqlite3` 2.1.11.
+- Python exercise execution through uv is verified for the first foundation exercise.
+
+## Remaining Work
+
+- Run content quality validation after the NuGet audit blocker is resolved.
+- Expand the Python foundations slice into the next small beginner milestone.
 
 ## Full Feature Later
 

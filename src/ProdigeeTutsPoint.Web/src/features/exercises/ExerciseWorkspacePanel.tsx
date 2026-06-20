@@ -131,6 +131,7 @@ export function ExerciseWorkspacePanel({
     setupSwiftSyntaxHighlighting(monaco)
     setupBackendLanguageProviders(monaco, 'csharp')
     setupBackendLanguageProviders(monaco, 'swift')
+    setupBackendLanguageProviders(monaco, 'python')
     void updateBackendDiagnostics(
       monaco,
       editor.getModel(),
@@ -219,6 +220,7 @@ export function ExerciseWorkspacePanel({
             <Editor
               beforeMount={setupEditorThemes}
               height="clamp(560px, calc(100vh - 330px), 820px)"
+              key={`${workspace.exerciseId}:${activeFile.path}`}
               language={monacoLanguageForPath(activeFile.path, workspace.language)}
               options={{
                 acceptSuggestionOnCommitCharacter: true,
@@ -389,14 +391,14 @@ function setupSwiftSyntaxHighlighting(monaco: Parameters<OnMount>[1]) {
   })
 }
 
-function setupBackendLanguageProviders(monaco: Parameters<OnMount>[1], languageId: 'csharp' | 'swift') {
+function setupBackendLanguageProviders(monaco: Parameters<OnMount>[1], languageId: 'csharp' | 'swift' | 'python') {
   if (backendProviderRegistrations.has(languageId)) {
     return
   }
 
   backendProviderRegistrations.add(languageId)
   monaco.languages.registerCompletionItemProvider(languageId, {
-    triggerCharacters: languageId === 'swift' ? ['.', '(', ','] : ['.', '(', ',', '<'],
+    triggerCharacters: languageId === 'csharp' ? ['.', '(', ',', '<'] : ['.', '(', ','],
     provideCompletionItems: async (
       _model: unknown,
       position: { lineNumber: number; column: number },

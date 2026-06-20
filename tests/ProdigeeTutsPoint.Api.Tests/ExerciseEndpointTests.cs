@@ -173,6 +173,135 @@ public sealed class ExerciseEndpointTests
     }
 
     [Fact]
+    public async Task WorkspaceEndpointGeneratesPythonPytestWorkspace()
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+        var profileId = $"python-workspace-{Guid.NewGuid():n}";
+
+        var workspace = await client.GetFromJsonAsync<ExerciseWorkspaceTestResponse>(
+            $"/api/exercises/normalize-note-title-py/workspace?profileId={profileId}",
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(workspace);
+        Assert.Equal("Python", workspace.Language);
+        Assert.Equal("python-pytest", workspace.Runtime);
+        Assert.Contains("Pyright", workspace.LanguageServiceMessage);
+        Assert.True(File.Exists(Path.Combine(workspace.WorkspacePath, "pyproject.toml")));
+        Assert.True(File.Exists(Path.Combine(workspace.WorkspacePath, "src", "note_titles.py")));
+        Assert.True(File.Exists(Path.Combine(workspace.WorkspacePath, "tests", "test_note_titles_visible.py")));
+        Assert.True(File.Exists(Path.Combine(workspace.WorkspacePath, "tests", "test_note_titles_hidden.py")));
+        Assert.Contains(workspace.Files, file =>
+            file.Path == "src/note_titles.py"
+            && file.Editable
+            && file.Content is not null
+            && file.Content.Contains("def normalize_title", StringComparison.Ordinal));
+        Assert.Contains(workspace.Files, file =>
+            file.Path == "tests/test_note_titles_visible.py"
+            && file.Role == "visible-test"
+            && file.Content is not null
+            && file.Content.Contains("from note_titles import normalize_title", StringComparison.Ordinal));
+        Assert.Contains(workspace.Files, file =>
+            file.Path == "tests/test_note_titles_hidden.py"
+            && file.Role == "hidden-test"
+            && file.Content is null);
+        Assert.Contains(workspace.Files, file =>
+            file.Path == "pyproject.toml"
+            && file.Role == "readonly"
+            && file.Content is not null
+            && file.Content.Contains("basedpyright", StringComparison.Ordinal)
+            && file.Content.Contains("uv sync", StringComparison.Ordinal));
+
+        var sourcePath = Path.Combine(workspace.WorkspacePath, "src", "note_titles.py");
+        await File.WriteAllTextAsync(sourcePath, "def normalize_title(raw_title: str) -> str:\n    return raw_title\n", TestContext.Current.CancellationToken);
+
+        workspace = await client.GetFromJsonAsync<ExerciseWorkspaceTestResponse>(
+            $"/api/exercises/normalize-note-title-py/workspace?profileId={profileId}",
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(workspace);
+        Assert.Contains(workspace.Files, file =>
+            file.Path == "src/note_titles.py"
+            && file.Content is not null
+            && file.Content.Contains("return raw_title", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task WorkspaceEndpointMigratesLegacyPythonWorkspaceGeneratedAsCSharpFallback()
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+        var profileId = $"python-legacy-workspace-{Guid.NewGuid():n}";
+
+        var workspace = await client.GetFromJsonAsync<ExerciseWorkspaceTestResponse>(
+            $"/api/exercises/normalize-note-title-py/workspace?profileId={profileId}",
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(workspace);
+        var legacySourceDirectory = Path.Combine(workspace.WorkspacePath, "src", "Exercise");
+        Directory.CreateDirectory(legacySourceDirectory);
+        await File.WriteAllTextAsync(
+            Path.Combine(legacySourceDirectory, "WordFrequencyAnalyzer.cs"),
+            """
+            def normalize_title(raw_title: str) -> str:
+                return raw_title.strip().lower()
+            """,
+            TestContext.Current.CancellationToken);
+        File.Delete(Path.Combine(workspace.WorkspacePath, "src", "note_titles.py"));
+
+        workspace = await client.GetFromJsonAsync<ExerciseWorkspaceTestResponse>(
+            $"/api/exercises/normalize-note-title-py/workspace?profileId={profileId}",
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(workspace);
+        Assert.Equal("python-pytest", workspace.Runtime);
+        Assert.Contains("Pyright", workspace.LanguageServiceMessage);
+        Assert.DoesNotContain(workspace.Files, file => file.Path.EndsWith(".cs", StringComparison.Ordinal));
+        Assert.Contains(workspace.Files, file =>
+            file.Path == "src/note_titles.py"
+            && file.Editable
+            && file.Content is not null
+            && file.Content.Contains("return raw_title.strip().lower()", StringComparison.Ordinal));
+        Assert.False(File.Exists(Path.Combine(workspace.WorkspacePath, "src", "Exercise", "WordFrequencyAnalyzer.cs")));
+        Assert.False(File.Exists(Path.Combine(workspace.WorkspacePath, "ExerciseWorkspace.sln")));
+    }
+
+    [Fact]
+    public async Task RunEndpointExecutesPythonVisibleAndHiddenTestsThroughUv()
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+        var profileId = $"python-runner-missing-uv-{Guid.NewGuid():n}";
+
+        var response = await client.PostAsJsonAsync(
+            "/api/exercises/normalize-note-title-py/run",
+            new ExerciseRunTestRequest(
+                profileId,
+                [
+                    new(
+                        "src/note_titles.py",
+                        """
+                        def normalize_title(raw_title: str) -> str:
+                            words = raw_title.split()
+                            if not words:
+                                raise ValueError("title must contain at least one non-space character")
+
+                            return " ".join(words).lower()
+                        """)
+                ]),
+            TestContext.Current.CancellationToken);
+
+        var result = await response.Content.ReadFromJsonAsync<ExerciseRunTestResponse>(
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(result);
+        Assert.Equal("Passed", result.Status);
+        Assert.True(result.VisiblePassed);
+        Assert.True(result.HiddenPassed);
+        Assert.DoesNotContain("uv is required", result.Diagnostics, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task RunEndpointExecutesTypeScriptVisibleAndHiddenTests()
     {
         await using var factory = new WebApplicationFactory<Program>();

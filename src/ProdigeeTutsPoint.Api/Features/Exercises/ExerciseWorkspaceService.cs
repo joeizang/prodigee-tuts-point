@@ -15,7 +15,8 @@ public sealed class ExerciseWorkspaceService(
     AppDbContext db,
     IExerciseRunner runner,
     ITypeScriptExerciseRunner typeScriptRunner,
-    ISwiftExerciseRunner swiftRunner)
+    ISwiftExerciseRunner swiftRunner,
+    IPythonExerciseRunner pythonRunner)
 {
     private const int OutputLimit = 24_000;
     private static readonly Regex DotnetLocationDiagnosticPattern = new(
@@ -29,6 +30,9 @@ public sealed class ExerciseWorkspaceService(
         RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
     private static readonly Regex SwiftDiagnosticPattern = new(
         @"^(?<file>.+?):(?<line>\d+):(?<column>\d+): (?<severity>error|warning): (?<message>.+)$",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
+    private static readonly Regex PythonDiagnosticPattern = new(
+        @"^(?<file>.+?):(?<line>\d+):(?<column>\d+): (?<rule>[A-Z]+[A-Z0-9]*\d*) (?<message>.+)$",
         RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
     private readonly IDeserializer deserializer = new DeserializerBuilder()
         .WithNamingConvention(CamelCaseNamingConvention.Instance)
@@ -137,13 +141,14 @@ public sealed class ExerciseWorkspaceService(
 
         var runWorkspacePath = CreateRunWorkspace(workspace.WorkspacePath, profileId, exerciseId);
         var definition = await ReadDefinitionForExerciseIdAsync(exerciseId, cancellationToken);
+        var runtime = RuntimeForDefinition(definition);
         CommandResult visible;
         CommandResult hidden;
         CommandResult analysis;
         IReadOnlyCollection<StaticAnalysisDiagnosticResponse> analysisDiagnostics;
         try
         {
-            if (definition.Workspace.Runtime.Equals("node-typescript", StringComparison.OrdinalIgnoreCase))
+            if (runtime.Equals("node-typescript", StringComparison.OrdinalIgnoreCase))
             {
                 analysis = await typeScriptRunner.RunStaticAnalysisAsync(runWorkspacePath, cancellationToken);
                 analysisDiagnostics = ParseTypeScriptStaticAnalysisDiagnostics(runWorkspacePath, analysis);
@@ -152,13 +157,22 @@ public sealed class ExerciseWorkspaceService(
                     ? await typeScriptRunner.RunHiddenTestsAsync(runWorkspacePath, cancellationToken)
                     : CommandResult.Skipped("Hidden tests were not run because visible tests failed.");
             }
-            else if (definition.Workspace.Runtime.Equals("swiftpm", StringComparison.OrdinalIgnoreCase))
+            else if (runtime.Equals("swiftpm", StringComparison.OrdinalIgnoreCase))
             {
                 analysis = await swiftRunner.RunStaticAnalysisAsync(runWorkspacePath, cancellationToken);
                 analysisDiagnostics = ParseSwiftStaticAnalysisDiagnostics(runWorkspacePath, analysis);
                 visible = await swiftRunner.RunVisibleTestsAsync(runWorkspacePath, cancellationToken);
                 hidden = visible.ExitCode == 0 && !visible.TimedOut && !visible.HasRunnerError
                     ? await swiftRunner.RunHiddenTestsAsync(runWorkspacePath, cancellationToken)
+                    : CommandResult.Skipped("Hidden tests were not run because visible tests failed.");
+            }
+            else if (runtime.Equals("python-pytest", StringComparison.OrdinalIgnoreCase))
+            {
+                analysis = await pythonRunner.RunStaticAnalysisAsync(runWorkspacePath, cancellationToken);
+                analysisDiagnostics = ParsePythonStaticAnalysisDiagnostics(runWorkspacePath, analysis);
+                visible = await pythonRunner.RunVisibleTestsAsync(runWorkspacePath, cancellationToken);
+                hidden = visible.ExitCode == 0 && !visible.TimedOut && !visible.HasRunnerError
+                    ? await pythonRunner.RunHiddenTestsAsync(runWorkspacePath, cancellationToken)
                     : CommandResult.Skipped("Hidden tests were not run because visible tests failed.");
             }
             else
@@ -445,7 +459,8 @@ public sealed class ExerciseWorkspaceService(
         ExerciseAttempt attempt,
         CancellationToken cancellationToken)
     {
-        var files = definition.Workspace.Runtime.ToLowerInvariant() switch
+        var runtime = RuntimeForDefinition(definition);
+        var files = runtime switch
         {
             "node-typescript" => new List<ExerciseWorkspaceFileResponse>
             {
@@ -462,6 +477,13 @@ public sealed class ExerciseWorkspaceService(
                 new("Tests/ExerciseHiddenTests/HiddenTests.swift", "hidden-test", false, null),
                 await FileResponseAsync(workspacePath, "Package.swift", "readonly", false, cancellationToken),
             },
+            "python-pytest" => new List<ExerciseWorkspaceFileResponse>
+            {
+                await FileResponseAsync(workspacePath, PythonEditablePath(definition), "editable", true, cancellationToken),
+                await FileResponseAsync(workspacePath, PythonVisibleTestPath(definition), "visible-test", false, cancellationToken),
+                new(PythonHiddenTestPath(definition), "hidden-test", false, null),
+                await FileResponseAsync(workspacePath, "pyproject.toml", "readonly", false, cancellationToken),
+            },
             _ => new List<ExerciseWorkspaceFileResponse>
             {
                 await FileResponseAsync(workspacePath, "src/Exercise/WordFrequencyAnalyzer.cs", "editable", true, cancellationToken),
@@ -476,9 +498,9 @@ public sealed class ExerciseWorkspaceService(
             exerciseId,
             title,
             language,
-            definition.Workspace.Runtime,
+            runtime,
             workspacePath,
-            LanguageServiceMessage(definition.Workspace.Runtime),
+            LanguageServiceMessage(runtime),
             files,
             attempt.Status,
             attempt.Output,
@@ -490,7 +512,8 @@ public sealed class ExerciseWorkspaceService(
         ExerciseContentDefinition definition,
         CancellationToken cancellationToken)
     {
-        if (definition.Workspace.Runtime.Equals("node-typescript", StringComparison.OrdinalIgnoreCase))
+        var runtime = RuntimeForDefinition(definition);
+        if (runtime.Equals("node-typescript", StringComparison.OrdinalIgnoreCase))
         {
             Directory.CreateDirectory(Path.Combine(workspacePath, "src"));
             Directory.CreateDirectory(Path.Combine(workspacePath, "tests"));
@@ -504,7 +527,7 @@ public sealed class ExerciseWorkspaceService(
             return;
         }
 
-        if (definition.Workspace.Runtime.Equals("swiftpm", StringComparison.OrdinalIgnoreCase))
+        if (runtime.Equals("swiftpm", StringComparison.OrdinalIgnoreCase))
         {
             Directory.CreateDirectory(Path.Combine(workspacePath, "Sources", "Exercise"));
             Directory.CreateDirectory(Path.Combine(workspacePath, "Tests", "ExerciseVisibleTests"));
@@ -515,6 +538,20 @@ public sealed class ExerciseWorkspaceService(
                 await ReadContentTextAsync(definition.Workspace.Starter, cancellationToken));
             WriteGeneratedFile(Path.Combine(workspacePath, "Tests", "ExerciseVisibleTests", "VisibleTests.swift"), SwiftVisibleTests(definition.Workspace.VisibleTest));
             WriteGeneratedFile(Path.Combine(workspacePath, "Tests", "ExerciseHiddenTests", "HiddenTests.swift"), SwiftHiddenTests(definition.Workspace.HiddenTest));
+            return;
+        }
+
+        if (runtime.Equals("python-pytest", StringComparison.OrdinalIgnoreCase))
+        {
+            Directory.CreateDirectory(Path.Combine(workspacePath, "src"));
+            Directory.CreateDirectory(Path.Combine(workspacePath, "tests"));
+            WriteGeneratedFile(Path.Combine(workspacePath, "pyproject.toml"), PythonProjectFile());
+            WriteFileIfMissing(
+                Path.Combine(workspacePath, PythonEditablePath(definition)),
+                await PythonStarterOrMigratedLegacySourceAsync(workspacePath, definition, cancellationToken));
+            WriteGeneratedFile(Path.Combine(workspacePath, PythonVisibleTestPath(definition)), definition.Workspace.VisibleTest.Trim() + Environment.NewLine);
+            WriteGeneratedFile(Path.Combine(workspacePath, PythonHiddenTestPath(definition)), definition.Workspace.HiddenTest.Trim() + Environment.NewLine);
+            CleanupObsoletePythonFallbackFiles(workspacePath);
             return;
         }
 
@@ -544,7 +581,150 @@ public sealed class ExerciseWorkspaceService(
             return "SwiftPM workspace generation, SourceKit-LSP IntelliSense, Swift diagnostics, formatting, and swift test execution are active for editable Swift files.";
         }
 
+        if (runtime.Equals("python-pytest", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Python project workspace generation is active. Pyright or basedpyright powers Python IntelliSense when installed, Ruff powers formatting and linting when installed, and pytest runs visible and hidden tests.";
+        }
+
         return "Project-aware Roslyn services are active for editable C# files: diagnostics, completions, hover, signature help, formatting, and code actions.";
+    }
+
+    private async Task<string> PythonStarterOrMigratedLegacySourceAsync(
+        string workspacePath,
+        ExerciseContentDefinition definition,
+        CancellationToken cancellationToken)
+    {
+        var legacyCSharpFallbackPath = Path.Combine(workspacePath, "src", "Exercise", "WordFrequencyAnalyzer.cs");
+        if (File.Exists(legacyCSharpFallbackPath))
+        {
+            var legacyContent = await File.ReadAllTextAsync(legacyCSharpFallbackPath, cancellationToken);
+            if (LooksLikePythonSource(legacyContent))
+            {
+                return legacyContent;
+            }
+        }
+
+        return await ReadContentTextAsync(definition.Workspace.Starter, cancellationToken);
+    }
+
+    private static bool LooksLikePythonSource(string content)
+    {
+        return content.Contains("def ", StringComparison.Ordinal)
+            || content.Contains("from ", StringComparison.Ordinal)
+            || content.Contains("import ", StringComparison.Ordinal);
+    }
+
+    private static void CleanupObsoletePythonFallbackFiles(string workspacePath)
+    {
+        foreach (var relativePath in new[]
+        {
+            "ExerciseWorkspace.sln",
+            ".editorconfig",
+            Path.Combine("src", "Exercise", "Exercise.csproj"),
+            Path.Combine("src", "Exercise", "WordFrequencyAnalyzer.cs"),
+            Path.Combine("tests", "Exercise.Tests", "Exercise.Tests.csproj"),
+            Path.Combine("tests", "Exercise.Tests", "VisibleTests.cs"),
+            Path.Combine("tests", "Exercise.Tests", "HiddenTests.cs"),
+        })
+        {
+            DeleteFileBestEffort(Path.Combine(workspacePath, relativePath));
+        }
+
+        DeleteDirectoryIfEmpty(Path.Combine(workspacePath, "src", "Exercise"));
+        DeleteDirectoryIfEmpty(Path.Combine(workspacePath, "tests", "Exercise.Tests"));
+    }
+
+    private static void DeleteFileBestEffort(string path)
+    {
+        try
+        {
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
+        catch (IOException)
+        {
+        }
+        catch (UnauthorizedAccessException)
+        {
+        }
+    }
+
+    private static void DeleteDirectoryIfEmpty(string path)
+    {
+        try
+        {
+            if (Directory.Exists(path) && !Directory.EnumerateFileSystemEntries(path).Any())
+            {
+                Directory.Delete(path);
+            }
+        }
+        catch (IOException)
+        {
+        }
+        catch (UnauthorizedAccessException)
+        {
+        }
+    }
+
+    private static string RuntimeForDefinition(ExerciseContentDefinition definition)
+    {
+        var runtime = definition.Workspace.Runtime;
+        if (!string.IsNullOrWhiteSpace(runtime) && !runtime.Equals("dotnet", StringComparison.OrdinalIgnoreCase))
+        {
+            return runtime.ToLowerInvariant();
+        }
+
+        var starter = definition.Workspace.Starter;
+        if (starter.EndsWith(".py", StringComparison.OrdinalIgnoreCase))
+        {
+            return "python-pytest";
+        }
+
+        if (starter.EndsWith(".ts", StringComparison.OrdinalIgnoreCase))
+        {
+            return "node-typescript";
+        }
+
+        if (starter.EndsWith(".swift", StringComparison.OrdinalIgnoreCase))
+        {
+            return "swiftpm";
+        }
+
+        return "dotnet";
+    }
+
+    private static string PythonEditablePath(ExerciseContentDefinition definition)
+    {
+        return Path.Combine("src", $"{PythonModuleName(definition)}.py").Replace('\\', '/');
+    }
+
+    private static string PythonVisibleTestPath(ExerciseContentDefinition definition)
+    {
+        return Path.Combine("tests", $"test_{PythonModuleName(definition)}_visible.py").Replace('\\', '/');
+    }
+
+    private static string PythonHiddenTestPath(ExerciseContentDefinition definition)
+    {
+        return Path.Combine("tests", $"test_{PythonModuleName(definition)}_hidden.py").Replace('\\', '/');
+    }
+
+    private static string PythonModuleName(ExerciseContentDefinition definition)
+    {
+        var stem = Path.GetFileNameWithoutExtension(definition.Workspace.Starter);
+        if (string.IsNullOrWhiteSpace(stem))
+        {
+            return "exercise";
+        }
+
+        var sanitized = Regex.Replace(stem, "[^a-zA-Z0-9_]", "_");
+        if (string.IsNullOrWhiteSpace(sanitized) || char.IsDigit(sanitized[0]))
+        {
+            return $"exercise_{sanitized}";
+        }
+
+        return sanitized;
     }
 
     private static async Task<ExerciseWorkspaceFileResponse> FileResponseAsync(
@@ -754,7 +934,7 @@ public sealed class ExerciseWorkspaceService(
 
     private static bool IsGeneratedBuildDirectory(string segment)
     {
-        return segment is "bin" or "obj" or "node_modules" or ".vite" or ".build";
+        return segment is "bin" or "obj" or "node_modules" or ".vite" or ".build" or "__pycache__" or ".pytest_cache" or ".ruff_cache" or ".venv";
     }
 
     private static string SafeSegment(string value)
@@ -939,6 +1119,41 @@ public sealed class ExerciseWorkspaceService(
             .Cast<StaticAnalysisDiagnosticResponse>()
             .DistinctBy(diagnostic => (diagnostic.RuleId, diagnostic.FilePath, diagnostic.Line, diagnostic.Column, diagnostic.Message))
             .ToArray();
+    }
+
+    private static IReadOnlyCollection<StaticAnalysisDiagnosticResponse> ParsePythonStaticAnalysisDiagnostics(
+        string workspacePath,
+        CommandResult analysis)
+    {
+        var lines = $"{analysis.Output}\n{analysis.Diagnostics}".Split(["\r\n", "\n"], StringSplitOptions.RemoveEmptyEntries);
+        return lines
+            .Select(line => ParsePythonStaticAnalysisDiagnostic(workspacePath, line.Trim()))
+            .Where(diagnostic => diagnostic is not null)
+            .Cast<StaticAnalysisDiagnosticResponse>()
+            .DistinctBy(diagnostic => (diagnostic.RuleId, diagnostic.FilePath, diagnostic.Line, diagnostic.Column, diagnostic.Message))
+            .ToArray();
+    }
+
+    private static StaticAnalysisDiagnosticResponse? ParsePythonStaticAnalysisDiagnostic(string workspacePath, string line)
+    {
+        var match = PythonDiagnosticPattern.Match(line);
+        if (!match.Success)
+        {
+            return null;
+        }
+
+        var filePath = match.Groups["file"].Value;
+        var relativePath = Path.IsPathRooted(filePath)
+            ? Path.GetRelativePath(workspacePath, filePath)
+            : filePath;
+
+        return new StaticAnalysisDiagnosticResponse(
+            match.Groups["rule"].Value,
+            "warning",
+            match.Groups["message"].Value,
+            relativePath,
+            int.Parse(match.Groups["line"].Value),
+            int.Parse(match.Groups["column"].Value));
     }
 
     private static StaticAnalysisDiagnosticResponse? ParseSwiftStaticAnalysisDiagnostic(string workspacePath, string line)
@@ -1143,6 +1358,42 @@ public sealed class ExerciseWorkspaceService(
           },
           "devDependencies": {}
         }
+        """;
+    }
+
+    private static string PythonProjectFile()
+    {
+        return """
+        # Dependencies are provided by the repository-level uv environment.
+        # Run `uv sync` from the repository root; do not install packages in generated exercise workspaces.
+
+        [project]
+        name = "prodigee-python-exercise"
+        version = "0.0.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [dependency-groups]
+        dev = [
+          "pytest",
+          "ruff",
+          "basedpyright"
+        ]
+
+        [tool.pytest.ini_options]
+        pythonpath = ["src"]
+
+        [tool.ruff]
+        line-length = 100
+        target-version = "py312"
+
+        [tool.basedpyright]
+        typeCheckingMode = "standard"
+        pythonVersion = "3.12"
+        include = ["src", "tests"]
+        reportMissingImports = "warning"
+        reportUnknownMemberType = "warning"
+        reportUnknownParameterType = "warning"
         """;
     }
 

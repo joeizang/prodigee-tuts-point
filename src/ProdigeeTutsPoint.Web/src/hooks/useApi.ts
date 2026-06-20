@@ -8,10 +8,16 @@ export function useApi<T>(url: string | null) {
 
   useEffect(() => {
     if (url === null) {
+      setData(null)
+      setError(null)
+      setIsLoading(false)
       return
     }
 
     const controller = new AbortController()
+    setData(null)
+    setError(null)
+    setIsLoading(true)
 
     getJson<T>(url, controller.signal)
       .then((response) => {

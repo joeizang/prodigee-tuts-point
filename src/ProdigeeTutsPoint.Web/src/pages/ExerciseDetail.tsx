@@ -57,6 +57,14 @@ export function ExerciseDetail({ profile, theme }: { profile: LocalProfile; them
   const assistance = assistanceOverride ?? initialAssistance ?? null
   const attempts = attemptsOverride ?? initialAttempts ?? []
 
+  useEffect(() => {
+    setSelectedPath(null)
+    setFileEdits({})
+    setRunResult(null)
+    setAssistanceOverride(null)
+    setAttemptsOverride(null)
+  }, [exerciseId])
+
   const saveActiveFile = useCallback(async () => {
     if (!activeFile?.editable) {
       return

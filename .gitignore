@@ -3,6 +3,8 @@ obj/
 node_modules/
 dist/
 .vite/
+.venv/
+.uv-cache/
 .DS_Store
 *.user
 *.suo

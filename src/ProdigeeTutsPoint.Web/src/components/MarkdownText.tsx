@@ -86,7 +86,17 @@ function highlightCode(code: string, language: string) {
     return highlightCSharpCode(code)
   }
 
+  if (language === 'python') {
+    return highlightPythonCode(code)
+  }
+
   return escapeHtml(code)
+}
+
+function highlightPythonCode(code: string) {
+  const tokenPattern =
+    /(#.*|"""[\s\S]*?"""|'''[\s\S]*?'''|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\b(?:def|class|return|raise|if|elif|else|for|while|in|not|and|or|is|None|True|False|import|from|as|with|try|except|finally|pass|break|continue|lambda|async|await|str|int|bool|float|list|dict|set|tuple)\b|\b[A-Z][A-Za-z0-9_]*\b|\b\d+(?:\.\d+)?\b)/g
+  return highlightWithPattern(code, tokenPattern)
 }
 
 function highlightCSharpCode(code: string) {
@@ -161,6 +171,9 @@ function normalizeCodeLanguage(language: string) {
     case 'cs':
     case 'csharp':
       return 'csharp'
+    case 'py':
+    case 'python':
+      return 'python'
     case 'ts':
     case 'tsx':
     case 'typescript':
@@ -195,6 +208,16 @@ function inferSupportedCodeLanguage(code: string) {
     )
   ) {
     return 'typescript'
+  }
+
+  if (
+    /\bdef\s+[A-Za-z_][A-Za-z0-9_]*\s*\([^)]*\)\s*(?:->\s*[A-Za-z_][A-Za-z0-9_[\], |.]*)?:/.test(
+      code,
+    )
+    || /\bfrom\s+[A-Za-z_][A-Za-z0-9_.]*\s+import\s+/.test(code)
+    || /\bimport\s+(?:pytest|fastapi|pydantic|typing)\b/.test(code)
+  ) {
+    return 'python'
   }
 
   if (

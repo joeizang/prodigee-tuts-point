@@ -7,4 +7,9 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
   </PropertyGroup>
+
+  <ItemGroup>
+    <!-- SQLitePCLRaw.lib.e_sqlite3 CVE-2025-6965 currently has no patched NuGet version. Keep audit enabled and suppress only this advisory until an upstream fixed package exists. -->
+    <NuGetAuditSuppress Include="https://github.com/advisories/GHSA-2m69-gcr7-jv3q" />
+  </ItemGroup>
 </Project>

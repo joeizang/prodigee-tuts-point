@@ -18,7 +18,8 @@ namespace ProdigeeTutsPoint.Api.Features.Exercises;
 public sealed partial class ExerciseLanguageService(
     ExerciseWorkspaceService workspaces,
     CSharpLspBridge lspBridge,
-    SwiftLspBridge swiftLspBridge)
+    SwiftLspBridge swiftLspBridge,
+    PythonLspBridge pythonLspBridge)
 {
     private const int CompletionLimit = 250;
     private const int CodeActionLimit = 20;
@@ -57,6 +58,22 @@ public sealed partial class ExerciseLanguageService(
 
             EnsureEditableFile(workspace, request.Path);
             return await swiftLspBridge.GetDiagnosticsAsync(
+                workspace.WorkspacePath,
+                request.Path,
+                request.Content,
+                cancellationToken);
+        }
+
+        if (IsPythonFile(request.Path))
+        {
+            var workspace = await workspaces.EnsureWorkspaceAsync(request.ProfileId, exerciseId, cancellationToken);
+            if (workspace is null)
+            {
+                return null;
+            }
+
+            EnsureEditableFile(workspace, request.Path);
+            return await pythonLspBridge.GetDiagnosticsAsync(
                 workspace.WorkspacePath,
                 request.Path,
                 request.Content,
@@ -158,6 +175,24 @@ public sealed partial class ExerciseLanguageService(
 
             EnsureEditableFile(workspace, request.Path);
             return await swiftLspBridge.GetCompletionsAsync(
+                workspace.WorkspacePath,
+                request.Path,
+                request.Content,
+                request.LineNumber,
+                request.Column,
+                cancellationToken);
+        }
+
+        if (IsPythonFile(request.Path))
+        {
+            var workspace = await workspaces.EnsureWorkspaceAsync(request.ProfileId, exerciseId, cancellationToken);
+            if (workspace is null)
+            {
+                return null;
+            }
+
+            EnsureEditableFile(workspace, request.Path);
+            return await pythonLspBridge.GetCompletionsAsync(
                 workspace.WorkspacePath,
                 request.Path,
                 request.Content,
@@ -268,6 +303,24 @@ public sealed partial class ExerciseLanguageService(
                 cancellationToken);
         }
 
+        if (IsPythonFile(request.Path))
+        {
+            var workspace = await workspaces.EnsureWorkspaceAsync(request.ProfileId, exerciseId, cancellationToken);
+            if (workspace is null)
+            {
+                return null;
+            }
+
+            EnsureEditableFile(workspace, request.Path);
+            return await pythonLspBridge.GetHoverAsync(
+                workspace.WorkspacePath,
+                request.Path,
+                request.Content,
+                request.LineNumber,
+                request.Column,
+                cancellationToken);
+        }
+
         using var context = await CreateContextAsync(exerciseId, request.ProfileId, request.Path, request.Content, cancellationToken);
         if (context is null)
         {
@@ -311,6 +364,24 @@ public sealed partial class ExerciseLanguageService(
 
             EnsureEditableFile(workspace, request.Path);
             return await swiftLspBridge.GetSignatureHelpAsync(
+                workspace.WorkspacePath,
+                request.Path,
+                request.Content,
+                request.LineNumber,
+                request.Column,
+                cancellationToken);
+        }
+
+        if (IsPythonFile(request.Path))
+        {
+            var workspace = await workspaces.EnsureWorkspaceAsync(request.ProfileId, exerciseId, cancellationToken);
+            if (workspace is null)
+            {
+                return null;
+            }
+
+            EnsureEditableFile(workspace, request.Path);
+            return await pythonLspBridge.GetSignatureHelpAsync(
                 workspace.WorkspacePath,
                 request.Path,
                 request.Content,
@@ -384,6 +455,26 @@ public sealed partial class ExerciseLanguageService(
                 cancellationToken);
         }
 
+        if (IsPythonFile(request.Path))
+        {
+            var workspace = await workspaces.EnsureWorkspaceAsync(request.ProfileId, exerciseId, cancellationToken);
+            if (workspace is null)
+            {
+                return null;
+            }
+
+            EnsureEditableFile(workspace, request.Path);
+            return await pythonLspBridge.GetCodeActionsAsync(
+                workspace.WorkspacePath,
+                request.Path,
+                request.Content,
+                request.StartLineNumber,
+                request.StartColumn,
+                request.EndLineNumber,
+                request.EndColumn,
+                cancellationToken);
+        }
+
         using var context = await CreateContextAsync(exerciseId, request.ProfileId, request.Path, request.Content, cancellationToken);
         if (context is null)
         {
@@ -433,6 +524,22 @@ public sealed partial class ExerciseLanguageService(
 
             EnsureEditableFile(workspace, request.Path);
             return await swiftLspBridge.FormatAsync(
+                workspace.WorkspacePath,
+                request.Path,
+                request.Content,
+                cancellationToken);
+        }
+
+        if (IsPythonFile(request.Path))
+        {
+            var workspace = await workspaces.EnsureWorkspaceAsync(request.ProfileId, exerciseId, cancellationToken);
+            if (workspace is null)
+            {
+                return null;
+            }
+
+            EnsureEditableFile(workspace, request.Path);
+            return await pythonLspBridge.FormatAsync(
                 workspace.WorkspacePath,
                 request.Path,
                 request.Content,
@@ -1011,6 +1118,11 @@ public sealed partial class ExerciseLanguageService(
     private static bool IsSwiftFile(string path)
     {
         return path.EndsWith(".swift", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsPythonFile(string path)
+    {
+        return path.EndsWith(".py", StringComparison.OrdinalIgnoreCase);
     }
 
     private static async Task<Solution> AddAnalyzerConfigDocumentAsync(

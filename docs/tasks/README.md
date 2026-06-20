@@ -64,6 +64,6 @@ They are ordered roughly by dependency. Each task should leave the app in a more
 51. 0051 Seed the ASP.NET Core foundation track slice - Planned
 52. 0052 Seed the Node.js Servers with Fastify foundation track slice - Planned
 53. 0053 Seed the Server-Side Swift with Vapor foundation track slice - Planned
-54. [0054 Plan Python/FastAPI language-service and runner architecture](./0054-plan-python-fastapi-language-service-and-runner-architecture.md) - Planned
-55. [0055 Seed Python foundations track slice](./0055-seed-python-foundations-track-slice.md) - Planned
+54. [0054 Plan Python/FastAPI language-service and runner architecture](./0054-plan-python-fastapi-language-service-and-runner-architecture.md) - In Progress
+55. [0055 Seed Python foundations track slice](./0055-seed-python-foundations-track-slice.md) - In Progress
 56. [0056 Seed FastAPI foundation track slice](./0056-seed-fastapi-foundation-track-slice.md) - Planned

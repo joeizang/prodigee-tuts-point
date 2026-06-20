@@ -6,7 +6,7 @@ Architecture
 
 ## Status
 
-Planned
+In Progress
 
 ## Outcome
 
@@ -24,8 +24,17 @@ Python and FastAPI exercises will use real generated Python workspaces, pytest e
 ## Verification
 
 - ADR added: `docs/adr/0007-python-fastapi-pyright-ruff-workspaces.md`.
-- Local or repo-managed Python tooling path identified.
-- Spike proves a generated workspace can run pytest and expose package-aware Pyright/basedpyright completions for an unsaved Monaco buffer.
+- Python 3.14 is available locally.
+- `pytest`, `ruff`, `basedpyright-langserver`, `pyright-langserver`, FastAPI, and Pydantic are managed through the repository-level uv project rather than installed globally or inside generated exercise workspaces.
+- `uv` is installed locally and `uv.lock` captures the repository-level Python tool environment.
+- Added `python-pytest` workspace generation, Python runner hooks, Ruff/Pyright-oriented project files, and backend Monaco routing for editable `.py` files.
+- Added `PythonLspBridge` using `uv run --project <repo> basedpyright-langserver --stdio`, with Ruff formatting through `uv run --project <repo> ruff format` and explicit setup warnings when uv/tools are missing.
+- Verified Python visible and hidden pytest execution through uv for the first Python foundation exercise.
+
+## Remaining Work
+
+- Run a live Monaco smoke proving completions, diagnostics, hover, signature help, formatting, and package-aware imports.
+- Add FastAPI dependency-profile workspaces after the Python foundations runner is verified.
 
 ## Full Feature Later
 

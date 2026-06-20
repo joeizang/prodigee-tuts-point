@@ -1,0 +1,62 @@
+id: normalize-note-title-py
+title: NormalizeNoteTitle
+kind: focused
+workspace:
+  runtime: python-pytest
+  starter: tracks/python/exercises/normalize-note-title-py/note_titles.py
+  entryPoint: normalize_title
+  visibleTest: |
+    from note_titles import normalize_title
+
+
+    def test_trims_and_lowercases_a_normal_title() -> None:
+        assert normalize_title("  Learn Python  ") == "learn python"
+
+
+    def test_collapses_repeated_internal_spaces() -> None:
+        assert normalize_title("Fast   API   Later") == "fast api later"
+  hiddenTest: |
+    import pytest
+
+    from note_titles import normalize_title
+
+
+    def test_collapses_tabs_and_newlines() -> None:
+        raw_title = f"{chr(9)}Learn{chr(10)}Python{chr(9)}Well "
+        assert normalize_title(raw_title) == "learn python well"
+
+
+    def test_rejects_blank_titles() -> None:
+        with pytest.raises(ValueError, match="title"):
+            normalize_title(f" {chr(9)}{chr(10)} ")
+hints:
+  - id: conceptual
+    level: conceptual
+    title: Return a new value
+    body: Python strings are immutable. String methods such as strip, split, join, and lower produce values you need to return or assign.
+  - id: api-approach
+    level: api-approach
+    title: Let split handle whitespace
+    body: Calling split with no argument treats spaces, tabs, and newlines as separators and collapses repeated whitespace for you.
+  - id: structural
+    level: structural
+    title: Check before joining
+    body: Split the raw title into words, reject the empty list, then join the words with one space and lowercase the result.
+solution:
+  title: Model solution
+  body: The model solution states the text boundary directly. It uses Python's whitespace-aware split behavior, rejects blank titles before joining, and returns a normalized string without side effects.
+  code: |
+    def normalize_title(raw_title: str) -> str:
+        words = raw_title.split()
+        if not words:
+            raise ValueError("title must contain at least one non-space character")
+
+        return " ".join(words).lower()
+commonWrongApproaches:
+  - Calling raw_title.strip() without returning or assigning the stripped value.
+  - Using split(" "), which leaves empty chunks for repeated spaces and does not handle all whitespace the same way.
+  - Returning an empty string for blank input instead of raising ValueError.
+expectedSolutionCharacteristics:
+  - Uses the function argument rather than hardcoded visible-test strings.
+  - "Keeps the function pure: no input calls, no print calls, and no file access."
+  - Raises ValueError with a message that mentions the title when the input is blank.

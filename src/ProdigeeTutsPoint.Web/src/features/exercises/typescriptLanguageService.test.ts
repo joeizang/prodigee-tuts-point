@@ -14,6 +14,7 @@ describe('TypeScript Monaco language service setup', () => {
     expect(monacoLanguageForPath('package.json', 'TypeScript')).toBe('json')
     expect(monacoLanguageForPath('src/Exercise/Analyzer.cs', 'CSharp')).toBe('csharp')
     expect(monacoLanguageForPath('Sources/Exercise/Exercise.swift', 'Swift')).toBe('swift')
+    expect(monacoLanguageForPath('src/note_titles.py', 'Python')).toBe('python')
     expect(monacoLanguageForPath('README.md', 'TypeScript')).toBe('typescript')
   })
 
@@ -43,6 +44,14 @@ describe('TypeScript Monaco language service setup', () => {
         content: 'namespace Exercise;',
         editable: true,
         path: 'src/Exercise/WordFrequencyAnalyzer.cs',
+        role: 'editable',
+      }),
+    ).toBe(true)
+    expect(
+      shouldUseBackendLanguageService({
+        content: 'def normalize_title(raw_title: str) -> str: ...',
+        editable: true,
+        path: 'src/note_titles.py',
         role: 'editable',
       }),
     ).toBe(true)

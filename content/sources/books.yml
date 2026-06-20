@@ -64,3 +64,23 @@ books:
     author: Kodeco
     publisher: Kodeco
     ownership: Owned
+  - id: python-official-tutorial
+    title: The Python Tutorial
+    author: Python Software Foundation
+    publisher: Python Software Foundation
+    ownership: FreeOnline
+  - id: python-standard-library
+    title: The Python Standard Library
+    author: Python Software Foundation
+    publisher: Python Software Foundation
+    ownership: FreeOnline
+  - id: pytest-docs
+    title: pytest Documentation
+    author: pytest-dev
+    publisher: pytest-dev
+    ownership: FreeOnline
+  - id: fastapi-docs
+    title: FastAPI Documentation
+    author: Sebastian Ramirez and contributors
+    publisher: FastAPI
+    ownership: FreeOnline

@@ -1,0 +1,92 @@
+id: python
+title: Python and FastAPI
+slug: python
+description: Beginner-to-proficient Python and FastAPI through methodical language foundations, pytest, real project workspaces, APIs, persistence, validation, and production design.
+language: Python
+contentVersion: 2026.06.20
+concepts:
+  - id: py-names-and-objects
+    title: Names and Objects
+    description: Understanding Python names as bindings to objects rather than boxes that contain values.
+  - id: py-strings
+    title: Text as Data
+    description: Working with immutable strings, whitespace, casing, and explicit text contracts.
+  - id: py-functions
+    title: Functions and Return Values
+    description: Writing small functions with clear inputs, outputs, exceptions, and type hints.
+  - id: py-pytest-basics
+    title: pytest Basics
+    description: Using assertions and exception tests to turn beginner mental models into executable evidence.
+  - id: py-editor-feedback
+    title: Editor Feedback
+    description: Using Pyright, Ruff, diagnostics, hover, and formatting as part of the learning loop.
+  - id: fastapi-request-models
+    title: FastAPI Request Models
+    description: Future concept for connecting plain Python type hints and validation to FastAPI request bodies.
+modules:
+  - id: py-notes-foundations
+    title: Python Notes Foundations
+    description: Build the first pure functions for py-notes-cli while learning Python syntax, strings, functions, tests, and editor feedback from zero.
+    order: 1
+lessons:
+  - id: text-as-data-python
+    moduleId: py-notes-foundations
+    title: Text as Data in Python
+    summary: "Learn Python's first text mental model: names, immutable strings, return values, whitespace contracts, tests, and editor feedback."
+    markdown: tracks/python/lessons/text-as-data-python.md
+    order: 1
+    concepts:
+      - py-names-and-objects
+      - py-strings
+      - py-functions
+      - py-pytest-basics
+      - py-editor-feedback
+    sourceReferences:
+      - book: python-official-tutorial
+        chapter: An Informal Introduction to Python
+        topic: strings, names, lists, and basic expressions
+        usage: QualityAnchor
+      - book: python-official-tutorial
+        chapter: Defining Functions
+        topic: function bodies, return values, and arguments
+        usage: QualityAnchor
+      - book: pytest-docs
+        chapter: How to write and report assertions in tests
+        topic: plain assert statements and exception checks
+        usage: QualityAnchor
+exercises:
+  - id: normalize-note-title-py
+    moduleId: py-notes-foundations
+    title: NormalizeNoteTitle
+    summary: Normalize a note title with Python string methods, explicit blank-input failure, and pytest-visible behavior.
+    directory: tracks/python/exercises/normalize-note-title-py
+    order: 1
+    concepts:
+      - py-names-and-objects
+      - py-strings
+      - py-functions
+      - py-pytest-basics
+projects:
+  - id: py-notes-cli
+    title: py-notes-cli
+    slug: py-notes-cli
+    description: Build a small notes command-line tool while learning Python from first principles through tests, text contracts, JSON storage, and deterministic output.
+    milestones:
+      - id: py-notes-title-normalization
+        title: Title normalization
+        summary: Define and implement the first Python text boundary for reusable note-title handling.
+        markdown: tracks/python/projects/py-notes-cli/title-normalization.md
+        order: 1
+        lessons:
+          - text-as-data-python
+        exercises:
+          - normalize-note-title-py
+        sourceReferences:
+          - book: python-official-tutorial
+            chapter: An Informal Introduction to Python
+            topic: strings and lists
+            usage: QualityAnchor
+          - book: pytest-docs
+            chapter: Getting started
+            topic: assertions and exception tests
+            usage: QualityAnchor

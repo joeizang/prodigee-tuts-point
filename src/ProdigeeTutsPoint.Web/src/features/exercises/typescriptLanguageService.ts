@@ -39,6 +39,10 @@ export function monacoLanguageForPath(path: string, fallbackLanguage: string) {
     return 'swift'
   }
 
+  if (normalized.endsWith('.py')) {
+    return 'python'
+  }
+
   return fallbackLanguage.toLowerCase() === 'typescript' ? 'typescript' : 'plaintext'
 }
 
@@ -141,7 +145,7 @@ export function shouldUseBackendLanguageService(file: ExerciseWorkspaceFile | nu
   }
 
   const path = file.path.toLowerCase()
-  return path.endsWith('.cs') || path.endsWith('.swift')
+  return path.endsWith('.cs') || path.endsWith('.swift') || path.endsWith('.py')
 }
 
 export function shouldUseBackendCSharpLanguageService(file: ExerciseWorkspaceFile | null) {

@@ -13,6 +13,8 @@ public sealed class ContentQualityValidator
         "c#",
         "csharp",
         "cs",
+        "py",
+        "python",
         "swift",
         "ts",
         "tsx",
@@ -239,7 +241,10 @@ public sealed class ContentQualityValidator
         }
         catch (Exception exception) when (exception is InvalidOperationException or YamlDotNet.Core.YamlException)
         {
-            diagnostics.Add(new ContentQualityDiagnostic("YamlParse", path, $"Could not parse YAML: {exception.Message}"));
+            var detail = exception.InnerException is null
+                ? exception.Message
+                : $"{exception.Message}: {exception.InnerException.Message}";
+            diagnostics.Add(new ContentQualityDiagnostic("YamlParse", path, $"Could not parse YAML: {detail}"));
             return default;
         }
     }

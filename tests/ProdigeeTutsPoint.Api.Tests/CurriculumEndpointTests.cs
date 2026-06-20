@@ -19,6 +19,27 @@ public sealed class CurriculumEndpointTests
         Assert.Contains(tracks, track => track.Id == "csharp" && track.Title == "C# Language");
         Assert.Contains(tracks, track => track.Id == "typescript" && track.Title == "TypeScript and Node.js Servers");
         Assert.Contains(tracks, track => track.Id == "swift" && track.Title == "Swift and Server-Side Swift");
+        Assert.Contains(tracks, track => track.Id == "python" && track.Title == "Python and FastAPI");
+    }
+
+    [Fact]
+    public async Task PythonFoundationMilestoneReturnsLessonsExercisesAndSources()
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+
+        var milestone = await client.GetFromJsonAsync<MilestoneDetailTestResponse>(
+            "/api/curriculum/projects/py-notes-cli/milestones/py-notes-title-normalization",
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(milestone);
+        Assert.Equal("Title normalization", milestone.Title);
+        Assert.Single(milestone.Lessons);
+        Assert.Single(milestone.Exercises);
+        Assert.Contains(milestone.Lessons, lesson => lesson.Id == "text-as-data-python");
+        Assert.Contains(milestone.Exercises, exercise => exercise.Id == "normalize-note-title-py" && exercise.Language == "Python");
+        Assert.NotEmpty(milestone.Sources);
+        Assert.Contains("Normalize note titles", milestone.Markdown, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
