@@ -20,6 +20,18 @@ concepts:
   - id: py-validation
     title: Validation Boundaries
     description: Separating outside text from trusted application data with explicit parsing and errors.
+  - id: py-file-io
+    title: File I/O Boundaries
+    description: Reading and writing UTF-8 text with pathlib while keeping file effects outside pure core logic.
+  - id: py-json-storage
+    title: JSON Storage
+    description: Converting Python dictionaries and lists to deterministic JSON and validating loaded records.
+  - id: py-cli-boundaries
+    title: CLI Command Boundaries
+    description: Parsing command arguments and rendering command output without mixing UI concerns into core rules.
+  - id: py-command-runner
+    title: Command Runner Composition
+    description: Composing parsing, validation, storage, and rendering helpers into one testable application workflow.
   - id: py-pytest-basics
     title: pytest Basics
     description: Using assertions and exception tests to turn beginner mental models into executable evidence.
@@ -86,6 +98,109 @@ lessons:
         chapter: How to write and report assertions in tests
         topic: testing returned lists and exception paths
         usage: QualityAnchor
+  - id: files-paths-utf8-python
+    moduleId: py-notes-foundations
+    title: Files, Paths, and UTF-8 Text
+    summary: Learn pathlib, explicit UTF-8 file boundaries, and why file effects should wrap tested pure functions.
+    markdown: tracks/python/lessons/files-paths-utf8-python.md
+    order: 3
+    concepts:
+      - py-functions
+      - py-validation
+      - py-file-io
+      - py-pytest-basics
+      - py-editor-feedback
+    sourceReferences:
+      - book: python-standard-library
+        chapter: pathlib
+        topic: Path objects and text file operations
+        usage: QualityAnchor
+      - book: python-standard-library
+        chapter: Built-in Functions
+        topic: open, text mode, and explicit encodings
+        usage: QualityAnchor
+      - book: pytest-docs
+        chapter: How to use temporary directories and files in tests
+        topic: tmp_path for isolated file tests
+        usage: QualityAnchor
+  - id: json-storage-python
+    moduleId: py-notes-foundations
+    title: JSON as a Storage Boundary
+    summary: Store notes as JSON-safe dictionaries and validate loaded data before trusting it.
+    markdown: tracks/python/lessons/json-storage-python.md
+    order: 4
+    concepts:
+      - py-collections
+      - py-validation
+      - py-file-io
+      - py-json-storage
+      - py-pytest-basics
+    sourceReferences:
+      - book: python-standard-library
+        chapter: json
+        topic: dumps, loads, indentation, and decoded Python values
+        usage: QualityAnchor
+      - book: python-official-tutorial
+        chapter: Data Structures
+        topic: dictionaries, lists, and nested records
+        usage: QualityAnchor
+      - book: pytest-docs
+        chapter: How to write and report assertions in tests
+        topic: asserting nested dictionaries and lists
+        usage: QualityAnchor
+  - id: cli-command-boundaries-python
+    moduleId: py-notes-foundations
+    title: CLI Command Boundaries
+    summary: Parse command arguments into request data and render deterministic output while keeping the core reusable for FastAPI.
+    markdown: tracks/python/lessons/cli-command-boundaries-python.md
+    order: 5
+    concepts:
+      - py-functions
+      - py-collections
+      - py-validation
+      - py-cli-boundaries
+      - py-pytest-basics
+    sourceReferences:
+      - book: python-standard-library
+        chapter: argparse
+        topic: command-line parser structure and argument values
+        usage: QualityAnchor
+      - book: python-official-tutorial
+        chapter: More on Defining Functions
+        topic: keyword-like request data and clear function boundaries
+        usage: QualityAnchor
+      - book: pytest-docs
+        chapter: How to write and report assertions in tests
+        topic: testing command parsing and output strings
+        usage: QualityAnchor
+  - id: command-runner-composition-python
+    moduleId: py-notes-foundations
+    title: Command Runner Composition
+    summary: Compose pure helpers and storage boundaries into a real add-command workflow without losing testability.
+    markdown: tracks/python/lessons/command-runner-composition-python.md
+    order: 6
+    concepts:
+      - py-functions
+      - py-collections
+      - py-validation
+      - py-file-io
+      - py-json-storage
+      - py-cli-boundaries
+      - py-command-runner
+      - py-pytest-basics
+    sourceReferences:
+      - book: python-official-tutorial
+        chapter: Modules
+        topic: composing functions into reusable modules
+        usage: QualityAnchor
+      - book: python-standard-library
+        chapter: json
+        topic: deterministic JSON writes and decoded values
+        usage: QualityAnchor
+      - book: pytest-docs
+        chapter: How to use temporary directories and files in tests
+        topic: testing workflows with tmp_path
+        usage: QualityAnchor
 exercises:
   - id: normalize-note-title-py
     moduleId: py-notes-foundations
@@ -109,6 +224,71 @@ exercises:
       - py-functions
       - py-collections
       - py-validation
+      - py-pytest-basics
+  - id: serialize-note-record-py
+    moduleId: py-notes-foundations
+    title: SerializeNoteRecord
+    summary: Build a JSON-safe note dictionary from trusted title, body, and tags while preserving deterministic structure.
+    directory: tracks/python/exercises/serialize-note-record-py
+    order: 3
+    concepts:
+      - py-strings
+      - py-functions
+      - py-collections
+      - py-validation
+      - py-json-storage
+      - py-pytest-basics
+  - id: load-notes-file-py
+    moduleId: py-notes-foundations
+    title: LoadNotesFile
+    summary: Read a UTF-8 JSON notes file, validate each record, and return trusted note dictionaries.
+    directory: tracks/python/exercises/load-notes-file-py
+    order: 4
+    concepts:
+      - py-collections
+      - py-validation
+      - py-file-io
+      - py-json-storage
+      - py-pytest-basics
+  - id: parse-add-command-py
+    moduleId: py-notes-foundations
+    title: ParseAddCommand
+    summary: Parse py-notes add command arguments into a validated request dictionary without performing file or console I/O.
+    directory: tracks/python/exercises/parse-add-command-py
+    order: 5
+    concepts:
+      - py-strings
+      - py-functions
+      - py-collections
+      - py-validation
+      - py-cli-boundaries
+      - py-pytest-basics
+  - id: render-note-list-py
+    moduleId: py-notes-foundations
+    title: RenderNoteList
+    summary: Render trusted note records into deterministic CLI list output without reading files or printing.
+    directory: tracks/python/exercises/render-note-list-py
+    order: 6
+    concepts:
+      - py-strings
+      - py-functions
+      - py-collections
+      - py-cli-boundaries
+      - py-pytest-basics
+  - id: run-add-command-py
+    moduleId: py-notes-foundations
+    title: RunAddCommand
+    summary: Compose the add-command workflow by parsing arguments, building a note record, appending it to storage, and returning deterministic output.
+    directory: tracks/python/exercises/run-add-command-py
+    order: 7
+    concepts:
+      - py-functions
+      - py-collections
+      - py-validation
+      - py-file-io
+      - py-json-storage
+      - py-cli-boundaries
+      - py-command-runner
       - py-pytest-basics
 projects:
   - id: py-notes-cli
@@ -155,4 +335,73 @@ projects:
           - book: pytest-docs
             chapter: How to write and report assertions in tests
             topic: returned collection assertions and pytest.raises
+            usage: QualityAnchor
+      - id: py-notes-storage-boundary
+        title: Note storage
+        summary: Convert trusted note fields into JSON records and load UTF-8 JSON files through a validation boundary.
+        markdown: tracks/python/projects/py-notes-cli/note-storage.md
+        order: 3
+        lessons:
+          - files-paths-utf8-python
+          - json-storage-python
+        exercises:
+          - serialize-note-record-py
+          - load-notes-file-py
+        sourceReferences:
+          - book: python-standard-library
+            chapter: pathlib
+            topic: Path objects and text reads
+            usage: QualityAnchor
+          - book: python-standard-library
+            chapter: json
+            topic: JSON encoding, decoding, and deterministic formatting
+            usage: QualityAnchor
+          - book: pytest-docs
+            chapter: How to use temporary directories and files in tests
+            topic: tmp_path for isolated storage tests
+            usage: QualityAnchor
+      - id: py-notes-cli-boundary
+        title: CLI command boundary
+        summary: Convert command-line text into request dictionaries and render note records as deterministic command output.
+        markdown: tracks/python/projects/py-notes-cli/cli-command-boundary.md
+        order: 4
+        lessons:
+          - cli-command-boundaries-python
+        exercises:
+          - parse-add-command-py
+          - render-note-list-py
+        sourceReferences:
+          - book: python-standard-library
+            chapter: argparse
+            topic: command parser boundaries and parsed argument values
+            usage: QualityAnchor
+          - book: python-official-tutorial
+            chapter: Input and Output
+            topic: formatted string output and deterministic text
+            usage: QualityAnchor
+          - book: pytest-docs
+            chapter: How to write and report assertions in tests
+            topic: testing output strings and invalid command data
+            usage: QualityAnchor
+      - id: py-notes-command-runner
+        title: Command runner composition
+        summary: Compose the existing note helpers into a real add-command workflow that reads, appends, saves, and reports.
+        markdown: tracks/python/projects/py-notes-cli/command-runner-composition.md
+        order: 5
+        lessons:
+          - command-runner-composition-python
+        exercises:
+          - run-add-command-py
+        sourceReferences:
+          - book: python-official-tutorial
+            chapter: Modules
+            topic: organizing and composing reusable functions
+            usage: QualityAnchor
+          - book: python-standard-library
+            chapter: json
+            topic: reading and writing deterministic JSON
+            usage: QualityAnchor
+          - book: pytest-docs
+            chapter: How to use temporary directories and files in tests
+            topic: workflow tests with tmp_path
             usage: QualityAnchor

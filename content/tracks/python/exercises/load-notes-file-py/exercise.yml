@@ -1,0 +1,120 @@
+id: load-notes-file-py
+title: LoadNotesFile
+kind: focused
+workspace:
+  runtime: python-pytest
+  starter: tracks/python/exercises/load-notes-file-py/note_storage.py
+  entryPoint: load_notes
+  visibleTest: |
+    import json
+    from pathlib import Path
+
+    from note_storage import load_notes
+
+
+    def test_loads_notes_from_utf8_json_file(tmp_path: Path) -> None:
+        path = tmp_path / "notes.json"
+        path.write_text(
+            json.dumps(
+                [
+                    {"title": "learn python", "body": "practice storage", "tags": ["python"]},
+                    {"title": "learn fastapi", "body": "reuse the core", "tags": ["fastapi"]},
+                ]
+            ),
+            encoding="utf-8",
+        )
+
+        assert load_notes(path) == [
+            {"title": "learn python", "body": "practice storage", "tags": ["python"]},
+            {"title": "learn fastapi", "body": "reuse the core", "tags": ["fastapi"]},
+        ]
+  hiddenTest: |
+    import json
+    from pathlib import Path
+
+    import pytest
+
+    from note_storage import load_notes
+
+
+    def test_rejects_non_list_json_root(tmp_path: Path) -> None:
+        path = tmp_path / "notes.json"
+        path.write_text(json.dumps({"title": "not a list"}), encoding="utf-8")
+
+        with pytest.raises(ValueError, match="list"):
+            load_notes(path)
+
+
+    def test_rejects_record_missing_required_field(tmp_path: Path) -> None:
+        path = tmp_path / "notes.json"
+        path.write_text(json.dumps([{"title": "learn python", "tags": ["python"]}]), encoding="utf-8")
+
+        with pytest.raises(ValueError, match="body"):
+            load_notes(path)
+
+
+    def test_rejects_tags_that_are_not_strings(tmp_path: Path) -> None:
+        path = tmp_path / "notes.json"
+        path.write_text(
+            json.dumps([{"title": "learn python", "body": "practice", "tags": ["python", 42]}]),
+            encoding="utf-8",
+        )
+
+        with pytest.raises(ValueError, match="tags"):
+            load_notes(path)
+hints:
+  - id: conceptual
+    level: conceptual
+    title: Decode, then validate
+    body: json.loads gives you Python values, but those values are still outside data until you check the shape.
+  - id: api-approach
+    level: api-approach
+    title: Start with the root
+    body: First check that the decoded JSON root is a list. Then validate each record inside the list.
+  - id: structural
+    level: structural
+    title: Return copied records
+    body: Build new dictionaries and tag lists instead of returning decoded objects directly.
+solution:
+  title: Model solution
+  body: The model solution reads UTF-8 text, decodes JSON, validates every record, and returns copied dictionaries so the application receives trusted data.
+  code: |
+    import json
+    from pathlib import Path
+
+
+    def load_notes(path: Path) -> list[dict[str, object]]:
+        decoded = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(decoded, list):
+            raise ValueError("notes file must contain a list")
+
+        notes: list[dict[str, object]] = []
+        for value in decoded:
+            if not isinstance(value, dict):
+                raise ValueError("each note must be an object")
+
+            title = value.get("title")
+            if not isinstance(title, str):
+                raise ValueError("note title must be text")
+
+            body = value.get("body")
+            if not isinstance(body, str):
+                raise ValueError("note body must be text")
+
+            tags = value.get("tags")
+            if not isinstance(tags, list) or not all(isinstance(tag, str) for tag in tags):
+                raise ValueError("note tags must be a list of strings")
+
+            notes.append({"title": title, "body": body, "tags": list(tags)})
+
+        return notes
+commonWrongApproaches:
+  - Returning json.loads directly without validation.
+  - Accepting a dictionary root when the contract requires a list.
+  - Assuming tags is valid because it exists.
+  - Reading the file without specifying UTF-8.
+expectedSolutionCharacteristics:
+  - Uses Path.read_text with encoding="utf-8".
+  - Uses json.loads or json.load to decode JSON.
+  - Validates the root list and each record.
+  - Returns copied dictionaries with copied tag lists.

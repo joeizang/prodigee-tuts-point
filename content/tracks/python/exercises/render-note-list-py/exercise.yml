@@ -1,0 +1,75 @@
+id: render-note-list-py
+title: RenderNoteList
+kind: focused
+workspace:
+  runtime: python-pytest
+  starter: tracks/python/exercises/render-note-list-py/note_output.py
+  entryPoint: render_note_list
+  visibleTest: |
+    from note_output import render_note_list
+
+
+    def test_renders_empty_note_list() -> None:
+        assert render_note_list([]) == "No notes."
+
+
+    def test_renders_single_note() -> None:
+        assert render_note_list(
+            [{"title": "learn python", "body": "practice", "tags": ["python", "practice"]}]
+        ) == "1. learn python [python, practice]"
+  hiddenTest: |
+    from note_output import render_note_list
+
+
+    def test_renders_multiple_notes_in_order() -> None:
+        assert render_note_list(
+            [
+                {"title": "learn python", "body": "practice", "tags": ["python"]},
+                {"title": "learn fastapi", "body": "build api", "tags": ["fastapi", "api"]},
+            ]
+        ) == "1. learn python [python]\n2. learn fastapi [fastapi, api]"
+
+
+    def test_renders_note_without_tags() -> None:
+        assert render_note_list(
+            [{"title": "untagged note", "body": "plain", "tags": []}]
+        ) == "1. untagged note []"
+hints:
+  - id: conceptual
+    level: conceptual
+    title: Return output text
+    body: Rendering produces text for a caller to print later. The exercise function itself should not print.
+  - id: api-approach
+    level: api-approach
+    title: Build lines first
+    body: Build a list of output lines, then join them with newline characters for deterministic multi-note output.
+  - id: structural
+    level: structural
+    title: Use enumerate for numbering
+    body: enumerate(notes, start=1) gives you the display number and the note record at the same time.
+solution:
+  title: Model solution
+  body: The model solution handles empty output explicitly, then renders each note as one deterministic numbered line.
+  code: |
+    def render_note_list(notes: list[dict[str, object]]) -> str:
+        if not notes:
+            return "No notes."
+
+        lines: list[str] = []
+        for number, note in enumerate(notes, start=1):
+            title = str(note["title"])
+            tags = note["tags"]
+            tag_text = ", ".join(tags) if isinstance(tags, list) else ""
+            lines.append(f"{number}. {title} [{tag_text}]")
+
+        return "\n".join(lines)
+commonWrongApproaches:
+  - Printing each line instead of returning one string.
+  - Forgetting the empty-list case.
+  - Starting numbering at zero.
+  - Adding nondeterministic spacing or trailing newlines.
+expectedSolutionCharacteristics:
+  - Returns exactly "No notes." for an empty list.
+  - Numbers notes starting at one.
+  - Joins tags with comma-space.
+  - Returns one newline-separated string with no trailing newline.

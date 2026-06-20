@@ -300,6 +300,45 @@ public sealed class ExerciseEndpointTests
         Assert.DoesNotContain(workspace.Files, file => file.Path.EndsWith(".cs", StringComparison.Ordinal));
     }
 
+    [Theory]
+    [InlineData("serialize-note-record-py", "src/note_records.py", "tests/test_note_records_visible.py", "tests/test_note_records_hidden.py", "def build_note_record")]
+    [InlineData("load-notes-file-py", "src/note_storage.py", "tests/test_note_storage_visible.py", "tests/test_note_storage_hidden.py", "def load_notes")]
+    [InlineData("parse-add-command-py", "src/note_commands.py", "tests/test_note_commands_visible.py", "tests/test_note_commands_hidden.py", "def parse_add_command")]
+    [InlineData("render-note-list-py", "src/note_output.py", "tests/test_note_output_visible.py", "tests/test_note_output_hidden.py", "def render_note_list")]
+    public async Task WorkspaceEndpointGeneratesPythonStorageWorkspaces(
+        string exerciseId,
+        string sourcePath,
+        string visibleTestPath,
+        string hiddenTestPath,
+        string expectedSource)
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+        var profileId = $"python-storage-workspace-{Guid.NewGuid():n}";
+
+        var workspace = await client.GetFromJsonAsync<ExerciseWorkspaceTestResponse>(
+            $"/api/exercises/{exerciseId}/workspace?profileId={profileId}",
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(workspace);
+        Assert.Equal("Python", workspace.Language);
+        Assert.Equal("python-pytest", workspace.Runtime);
+        Assert.Contains(workspace.Files, file =>
+            file.Path == sourcePath
+            && file.Editable
+            && file.Content is not null
+            && file.Content.Contains(expectedSource, StringComparison.Ordinal));
+        Assert.Contains(workspace.Files, file =>
+            file.Path == visibleTestPath
+            && file.Role == "visible-test"
+            && file.Content is not null);
+        Assert.Contains(workspace.Files, file =>
+            file.Path == hiddenTestPath
+            && file.Role == "hidden-test"
+            && file.Content is null);
+        Assert.DoesNotContain(workspace.Files, file => file.Path.EndsWith(".cs", StringComparison.Ordinal));
+    }
+
     [Fact]
     public async Task RunEndpointExecutesPythonVisibleAndHiddenTestsThroughUv()
     {
@@ -321,6 +360,211 @@ public sealed class ExerciseEndpointTests
                                 raise ValueError("title must contain at least one non-space character")
 
                             return " ".join(words).lower()
+                        """)
+                ]),
+            TestContext.Current.CancellationToken);
+
+        var result = await response.Content.ReadFromJsonAsync<ExerciseRunTestResponse>(
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(result);
+        Assert.Equal("Passed", result.Status);
+        Assert.True(result.VisiblePassed);
+        Assert.True(result.HiddenPassed);
+        Assert.DoesNotContain("uv is required", result.Diagnostics, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task RunEndpointExecutesPythonSerializeNoteRecordVisibleAndHiddenTestsThroughUv()
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+        var profileId = $"python-record-runner-{Guid.NewGuid():n}";
+
+        var response = await client.PostAsJsonAsync(
+            "/api/exercises/serialize-note-record-py/run",
+            new ExerciseRunTestRequest(
+                profileId,
+                [
+                    new(
+                        "src/note_records.py",
+                        """
+                        def build_note_record(title: str, body: str, tags: list[str]) -> dict[str, object]:
+                            clean_title = title.strip()
+                            if not clean_title:
+                                raise ValueError("title is required")
+
+                            clean_body = body.strip()
+                            if not clean_body:
+                                raise ValueError("body is required")
+
+                            clean_tags: list[str] = []
+                            for tag in tags:
+                                clean_tag = tag.strip()
+                                if not clean_tag:
+                                    raise ValueError("tags cannot contain blank values")
+                                clean_tags.append(clean_tag)
+
+                            return {"title": clean_title, "body": clean_body, "tags": clean_tags}
+                        """)
+                ]),
+            TestContext.Current.CancellationToken);
+
+        var result = await response.Content.ReadFromJsonAsync<ExerciseRunTestResponse>(
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(result);
+        Assert.Equal("Passed", result.Status);
+        Assert.True(result.VisiblePassed);
+        Assert.True(result.HiddenPassed);
+        Assert.DoesNotContain("uv is required", result.Diagnostics, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task RunEndpointExecutesPythonLoadNotesFileVisibleAndHiddenTestsThroughUv()
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+        var profileId = $"python-load-runner-{Guid.NewGuid():n}";
+
+        var response = await client.PostAsJsonAsync(
+            "/api/exercises/load-notes-file-py/run",
+            new ExerciseRunTestRequest(
+                profileId,
+                [
+                    new(
+                        "src/note_storage.py",
+                        """
+                        import json
+                        from pathlib import Path
+
+
+                        def load_notes(path: Path) -> list[dict[str, object]]:
+                            decoded = json.loads(path.read_text(encoding="utf-8"))
+                            if not isinstance(decoded, list):
+                                raise ValueError("notes file must contain a list")
+
+                            notes: list[dict[str, object]] = []
+                            for value in decoded:
+                                if not isinstance(value, dict):
+                                    raise ValueError("each note must be an object")
+
+                                title = value.get("title")
+                                if not isinstance(title, str):
+                                    raise ValueError("note title must be text")
+
+                                body = value.get("body")
+                                if not isinstance(body, str):
+                                    raise ValueError("note body must be text")
+
+                                tags = value.get("tags")
+                                if not isinstance(tags, list) or not all(isinstance(tag, str) for tag in tags):
+                                    raise ValueError("note tags must be a list of strings")
+
+                                notes.append({"title": title, "body": body, "tags": list(tags)})
+
+                            return notes
+                        """)
+                ]),
+            TestContext.Current.CancellationToken);
+
+        var result = await response.Content.ReadFromJsonAsync<ExerciseRunTestResponse>(
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(result);
+        Assert.Equal("Passed", result.Status);
+        Assert.True(result.VisiblePassed);
+        Assert.True(result.HiddenPassed);
+        Assert.DoesNotContain("uv is required", result.Diagnostics, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task RunEndpointExecutesPythonParseAddCommandVisibleAndHiddenTestsThroughUv()
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+        var profileId = $"python-command-runner-{Guid.NewGuid():n}";
+
+        var response = await client.PostAsJsonAsync(
+            "/api/exercises/parse-add-command-py/run",
+            new ExerciseRunTestRequest(
+                profileId,
+                [
+                    new(
+                        "src/note_commands.py",
+                        """
+                        def parse_add_command(args: list[str]) -> dict[str, object]:
+                            title: str | None = None
+                            body: str | None = None
+                            tags = ""
+
+                            index = 0
+                            while index < len(args):
+                                option = args[index]
+                                if option not in {"--title", "--body", "--tags"}:
+                                    raise ValueError(f"unknown option: {option}")
+
+                                index += 1
+                                if index >= len(args):
+                                    raise ValueError(f"{option} requires a value")
+
+                                value = args[index]
+                                if option == "--title":
+                                    title = value
+                                elif option == "--body":
+                                    body = value
+                                else:
+                                    tags = value
+
+                                index += 1
+
+                            if title is None:
+                                raise ValueError("--title is required")
+                            if body is None:
+                                raise ValueError("--body is required")
+
+                            return {"title": title, "body": body, "tags": tags}
+                        """)
+                ]),
+            TestContext.Current.CancellationToken);
+
+        var result = await response.Content.ReadFromJsonAsync<ExerciseRunTestResponse>(
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(result);
+        Assert.Equal("Passed", result.Status);
+        Assert.True(result.VisiblePassed);
+        Assert.True(result.HiddenPassed);
+        Assert.DoesNotContain("uv is required", result.Diagnostics, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task RunEndpointExecutesPythonRenderNoteListVisibleAndHiddenTestsThroughUv()
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+        var profileId = $"python-output-runner-{Guid.NewGuid():n}";
+
+        var response = await client.PostAsJsonAsync(
+            "/api/exercises/render-note-list-py/run",
+            new ExerciseRunTestRequest(
+                profileId,
+                [
+                    new(
+                        "src/note_output.py",
+                        """
+                        def render_note_list(notes: list[dict[str, object]]) -> str:
+                            if not notes:
+                                return "No notes."
+
+                            lines: list[str] = []
+                            for number, note in enumerate(notes, start=1):
+                                title = str(note["title"])
+                                tags = note["tags"]
+                                tag_text = ", ".join(tags) if isinstance(tags, list) else ""
+                                lines.append(f"{number}. {title} [{tag_text}]")
+
+                            return "\n".join(lines)
                         """)
                 ]),
             TestContext.Current.CancellationToken);

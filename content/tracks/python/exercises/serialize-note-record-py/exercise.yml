@@ -1,0 +1,95 @@
+id: serialize-note-record-py
+title: SerializeNoteRecord
+kind: focused
+workspace:
+  runtime: python-pytest
+  starter: tracks/python/exercises/serialize-note-record-py/note_records.py
+  entryPoint: build_note_record
+  visibleTest: |
+    from note_records import build_note_record
+
+
+    def test_builds_json_safe_note_record() -> None:
+        assert build_note_record("learn python", "practice storage", ["python", "storage"]) == {
+            "title": "learn python",
+            "body": "practice storage",
+            "tags": ["python", "storage"],
+        }
+
+
+    def test_trims_title_and_body() -> None:
+        assert build_note_record("  learn python  ", "  practice storage  ", ["python"]) == {
+            "title": "learn python",
+            "body": "practice storage",
+            "tags": ["python"],
+        }
+  hiddenTest: |
+    import pytest
+
+    from note_records import build_note_record
+
+
+    def test_copies_tags_so_callers_cannot_mutate_record() -> None:
+        tags = ["python"]
+        record = build_note_record("learn python", "practice storage", tags)
+        tags.append("mutated")
+        assert record["tags"] == ["python"]
+
+
+    def test_rejects_blank_title() -> None:
+        with pytest.raises(ValueError, match="title"):
+            build_note_record("   ", "body", ["python"])
+
+
+    def test_rejects_blank_body() -> None:
+        with pytest.raises(ValueError, match="body"):
+            build_note_record("title", "   ", ["python"])
+
+
+    def test_rejects_blank_tags() -> None:
+        with pytest.raises(ValueError, match="tag"):
+            build_note_record("title", "body", ["python", "   "])
+hints:
+  - id: conceptual
+    level: conceptual
+    title: Build trusted data
+    body: The result should be a dictionary that the rest of the app can trust, not merely the original inputs bundled together.
+  - id: api-approach
+    level: api-approach
+    title: Trim before validating
+    body: Strip title and body before checking blankness so whitespace-only text is rejected correctly.
+  - id: structural
+    level: structural
+    title: Copy the tag list
+    body: Use list(tags) after validating each tag so later mutations to the caller's list do not mutate the record.
+solution:
+  title: Model solution
+  body: The model solution trims scalar fields, validates blank values, copies tags, and returns a JSON-safe dictionary with deterministic keys.
+  code: |
+    def build_note_record(title: str, body: str, tags: list[str]) -> dict[str, object]:
+        clean_title = title.strip()
+        if not clean_title:
+            raise ValueError("title is required")
+
+        clean_body = body.strip()
+        if not clean_body:
+            raise ValueError("body is required")
+
+        clean_tags: list[str] = []
+        for tag in tags:
+            clean_tag = tag.strip()
+            if not clean_tag:
+                raise ValueError("tags cannot contain blank values")
+            clean_tags.append(clean_tag)
+
+        return {"title": clean_title, "body": clean_body, "tags": clean_tags}
+commonWrongApproaches:
+  - Returning the caller's tags list directly.
+  - Checking title and body before trimming.
+  - Returning a JSON string when the contract asks for a dictionary.
+  - Allowing blank tag strings into the record.
+expectedSolutionCharacteristics:
+  - Returns a dict with title, body, and tags keys.
+  - Trims title and body.
+  - Copies tags into a new list.
+  - Raises ValueError for blank title, blank body, and blank tags.

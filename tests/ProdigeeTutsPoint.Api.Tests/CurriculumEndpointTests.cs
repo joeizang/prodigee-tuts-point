@@ -79,6 +79,64 @@ public sealed class CurriculumEndpointTests
     }
 
     [Fact]
+    public async Task PythonNoteStorageMilestoneReturnsLessonsExercisesAndSources()
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+
+        var milestone = await client.GetFromJsonAsync<MilestoneDetailTestResponse>(
+            "/api/curriculum/projects/py-notes-cli/milestones/py-notes-storage-boundary",
+            TestContext.Current.CancellationToken);
+        var cluster = await client.GetFromJsonAsync<TheoryClusterTestResponse>(
+            "/api/curriculum/projects/py-notes-cli/milestones/py-notes-storage-boundary/theory-cluster",
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(milestone);
+        Assert.Equal("Note storage", milestone.Title);
+        Assert.Equal(2, milestone.Lessons.Count);
+        Assert.Equal(2, milestone.Exercises.Count);
+        Assert.Contains(milestone.Lessons, lesson => lesson.Id == "files-paths-utf8-python");
+        Assert.Contains(milestone.Lessons, lesson => lesson.Id == "json-storage-python");
+        Assert.Contains(milestone.Exercises, exercise => exercise.Id == "serialize-note-record-py" && exercise.Language == "Python");
+        Assert.Contains(milestone.Exercises, exercise => exercise.Id == "load-notes-file-py" && exercise.Language == "Python");
+        Assert.NotEmpty(milestone.Sources);
+        Assert.Contains("UTF-8 JSON file", milestone.Markdown, StringComparison.OrdinalIgnoreCase);
+
+        Assert.NotNull(cluster);
+        Assert.Equal(2, cluster.Items.Count);
+        Assert.All(cluster.Items, item => Assert.NotEmpty(item.Sources));
+    }
+
+    [Fact]
+    public async Task PythonCliCommandBoundaryMilestoneReturnsLessonsExercisesAndSources()
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+
+        var milestone = await client.GetFromJsonAsync<MilestoneDetailTestResponse>(
+            "/api/curriculum/projects/py-notes-cli/milestones/py-notes-cli-boundary",
+            TestContext.Current.CancellationToken);
+        var cluster = await client.GetFromJsonAsync<TheoryClusterTestResponse>(
+            "/api/curriculum/projects/py-notes-cli/milestones/py-notes-cli-boundary/theory-cluster",
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(milestone);
+        Assert.Equal("CLI command boundary", milestone.Title);
+        var lesson = Assert.Single(milestone.Lessons);
+        Assert.Equal("cli-command-boundaries-python", lesson.Id);
+        Assert.Equal(2, milestone.Exercises.Count);
+        Assert.Contains(milestone.Exercises, exercise => exercise.Id == "parse-add-command-py" && exercise.Language == "Python");
+        Assert.Contains(milestone.Exercises, exercise => exercise.Id == "render-note-list-py" && exercise.Language == "Python");
+        Assert.NotEmpty(milestone.Sources);
+        Assert.Contains("raw command-line text", milestone.Markdown, StringComparison.OrdinalIgnoreCase);
+
+        Assert.NotNull(cluster);
+        var clusterItem = Assert.Single(cluster.Items);
+        Assert.Equal("cli-command-boundaries-python", clusterItem.LessonId);
+        Assert.NotEmpty(clusterItem.Sources);
+    }
+
+    [Fact]
     public async Task MilestoneEndpointReturnsLessonsExercisesAndSources()
     {
         await using var factory = new WebApplicationFactory<Program>();
