@@ -1,0 +1,125 @@
+id: protect-notes-api-py
+title: ProtectNotesApi
+kind: focused
+workspace:
+  runtime: python-pytest
+  starter: tracks/python/exercises/protect-notes-api-py/auth_api.py
+  entryPoint: create_app
+  visibleTest: |
+    from fastapi.testclient import TestClient
+
+    from auth_api import create_app
+
+
+    def test_read_route_is_public_and_write_requires_key() -> None:
+        client = TestClient(create_app("secret"))
+
+        assert client.get("/notes").status_code == 200
+        missing = client.post("/notes", json={"title": "Python", "body": "body"})
+
+        assert missing.status_code == 401
+        assert missing.json()["detail"] == "API key is required"
+
+
+    def test_valid_key_can_create_note() -> None:
+        client = TestClient(create_app("secret"))
+
+        response = client.post(
+            "/notes",
+            json={"title": " Python ", "body": "body"},
+            headers={"X-API-Key": "secret"},
+        )
+
+        assert response.status_code == 201
+        assert client.get("/notes").json() == [{"title": "python", "body": "body"}]
+  hiddenTest: |
+    from fastapi.testclient import TestClient
+
+    from auth_api import create_app
+
+
+    def test_invalid_key_returns_403_and_does_not_write() -> None:
+        client = TestClient(create_app("secret"))
+
+        response = client.post(
+            "/notes",
+            json={"title": "Python", "body": "body"},
+            headers={"X-API-Key": "wrong"},
+        )
+
+        assert response.status_code == 403
+        assert response.json()["detail"] == "API key is invalid"
+        assert client.get("/notes").json() == []
+
+
+    def test_delete_is_protected() -> None:
+        client = TestClient(create_app("secret"))
+        client.post("/notes", json={"title": "Python", "body": "body"}, headers={"X-API-Key": "secret"})
+
+        assert client.delete("/notes/python").status_code == 401
+        assert client.delete("/notes/python", headers={"X-API-Key": "secret"}).status_code == 204
+hints:
+  - id: conceptual
+    level: conceptual
+    title: Protect writes consistently
+    body: Every route that changes state should use the same API key dependency.
+  - id: api-approach
+    level: api-approach
+    title: Separate missing from invalid
+    body: Missing API keys should return 401, while incorrect API keys should return 403.
+  - id: structural
+    level: structural
+    title: Keep reads public
+    body: Do not attach the auth dependency to public read routes unless the product requires it.
+solution:
+  title: Model solution
+  body: The model solution uses a header dependency to protect write routes while leaving reads public.
+  code: |
+    from typing import Annotated
+
+    from fastapi import Depends, FastAPI, Header, HTTPException, status
+    from pydantic import BaseModel, Field
+
+
+    class NoteCreate(BaseModel):
+        title: str = Field(min_length=1)
+        body: str = Field(min_length=1)
+
+
+    def create_app(api_key: str) -> FastAPI:
+        app = FastAPI()
+        notes: list[dict[str, str]] = []
+
+        def require_api_key(x_api_key: Annotated[str | None, Header(alias="X-API-Key")] = None) -> None:
+            if x_api_key is None:
+                raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="API key is required")
+            if x_api_key != api_key:
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="API key is invalid")
+
+        @app.get("/notes")
+        def list_notes() -> list[dict[str, str]]:
+            return notes
+
+        @app.post("/notes", status_code=201, dependencies=[Depends(require_api_key)])
+        def create_note(request: NoteCreate) -> dict[str, str]:
+            note = {"title": " ".join(request.title.split()).lower(), "body": request.body.strip()}
+            notes.append(note)
+            return note
+
+        @app.delete("/notes/{title}", status_code=204, dependencies=[Depends(require_api_key)])
+        def delete_note(title: str) -> None:
+            normalized = " ".join(title.split()).lower()
+            notes[:] = [note for note in notes if note["title"] != normalized]
+
+        return app
+commonWrongApproaches:
+  - Hard-coding the API key inside route functions.
+  - Protecting create but forgetting delete.
+  - Returning 200 for auth failures.
+  - Logging the provided API key.
+expectedSolutionCharacteristics:
+  - Keeps GET /notes public.
+  - Protects write routes with a dependency.
+  - Returns 401 for missing credentials.
+  - Returns 403 for invalid credentials.
+  - Accepts X-API-Key for valid writes.

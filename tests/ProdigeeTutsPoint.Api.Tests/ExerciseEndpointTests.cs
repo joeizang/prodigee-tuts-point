@@ -305,6 +305,31 @@ public sealed class ExerciseEndpointTests
     [InlineData("load-notes-file-py", "src/note_storage.py", "tests/test_note_storage_visible.py", "tests/test_note_storage_hidden.py", "def load_notes")]
     [InlineData("parse-add-command-py", "src/note_commands.py", "tests/test_note_commands_visible.py", "tests/test_note_commands_hidden.py", "def parse_add_command")]
     [InlineData("render-note-list-py", "src/note_output.py", "tests/test_note_output_visible.py", "tests/test_note_output_hidden.py", "def render_note_list")]
+    [InlineData("run-add-command-py", "src/note_runner.py", "tests/test_note_runner_visible.py", "tests/test_note_runner_hidden.py", "def run_add_command")]
+    [InlineData("run-note-command-py", "src/note_cli.py", "tests/test_note_cli_visible.py", "tests/test_note_cli_hidden.py", "def run_note_command")]
+    [InlineData("create-notes-api-py", "src/notes_api.py", "tests/test_notes_api_visible.py", "tests/test_notes_api_hidden.py", "def create_app")]
+    [InlineData("inject-notes-service-py", "src/notes_dependencies.py", "tests/test_notes_dependencies_visible.py", "tests/test_notes_dependencies_hidden.py", "def create_app")]
+    [InlineData("define-note-contracts-py", "src/note_contracts.py", "tests/test_note_contracts_visible.py", "tests/test_note_contracts_hidden.py", "class NoteCreate")]
+    [InlineData("map-notes-http-semantics-py", "src/notes_http.py", "tests/test_notes_http_visible.py", "tests/test_notes_http_hidden.py", "def create_app")]
+    [InlineData("abstract-note-repository-py", "src/note_repository.py", "tests/test_note_repository_visible.py", "tests/test_note_repository_hidden.py", "class NotesService")]
+    [InlineData("test-notes-api-depth-py", "src/notes_api_testing.py", "tests/test_notes_api_testing_visible.py", "tests/test_notes_api_testing_hidden.py", "def make_test_client")]
+    [InlineData("sqlite-note-repository-py", "src/sqlite_repository.py", "tests/test_sqlite_repository_visible.py", "tests/test_sqlite_repository_hidden.py", "class SqliteNoteRepository")]
+    [InlineData("assemble-notes-api-package-py", "src/notes_package.py", "tests/test_notes_package_visible.py", "tests/test_notes_package_hidden.py", "def create_app")]
+    [InlineData("integrate-sqlite-notes-api-py", "src/sqlite_api.py", "tests/test_sqlite_api_visible.py", "tests/test_sqlite_api_hidden.py", "def create_app")]
+    [InlineData("paginate-filter-notes-py", "src/notes_pagination.py", "tests/test_notes_pagination_visible.py", "tests/test_notes_pagination_hidden.py", "def create_app")]
+    [InlineData("transactional-note-writes-py", "src/transactional_notes.py", "tests/test_transactional_notes_visible.py", "tests/test_transactional_notes_hidden.py", "class TransactionalNoteRepository")]
+    [InlineData("async-boundary-policy-py", "src/async_notes_api.py", "tests/test_async_notes_api_visible.py", "tests/test_async_notes_api_hidden.py", "def create_app")]
+    [InlineData("load-app-settings-py", "src/settings_config.py", "tests/test_settings_config_visible.py", "tests/test_settings_config_hidden.py", "def load_settings")]
+    [InlineData("observe-notes-api-py", "src/observability_api.py", "tests/test_observability_api_visible.py", "tests/test_observability_api_hidden.py", "def create_app")]
+    [InlineData("protect-notes-api-py", "src/auth_api.py", "tests/test_auth_api_visible.py", "tests/test_auth_api_hidden.py", "def create_app")]
+    [InlineData("migrate-sqlite-schema-py", "src/sqlite_migrations.py", "tests/test_sqlite_migrations_visible.py", "tests/test_sqlite_migrations_hidden.py", "def migrate")]
+    [InlineData("package-run-notes-api-py", "src/run_notes_api.py", "tests/test_run_notes_api_visible.py", "tests/test_run_notes_api_hidden.py", "def create_app")]
+    [InlineData("design-orm-note-mapping-py", "src/orm_mapping.py", "tests/test_orm_mapping_visible.py", "tests/test_orm_mapping_hidden.py", "def note_orm_mapping")]
+    [InlineData("plan-alembic-revision-py", "src/alembic_plan.py", "tests/test_alembic_plan_visible.py", "tests/test_alembic_plan_hidden.py", "def build_revision_plan")]
+    [InlineData("prepare-postgres-settings-py", "src/postgres_readiness.py", "tests/test_postgres_readiness_visible.py", "tests/test_postgres_readiness_hidden.py", "def parse_database_url")]
+    [InlineData("implement-sqlalchemy-repository-py", "src/sqlalchemy_repository.py", "tests/test_sqlalchemy_repository_visible.py", "tests/test_sqlalchemy_repository_hidden.py", "def build_repository_blueprint")]
+    [InlineData("configure-alembic-environment-py", "src/alembic_environment.py", "tests/test_alembic_environment_visible.py", "tests/test_alembic_environment_hidden.py", "def alembic_environment_plan")]
+    [InlineData("configure-postgres-engine-py", "src/postgres_engine.py", "tests/test_postgres_engine_visible.py", "tests/test_postgres_engine_hidden.py", "def database_engine_settings")]
     public async Task WorkspaceEndpointGeneratesPythonStorageWorkspaces(
         string exerciseId,
         string sourcePath,
@@ -466,6 +491,595 @@ public sealed class ExerciseEndpointTests
                             return notes
                         """)
                 ]),
+            TestContext.Current.CancellationToken);
+
+        var result = await response.Content.ReadFromJsonAsync<ExerciseRunTestResponse>(
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(result);
+        Assert.Equal("Passed", result.Status);
+        Assert.True(result.VisiblePassed);
+        Assert.True(result.HiddenPassed);
+        Assert.DoesNotContain("uv is required", result.Diagnostics, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task RunEndpointExecutesPythonRunAddCommandVisibleAndHiddenTestsThroughUv()
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+        var profileId = $"python-run-add-runner-{Guid.NewGuid():n}";
+
+        var response = await client.PostAsJsonAsync(
+            "/api/exercises/run-add-command-py/run",
+            new ExerciseRunTestRequest(
+                profileId,
+                [
+                    new(
+                        "src/note_runner.py",
+                        """
+                        import json
+                        from pathlib import Path
+
+
+                        def run_add_command(args: list[str], notes_path: Path) -> str:
+                            request = parse_add_command(args)
+                            title = normalize_title(str(request["title"]))
+                            tags = parse_tags(str(request["tags"]))
+                            record = build_note_record(title, str(request["body"]), tags)
+                            notes = load_notes_or_empty(notes_path)
+                            notes.append(record)
+                            save_notes(notes_path, notes)
+                            return f"Added note: {title}"
+
+
+                        def parse_add_command(args: list[str]) -> dict[str, object]:
+                            title: str | None = None
+                            body: str | None = None
+                            tags = ""
+
+                            index = 0
+                            while index < len(args):
+                                option = args[index]
+                                if option not in {"--title", "--body", "--tags"}:
+                                    raise ValueError(f"unknown option: {option}")
+
+                                index += 1
+                                if index >= len(args):
+                                    raise ValueError(f"{option} requires a value")
+
+                                value = args[index]
+                                if option == "--title":
+                                    title = value
+                                elif option == "--body":
+                                    body = value
+                                else:
+                                    tags = value
+
+                                index += 1
+
+                            if title is None:
+                                raise ValueError("--title is required")
+                            if body is None:
+                                raise ValueError("--body is required")
+
+                            return {"title": title, "body": body, "tags": tags}
+
+
+                        def normalize_title(raw_title: str) -> str:
+                            words = raw_title.split()
+                            if not words:
+                                raise ValueError("title is required")
+                            return " ".join(words).lower()
+
+
+                        def parse_tags(raw_tags: str) -> list[str]:
+                            tags: list[str] = []
+                            for chunk in raw_tags.split(","):
+                                tag = chunk.strip().lower()
+                                if not tag:
+                                    continue
+                                if " " in tag:
+                                    raise ValueError("tags cannot contain spaces")
+                                if tag in tags:
+                                    continue
+                                tags.append(tag)
+                            return tags
+
+
+                        def build_note_record(title: str, body: str, tags: list[str]) -> dict[str, object]:
+                            clean_body = body.strip()
+                            if not clean_body:
+                                raise ValueError("body is required")
+                            return {"title": title, "body": clean_body, "tags": list(tags)}
+
+
+                        def load_notes_or_empty(path: Path) -> list[dict[str, object]]:
+                            if not path.exists():
+                                return []
+
+                            decoded = json.loads(path.read_text(encoding="utf-8"))
+                            if not isinstance(decoded, list):
+                                raise ValueError("notes file must contain a list")
+
+                            notes: list[dict[str, object]] = []
+                            for value in decoded:
+                                if not isinstance(value, dict):
+                                    raise ValueError("each note must be an object")
+                                title = value.get("title")
+                                body = value.get("body")
+                                tags = value.get("tags")
+                                if not isinstance(title, str):
+                                    raise ValueError("note title must be text")
+                                if not isinstance(body, str):
+                                    raise ValueError("note body must be text")
+                                if not isinstance(tags, list) or not all(isinstance(tag, str) for tag in tags):
+                                    raise ValueError("note tags must be a list of strings")
+                                notes.append({"title": title, "body": body, "tags": list(tags)})
+                            return notes
+
+
+                        def save_notes(path: Path, notes: list[dict[str, object]]) -> None:
+                            path.parent.mkdir(parents=True, exist_ok=True)
+                            path.write_text(json.dumps(notes, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+                        """)
+                ]),
+            TestContext.Current.CancellationToken);
+
+        var result = await response.Content.ReadFromJsonAsync<ExerciseRunTestResponse>(
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(result);
+        Assert.Equal("Passed", result.Status);
+        Assert.True(result.VisiblePassed);
+        Assert.True(result.HiddenPassed);
+        Assert.DoesNotContain("uv is required", result.Diagnostics, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task RunEndpointExecutesPythonRunNoteCommandVisibleAndHiddenTestsThroughUv()
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+        var profileId = $"python-run-note-runner-{Guid.NewGuid():n}";
+
+        var response = await client.PostAsJsonAsync(
+            "/api/exercises/run-note-command-py/run",
+            new ExerciseRunTestRequest(
+                profileId,
+                [
+                    new(
+                        "src/note_cli.py",
+                        """
+                        import json
+                        from pathlib import Path
+
+
+                        def run_note_command(args: list[str], notes_path: Path) -> str:
+                            if not args:
+                                raise ValueError("command is required")
+
+                            command = args[0]
+                            command_args = args[1:]
+
+                            if command == "list":
+                                return render_note_list(load_notes_or_empty(notes_path))
+                            if command == "search":
+                                tag = parse_single_option(command_args, "--tag")
+                                return render_note_list(search_notes_by_tag(load_notes_or_empty(notes_path), tag))
+                            if command == "update":
+                                values = parse_options(command_args, {"--title", "--body"})
+                                title = normalize_title(values["--title"])
+                                body = values["--body"].strip()
+                                if not body:
+                                    raise ValueError("--body is required")
+                                notes = load_notes_or_empty(notes_path)
+                                if not update_note_body(notes, title, body):
+                                    raise ValueError(f"note not found: {title}")
+                                save_notes(notes_path, notes)
+                                return f"Updated note: {title}"
+                            if command == "delete":
+                                title = normalize_title(parse_single_option(command_args, "--title"))
+                                notes = load_notes_or_empty(notes_path)
+                                if not delete_note(notes, title):
+                                    raise ValueError(f"note not found: {title}")
+                                save_notes(notes_path, notes)
+                                return f"Deleted note: {title}"
+
+                            raise ValueError(f"unknown command: {command}")
+
+
+                        def parse_single_option(args: list[str], option: str) -> str:
+                            return parse_options(args, {option})[option]
+
+
+                        def parse_options(args: list[str], required: set[str]) -> dict[str, str]:
+                            values: dict[str, str] = {}
+                            index = 0
+                            while index < len(args):
+                                option = args[index]
+                                if option not in required:
+                                    raise ValueError(f"unknown option: {option}")
+                                index += 1
+                                if index >= len(args):
+                                    raise ValueError(f"{option} requires a value")
+                                values[option] = args[index]
+                                index += 1
+
+                            missing = required - values.keys()
+                            if missing:
+                                raise ValueError(f"{sorted(missing)[0]} is required")
+                            return values
+
+
+                        def normalize_title(raw_title: str) -> str:
+                            words = raw_title.split()
+                            if not words:
+                                raise ValueError("--title is required")
+                            return " ".join(words).lower()
+
+
+                        def load_notes_or_empty(path: Path) -> list[dict[str, object]]:
+                            if not path.exists():
+                                return []
+                            decoded = json.loads(path.read_text(encoding="utf-8"))
+                            if not isinstance(decoded, list):
+                                raise ValueError("notes file must contain a list")
+                            return [
+                                {"title": value["title"], "body": value["body"], "tags": list(value["tags"])}
+                                for value in decoded
+                                if isinstance(value, dict)
+                            ]
+
+
+                        def save_notes(path: Path, notes: list[dict[str, object]]) -> None:
+                            path.parent.mkdir(parents=True, exist_ok=True)
+                            path.write_text(json.dumps(notes, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+                        def render_note_list(notes: list[dict[str, object]]) -> str:
+                            if not notes:
+                                return "No notes found."
+                            lines: list[str] = []
+                            for index, note in enumerate(notes, start=1):
+                                tags = ", ".join(str(tag) for tag in note["tags"])
+                                tag_text = f" [{tags}]" if tags else ""
+                                lines.append(f"{index}. {note['title']}{tag_text}")
+                            return "\n".join(lines)
+
+
+                        def search_notes_by_tag(notes: list[dict[str, object]], tag: str) -> list[dict[str, object]]:
+                            normalized = tag.strip().lower()
+                            if not normalized:
+                                raise ValueError("--tag is required")
+                            return [note for note in notes if normalized in note["tags"]]
+
+
+                        def update_note_body(notes: list[dict[str, object]], title: str, body: str) -> bool:
+                            for note in notes:
+                                if note["title"] == title:
+                                    note["body"] = body
+                                    return True
+                            return False
+
+
+                        def delete_note(notes: list[dict[str, object]], title: str) -> bool:
+                            for index, note in enumerate(notes):
+                                if note["title"] == title:
+                                    del notes[index]
+                                    return True
+                            return False
+                        """)
+                ]),
+            TestContext.Current.CancellationToken);
+
+        var result = await response.Content.ReadFromJsonAsync<ExerciseRunTestResponse>(
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(result);
+        Assert.Equal("Passed", result.Status);
+        Assert.True(result.VisiblePassed);
+        Assert.True(result.HiddenPassed);
+        Assert.DoesNotContain("uv is required", result.Diagnostics, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task RunEndpointExecutesPythonFastApiAdapterVisibleAndHiddenTestsThroughUv()
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+        var profileId = $"python-fastapi-runner-{Guid.NewGuid():n}";
+
+        var response = await client.PostAsJsonAsync(
+            "/api/exercises/create-notes-api-py/run",
+            new ExerciseRunTestRequest(
+                profileId,
+                [
+                    new(
+                        "src/notes_api.py",
+                        """
+                        import json
+                        from pathlib import Path
+
+                        from fastapi import FastAPI, HTTPException
+                        from pydantic import BaseModel, Field
+
+
+                        class CreateNoteRequest(BaseModel):
+                            title: str = Field(min_length=1)
+                            body: str = Field(min_length=1)
+                            tags: list[str] = []
+
+
+                        class UpdateNoteRequest(BaseModel):
+                            body: str = Field(min_length=1)
+
+
+                        class NoteResponse(BaseModel):
+                            title: str
+                            body: str
+                            tags: list[str]
+
+
+                        class DeleteResponse(BaseModel):
+                            message: str
+
+
+                        class NotesService:
+                            def __init__(self, path: Path) -> None:
+                                self.path = path
+
+                            def list_notes(self) -> list[dict[str, object]]:
+                                return load_notes_or_empty(self.path)
+
+                            def create_note(self, title: str, body: str, tags: list[str]) -> dict[str, object]:
+                                record = build_note_record(normalize_title(title), body, parse_tags(tags))
+                                notes = self.list_notes()
+                                notes.append(record)
+                                save_notes(self.path, notes)
+                                return record
+
+                            def search_by_tag(self, tag: str) -> list[dict[str, object]]:
+                                normalized = tag.strip().lower()
+                                if not normalized:
+                                    raise ValueError("tag is required")
+                                return [note for note in self.list_notes() if normalized in note["tags"]]
+
+                            def update_body(self, title: str, body: str) -> dict[str, object]:
+                                normalized_title = normalize_title(title)
+                                clean_body = body.strip()
+                                if not clean_body:
+                                    raise ValueError("body is required")
+                                notes = self.list_notes()
+                                for note in notes:
+                                    if note["title"] == normalized_title:
+                                        note["body"] = clean_body
+                                        save_notes(self.path, notes)
+                                        return note
+                                raise LookupError(f"note not found: {normalized_title}")
+
+                            def delete_note(self, title: str) -> str:
+                                normalized_title = normalize_title(title)
+                                notes = self.list_notes()
+                                for index, note in enumerate(notes):
+                                    if note["title"] == normalized_title:
+                                        del notes[index]
+                                        save_notes(self.path, notes)
+                                        return f"Deleted note: {normalized_title}"
+                                raise LookupError(f"note not found: {normalized_title}")
+
+
+                        def create_app(notes_path: Path) -> FastAPI:
+                            service = NotesService(notes_path)
+                            app = FastAPI()
+
+                            @app.post("/notes", response_model=NoteResponse, status_code=201)
+                            def create_note(request: CreateNoteRequest) -> dict[str, object]:
+                                try:
+                                    return service.create_note(request.title, request.body, request.tags)
+                                except ValueError as error:
+                                    raise HTTPException(status_code=400, detail=str(error)) from error
+
+                            @app.get("/notes", response_model=list[NoteResponse])
+                            def list_notes() -> list[dict[str, object]]:
+                                return service.list_notes()
+
+                            @app.get("/notes/search", response_model=list[NoteResponse])
+                            def search_notes(tag: str) -> list[dict[str, object]]:
+                                try:
+                                    return service.search_by_tag(tag)
+                                except ValueError as error:
+                                    raise HTTPException(status_code=400, detail=str(error)) from error
+
+                            @app.patch("/notes/{title}", response_model=NoteResponse)
+                            def update_note(title: str, request: UpdateNoteRequest) -> dict[str, object]:
+                                try:
+                                    return service.update_body(title, request.body)
+                                except LookupError as error:
+                                    raise HTTPException(status_code=404, detail=str(error)) from error
+                                except ValueError as error:
+                                    raise HTTPException(status_code=400, detail=str(error)) from error
+
+                            @app.delete("/notes/{title}", response_model=DeleteResponse)
+                            def delete_note(title: str) -> dict[str, str]:
+                                try:
+                                    return {"message": service.delete_note(title)}
+                                except LookupError as error:
+                                    raise HTTPException(status_code=404, detail=str(error)) from error
+                                except ValueError as error:
+                                    raise HTTPException(status_code=400, detail=str(error)) from error
+
+                            return app
+
+
+                        def normalize_title(raw_title: str) -> str:
+                            words = raw_title.split()
+                            if not words:
+                                raise ValueError("title is required")
+                            return " ".join(words).lower()
+
+
+                        def parse_tags(raw_tags: list[str]) -> list[str]:
+                            tags: list[str] = []
+                            for raw_tag in raw_tags:
+                                tag = raw_tag.strip().lower()
+                                if not tag:
+                                    continue
+                                if " " in tag:
+                                    raise ValueError("tags cannot contain spaces")
+                                if tag not in tags:
+                                    tags.append(tag)
+                            return tags
+
+
+                        def build_note_record(title: str, body: str, tags: list[str]) -> dict[str, object]:
+                            clean_body = body.strip()
+                            if not clean_body:
+                                raise ValueError("body is required")
+                            return {"title": title, "body": clean_body, "tags": list(tags)}
+
+
+                        def load_notes_or_empty(path: Path) -> list[dict[str, object]]:
+                            if not path.exists():
+                                return []
+                            decoded = json.loads(path.read_text(encoding="utf-8"))
+                            if not isinstance(decoded, list):
+                                raise ValueError("notes file must contain a list")
+                            return [validate_note(value) for value in decoded]
+
+
+                        def validate_note(value: object) -> dict[str, object]:
+                            if not isinstance(value, dict):
+                                raise ValueError("each note must be an object")
+                            title = value.get("title")
+                            body = value.get("body")
+                            tags = value.get("tags")
+                            if not isinstance(title, str) or not isinstance(body, str):
+                                raise ValueError("note title and body must be text")
+                            if not isinstance(tags, list) or not all(isinstance(tag, str) for tag in tags):
+                                raise ValueError("note tags must be a list of strings")
+                            return {"title": title, "body": body, "tags": list(tags)}
+
+
+                        def save_notes(path: Path, notes: list[dict[str, object]]) -> None:
+                            path.parent.mkdir(parents=True, exist_ok=True)
+                            path.write_text(json.dumps(notes, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+                        """)
+                ]),
+            TestContext.Current.CancellationToken);
+
+        var result = await response.Content.ReadFromJsonAsync<ExerciseRunTestResponse>(
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(result);
+        Assert.Equal("Passed", result.Status);
+        Assert.True(result.VisiblePassed);
+        Assert.True(result.HiddenPassed);
+        Assert.DoesNotContain("uv is required", result.Diagnostics, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData(
+        "inject-notes-service-py",
+        "src/notes_dependencies.py",
+        "content/tracks/python/exercises/inject-notes-service-py/exercise.yml")]
+    [InlineData(
+        "define-note-contracts-py",
+        "src/note_contracts.py",
+        "content/tracks/python/exercises/define-note-contracts-py/exercise.yml")]
+    [InlineData(
+        "map-notes-http-semantics-py",
+        "src/notes_http.py",
+        "content/tracks/python/exercises/map-notes-http-semantics-py/exercise.yml")]
+    [InlineData(
+        "abstract-note-repository-py",
+        "src/note_repository.py",
+        "content/tracks/python/exercises/abstract-note-repository-py/exercise.yml")]
+    [InlineData(
+        "test-notes-api-depth-py",
+        "src/notes_api_testing.py",
+        "content/tracks/python/exercises/test-notes-api-depth-py/exercise.yml")]
+    [InlineData(
+        "sqlite-note-repository-py",
+        "src/sqlite_repository.py",
+        "content/tracks/python/exercises/sqlite-note-repository-py/exercise.yml")]
+    [InlineData(
+        "assemble-notes-api-package-py",
+        "src/notes_package.py",
+        "content/tracks/python/exercises/assemble-notes-api-package-py/exercise.yml")]
+    [InlineData(
+        "integrate-sqlite-notes-api-py",
+        "src/sqlite_api.py",
+        "content/tracks/python/exercises/integrate-sqlite-notes-api-py/exercise.yml")]
+    [InlineData(
+        "paginate-filter-notes-py",
+        "src/notes_pagination.py",
+        "content/tracks/python/exercises/paginate-filter-notes-py/exercise.yml")]
+    [InlineData(
+        "transactional-note-writes-py",
+        "src/transactional_notes.py",
+        "content/tracks/python/exercises/transactional-note-writes-py/exercise.yml")]
+    [InlineData(
+        "async-boundary-policy-py",
+        "src/async_notes_api.py",
+        "content/tracks/python/exercises/async-boundary-policy-py/exercise.yml")]
+    [InlineData(
+        "load-app-settings-py",
+        "src/settings_config.py",
+        "content/tracks/python/exercises/load-app-settings-py/exercise.yml")]
+    [InlineData(
+        "observe-notes-api-py",
+        "src/observability_api.py",
+        "content/tracks/python/exercises/observe-notes-api-py/exercise.yml")]
+    [InlineData(
+        "protect-notes-api-py",
+        "src/auth_api.py",
+        "content/tracks/python/exercises/protect-notes-api-py/exercise.yml")]
+    [InlineData(
+        "migrate-sqlite-schema-py",
+        "src/sqlite_migrations.py",
+        "content/tracks/python/exercises/migrate-sqlite-schema-py/exercise.yml")]
+    [InlineData(
+        "package-run-notes-api-py",
+        "src/run_notes_api.py",
+        "content/tracks/python/exercises/package-run-notes-api-py/exercise.yml")]
+    [InlineData(
+        "design-orm-note-mapping-py",
+        "src/orm_mapping.py",
+        "content/tracks/python/exercises/design-orm-note-mapping-py/exercise.yml")]
+    [InlineData(
+        "plan-alembic-revision-py",
+        "src/alembic_plan.py",
+        "content/tracks/python/exercises/plan-alembic-revision-py/exercise.yml")]
+    [InlineData(
+        "prepare-postgres-settings-py",
+        "src/postgres_readiness.py",
+        "content/tracks/python/exercises/prepare-postgres-settings-py/exercise.yml")]
+    [InlineData(
+        "implement-sqlalchemy-repository-py",
+        "src/sqlalchemy_repository.py",
+        "content/tracks/python/exercises/implement-sqlalchemy-repository-py/exercise.yml")]
+    [InlineData(
+        "configure-alembic-environment-py",
+        "src/alembic_environment.py",
+        "content/tracks/python/exercises/configure-alembic-environment-py/exercise.yml")]
+    [InlineData(
+        "configure-postgres-engine-py",
+        "src/postgres_engine.py",
+        "content/tracks/python/exercises/configure-postgres-engine-py/exercise.yml")]
+    public async Task RunEndpointExecutesPythonFastApiProductionExercisesThroughUv(
+        string exerciseId,
+        string sourcePath,
+        string exerciseDocumentPath)
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+        var profileId = $"python-fastapi-production-{Guid.NewGuid():n}";
+        var solutionCode = await ReadExerciseSolutionCodeAsync(exerciseDocumentPath);
+
+        var response = await client.PostAsJsonAsync(
+            $"/api/exercises/{exerciseId}/run",
+            new ExerciseRunTestRequest(profileId, [new(sourcePath, solutionCode)]),
             TestContext.Current.CancellationToken);
 
         var result = await response.Content.ReadFromJsonAsync<ExerciseRunTestResponse>(
@@ -3169,6 +3783,54 @@ public sealed class ExerciseEndpointTests
             TestContext.Current.CancellationToken);
         Assert.NotNull(result);
         return result;
+    }
+
+    private static async Task<string> ReadExerciseSolutionCodeAsync(string exerciseDocumentPath)
+    {
+        var path = Path.Combine(FindRepositoryRoot(), exerciseDocumentPath);
+        var lines = await File.ReadAllLinesAsync(path, TestContext.Current.CancellationToken);
+        var code = new List<string>();
+        var inCodeBlock = false;
+
+        foreach (var line in lines)
+        {
+            if (!inCodeBlock)
+            {
+                if (line == "  code: |")
+                {
+                    inCodeBlock = true;
+                }
+
+                continue;
+            }
+
+            if (line.StartsWith("commonWrongApproaches:", StringComparison.Ordinal))
+            {
+                break;
+            }
+
+            code.Add(line.Length >= 4 ? line[4..] : string.Empty);
+        }
+
+        Assert.NotEmpty(code);
+        return string.Join('\n', code);
+    }
+
+    private static string FindRepositoryRoot()
+    {
+        var directory = new DirectoryInfo(Directory.GetCurrentDirectory());
+        while (directory is not null)
+        {
+            if (Directory.Exists(Path.Combine(directory.FullName, "content"))
+                && File.Exists(Path.Combine(directory.FullName, "ProdigeeTutsPoint.slnx")))
+            {
+                return directory.FullName;
+            }
+
+            directory = directory.Parent;
+        }
+
+        throw new DirectoryNotFoundException("Could not locate repository root.");
     }
 
     private sealed class FakeExerciseRunner(

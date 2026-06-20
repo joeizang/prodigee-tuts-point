@@ -1,0 +1,108 @@
+id: design-orm-note-mapping-py
+title: DesignOrmNoteMapping
+kind: focused
+workspace:
+  runtime: python-pytest
+  starter: tracks/python/exercises/design-orm-note-mapping-py/orm_mapping.py
+  entryPoint: note_orm_mapping
+  visibleTest: |
+    from orm_mapping import note_orm_mapping, repository_contract
+
+
+    def test_note_mapping_has_table_columns_constraints_and_indexes() -> None:
+        mapping = note_orm_mapping()
+
+        assert mapping["table"] == "notes"
+        assert mapping["orm_choices"] == ["SQLAlchemy", "SQLModel"]
+        assert mapping["columns"]["title"] == {"type": "str", "primary_key": True, "nullable": False}
+        assert mapping["columns"]["body"] == {"type": "str", "nullable": False}
+        assert mapping["columns"]["tags"] == {"type": "json", "nullable": False, "default": []}
+        assert "ix_notes_title" in mapping["indexes"]
+
+
+    def test_repository_contract_keeps_orm_below_service_boundary() -> None:
+        contract = repository_contract()
+
+        assert contract["service_imports_session"] is False
+        assert contract["routes_return_orm_rows"] is False
+        assert "list_notes" in contract["methods"]
+        assert contract["methods"]["list_notes"]["returns"] == "Page[NoteRecord]"
+  hiddenTest: |
+    from orm_mapping import note_orm_mapping, repository_contract
+
+
+    def test_mapping_documents_response_conversion() -> None:
+        mapping = note_orm_mapping()
+
+        assert mapping["conversion"] == {
+            "orm_row": "NoteRow",
+            "service_record": "NoteRecord",
+            "response_model": "NoteRead",
+        }
+
+
+    def test_repository_methods_are_use_case_oriented() -> None:
+        methods = repository_contract()["methods"]
+
+        assert set(methods) == {"list_notes", "get_by_title", "add", "update", "delete"}
+        assert all("session" not in method for method in methods)
+hints:
+  - id: conceptual
+    level: conceptual
+    title: ORM rows are not responses
+    body: The mapping should explicitly convert ORM rows to service records and response models.
+  - id: api-approach
+    level: api-approach
+    title: Design the contract first
+    body: Repository method names should describe use cases, not expose arbitrary table access.
+  - id: structural
+    level: structural
+    title: Keep sessions below services
+    body: Services should call repository methods and should not import SQLAlchemy Session directly.
+solution:
+  title: Model solution
+  body: The model solution defines a concrete ORM mapping plan and repository boundary contract without importing unavailable ORM packages.
+  code: |
+    def note_orm_mapping() -> dict[str, object]:
+        return {
+            "table": "notes",
+            "orm_choices": ["SQLAlchemy", "SQLModel"],
+            "columns": {
+                "title": {"type": "str", "primary_key": True, "nullable": False},
+                "body": {"type": "str", "nullable": False},
+                "tags": {"type": "json", "nullable": False, "default": []},
+                "archived": {"type": "bool", "nullable": False, "default": False},
+            },
+            "indexes": ["ix_notes_title", "ix_notes_archived"],
+            "constraints": ["title primary key", "body not null", "tags not null"],
+            "conversion": {
+                "orm_row": "NoteRow",
+                "service_record": "NoteRecord",
+                "response_model": "NoteRead",
+            },
+        }
+
+
+    def repository_contract() -> dict[str, object]:
+        return {
+            "service_imports_session": False,
+            "routes_return_orm_rows": False,
+            "methods": {
+                "list_notes": {"args": ["filters", "limit", "offset"], "returns": "Page[NoteRecord]"},
+                "get_by_title": {"args": ["title"], "returns": "NoteRecord | None"},
+                "add": {"args": ["note"], "returns": "NoteRecord"},
+                "update": {"args": ["title", "changes"], "returns": "NoteRecord"},
+                "delete": {"args": ["title"], "returns": "None"},
+            },
+        }
+commonWrongApproaches:
+  - Returning SQLAlchemy rows directly from FastAPI routes.
+  - Letting service code import Session.
+  - Exposing generic table access instead of use-case methods.
+  - Treating SQLModel response models as table models automatically.
+expectedSolutionCharacteristics:
+  - Defines table columns and constraints.
+  - Documents SQLAlchemy and SQLModel choices.
+  - Keeps ORM rows below repository boundaries.
+  - Provides use-case-oriented repository methods.
+  - Names conversion between row, service record, and response model.

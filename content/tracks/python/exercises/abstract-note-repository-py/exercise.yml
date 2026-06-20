@@ -1,0 +1,250 @@
+id: abstract-note-repository-py
+title: AbstractNoteRepository
+kind: focused
+workspace:
+  runtime: python-pytest
+  starter: tracks/python/exercises/abstract-note-repository-py/note_repository.py
+  entryPoint: NotesService
+  visibleTest: |
+    from pathlib import Path
+
+    from note_repository import JsonNoteRepository, NotesService
+
+
+    def test_service_creates_and_lists_notes_through_json_repository(tmp_path: Path) -> None:
+        service = NotesService(JsonNoteRepository(tmp_path / "notes.json"))
+
+        created = service.create_note(" Python ", "Body", ["API", "python"])
+
+        assert created == {"title": "python", "body": "Body", "tags": ["api", "python"]}
+        assert service.list_notes() == [{"title": "python", "body": "Body", "tags": ["api", "python"]}]
+
+
+    def test_service_updates_and_deletes_through_repository(tmp_path: Path) -> None:
+        service = NotesService(JsonNoteRepository(tmp_path / "notes.json"))
+        service.create_note("python", "old", [])
+
+        updated = service.update_note(" Python ", body="new")
+        service.delete_note("python")
+
+        assert updated == {"title": "python", "body": "new", "tags": []}
+        assert service.list_notes() == []
+  hiddenTest: |
+    from pathlib import Path
+
+    import pytest
+
+    from note_repository import JsonNoteRepository, NotesService
+
+
+    class FakeRepository:
+        def __init__(self) -> None:
+            self.notes: list[dict[str, object]] = []
+
+        def list_notes(self) -> list[dict[str, object]]:
+            return [dict(note) for note in self.notes]
+
+        def get_note(self, title: str) -> dict[str, object] | None:
+            return next((dict(note) for note in self.notes if note["title"] == title), None)
+
+        def add_note(self, note: dict[str, object]) -> None:
+            self.notes.append(dict(note))
+
+        def update_note(self, title: str, changes: dict[str, object]) -> dict[str, object]:
+            for note in self.notes:
+                if note["title"] == title:
+                    note.update(changes)
+                    return dict(note)
+            raise KeyError(title)
+
+        def delete_note(self, title: str) -> None:
+            for index, note in enumerate(self.notes):
+                if note["title"] == title:
+                    del self.notes[index]
+                    return
+            raise KeyError(title)
+
+
+    def test_service_uses_repository_contract_not_file_paths() -> None:
+        fake = FakeRepository()
+        service = NotesService(fake)
+
+        service.create_note("FastAPI", "body", [])
+
+        assert fake.notes == [{"title": "fastapi", "body": "body", "tags": []}]
+
+
+    def test_duplicate_and_missing_rules_live_in_service(tmp_path: Path) -> None:
+        service = NotesService(JsonNoteRepository(tmp_path / "notes.json"))
+        service.create_note("Python", "body", [])
+
+        with pytest.raises(ValueError, match="note already exists: python"):
+            service.create_note(" python ", "second", [])
+
+        with pytest.raises(LookupError, match="note not found: missing"):
+            service.update_note("missing", body="new")
+hints:
+  - id: conceptual
+    level: conceptual
+    title: Service owns rules
+    body: Duplicate and missing-record decisions belong in NotesService, not in FastAPI handlers or JSON helpers.
+  - id: api-approach
+    level: api-approach
+    title: Repository owns persistence
+    body: JsonNoteRepository should know about Path and JSON. NotesService should only call repository methods.
+  - id: structural
+    level: structural
+    title: Use a small contract
+    body: list_notes, get_note, add_note, update_note, and delete_note are enough for this milestone.
+solution:
+  title: Model solution
+  body: The model solution defines a repository protocol, a JSON implementation, and a service that owns note normalization, duplicate checks, and missing-record behavior.
+  code: |
+    import json
+    from pathlib import Path
+    from typing import Protocol
+
+
+    class NoteRepository(Protocol):
+        def list_notes(self) -> list[dict[str, object]]: ...
+        def get_note(self, title: str) -> dict[str, object] | None: ...
+        def add_note(self, note: dict[str, object]) -> None: ...
+        def update_note(self, title: str, changes: dict[str, object]) -> dict[str, object]: ...
+        def delete_note(self, title: str) -> None: ...
+
+
+    class NotesService:
+        def __init__(self, repository: NoteRepository) -> None:
+            self.repository = repository
+
+        def list_notes(self) -> list[dict[str, object]]:
+            return self.repository.list_notes()
+
+        def create_note(self, title: str, body: str, tags: list[str]) -> dict[str, object]:
+            note = build_note(title, body, tags)
+            if self.repository.get_note(str(note["title"])) is not None:
+                raise ValueError(f"note already exists: {note['title']}")
+            self.repository.add_note(note)
+            return note
+
+        def update_note(
+            self,
+            title: str,
+            *,
+            body: str | None = None,
+            tags: list[str] | None = None,
+        ) -> dict[str, object]:
+            normalized_title = normalize_title(title)
+            if self.repository.get_note(normalized_title) is None:
+                raise LookupError(f"note not found: {normalized_title}")
+
+            changes: dict[str, object] = {}
+            if body is not None:
+                changes["body"] = normalize_body(body)
+            if tags is not None:
+                changes["tags"] = normalize_tags(tags)
+            if not changes:
+                raise ValueError("at least one update field is required")
+            return self.repository.update_note(normalized_title, changes)
+
+        def delete_note(self, title: str) -> None:
+            normalized_title = normalize_title(title)
+            if self.repository.get_note(normalized_title) is None:
+                raise LookupError(f"note not found: {normalized_title}")
+            self.repository.delete_note(normalized_title)
+
+
+    class JsonNoteRepository:
+        def __init__(self, path: Path) -> None:
+            self.path = path
+
+        def list_notes(self) -> list[dict[str, object]]:
+            if not self.path.exists():
+                return []
+            decoded = json.loads(self.path.read_text(encoding="utf-8"))
+            if not isinstance(decoded, list):
+                raise ValueError("notes file must contain a list")
+            return [validate_note(value) for value in decoded]
+
+        def get_note(self, title: str) -> dict[str, object] | None:
+            return next((note for note in self.list_notes() if note["title"] == title), None)
+
+        def add_note(self, note: dict[str, object]) -> None:
+            notes = self.list_notes()
+            notes.append(dict(note))
+            self.save(notes)
+
+        def update_note(self, title: str, changes: dict[str, object]) -> dict[str, object]:
+            notes = self.list_notes()
+            for note in notes:
+                if note["title"] == title:
+                    note.update(changes)
+                    self.save(notes)
+                    return note
+            raise KeyError(title)
+
+        def delete_note(self, title: str) -> None:
+            notes = self.list_notes()
+            remaining = [note for note in notes if note["title"] != title]
+            if len(remaining) == len(notes):
+                raise KeyError(title)
+            self.save(remaining)
+
+        def save(self, notes: list[dict[str, object]]) -> None:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            self.path.write_text(json.dumps(notes, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+    def build_note(title: str, body: str, tags: list[str]) -> dict[str, object]:
+        return {"title": normalize_title(title), "body": normalize_body(body), "tags": normalize_tags(tags)}
+
+
+    def normalize_title(value: str) -> str:
+        words = value.split()
+        if not words:
+            raise ValueError("title is required")
+        return " ".join(words).lower()
+
+
+    def normalize_body(value: str) -> str:
+        body = value.strip()
+        if not body:
+            raise ValueError("body is required")
+        return body
+
+
+    def normalize_tags(values: list[str]) -> list[str]:
+        tags: list[str] = []
+        for raw_tag in values:
+            tag = raw_tag.strip().lower()
+            if not tag:
+                continue
+            if " " in tag:
+                raise ValueError("tags cannot contain spaces")
+            if tag not in tags:
+                tags.append(tag)
+        return tags
+
+
+    def validate_note(value: object) -> dict[str, object]:
+        if not isinstance(value, dict):
+            raise ValueError("each note must be an object")
+        title = value.get("title")
+        body = value.get("body")
+        tags = value.get("tags")
+        if not isinstance(title, str) or not isinstance(body, str):
+            raise ValueError("note title and body must be text")
+        if not isinstance(tags, list) or not all(isinstance(tag, str) for tag in tags):
+            raise ValueError("note tags must be a list of strings")
+        return {"title": title, "body": body, "tags": list(tags)}
+commonWrongApproaches:
+  - Letting NotesService open JSON files directly.
+  - Putting duplicate-title rules inside FastAPI handlers.
+  - Making repository methods return HTTP responses.
+  - Defining a large abstraction before the app needs it.
+expectedSolutionCharacteristics:
+  - Defines a small repository contract.
+  - Keeps JSON persistence inside JsonNoteRepository.
+  - Keeps application rules inside NotesService.
+  - Supports fake repositories in tests.
+  - Preserves deterministic note dictionaries.

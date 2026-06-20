@@ -1,0 +1,130 @@
+id: package-run-notes-api-py
+title: PackageRunNotesApi
+kind: focused
+workspace:
+  runtime: python-pytest
+  starter: tracks/python/exercises/package-run-notes-api-py/run_notes_api.py
+  entryPoint: create_app
+  visibleTest: |
+    from pathlib import Path
+
+    from fastapi.testclient import TestClient
+
+    from run_notes_api import APP_IMPORT_TARGET, build_uvicorn_command, create_app
+
+
+    def test_uvicorn_command_targets_app_factory() -> None:
+        assert APP_IMPORT_TARGET == "notes_api.main:create_app"
+        assert build_uvicorn_command("0.0.0.0", 8080) == [
+            "uv",
+            "run",
+            "uvicorn",
+            "notes_api.main:create_app",
+            "--factory",
+            "--host",
+            "0.0.0.0",
+            "--port",
+            "8080",
+        ]
+
+
+    def test_health_exposes_safe_runtime_metadata(tmp_path: Path) -> None:
+        client = TestClient(create_app(tmp_path / "notes.db", environment="test"))
+
+        assert client.get("/health").json() == {
+            "status": "ok",
+            "app": "py-notes-api",
+            "environment": "test",
+            "database": str(tmp_path / "notes.db"),
+        }
+  hiddenTest: |
+    from pathlib import Path
+
+    import pytest
+
+    from run_notes_api import create_app, startup_check
+
+
+    def test_startup_check_rejects_missing_parent_directory_in_prod(tmp_path: Path) -> None:
+        missing_parent = tmp_path / "missing" / "notes.db"
+
+        with pytest.raises(RuntimeError, match="database directory"):
+            startup_check(missing_parent, environment="prod")
+
+
+    def test_create_app_runs_startup_check_for_prod(tmp_path: Path) -> None:
+        with pytest.raises(RuntimeError, match="database directory"):
+            create_app(tmp_path / "missing" / "notes.db", environment="prod")
+hints:
+  - id: conceptual
+    level: conceptual
+    title: Running is a contract
+    body: Developers and deployment tools need a stable import target and repeatable run command.
+  - id: api-approach
+    level: api-approach
+    title: Use app factory target
+    body: The uvicorn command should include --factory because the target creates an app from settings.
+  - id: structural
+    level: structural
+    title: Health is safe metadata
+    body: Health output can include environment and database path but must not include secrets.
+solution:
+  title: Model solution
+  body: The model solution defines the ASGI app-factory target, startup checks, health metadata, and a deterministic uvicorn command.
+  code: |
+    from pathlib import Path
+
+    from fastapi import FastAPI
+
+
+    APP_IMPORT_TARGET = "notes_api.main:create_app"
+
+
+    def create_app(database_path: Path, environment: str = "dev") -> FastAPI:
+        startup_check(database_path, environment)
+        app = FastAPI(title="py-notes-api")
+        app.state.database_path = database_path
+        app.state.environment = environment
+
+        @app.get("/health")
+        def health() -> dict[str, str]:
+            return {
+                "status": "ok",
+                "app": "py-notes-api",
+                "environment": app.state.environment,
+                "database": str(app.state.database_path),
+            }
+
+        return app
+
+
+    def startup_check(database_path: Path, environment: str) -> None:
+        if environment == "prod" and not database_path.parent.exists():
+            raise RuntimeError("database directory must exist in prod")
+        if environment not in {"dev", "test", "prod"}:
+            raise RuntimeError("environment must be dev, test, or prod")
+
+
+    def build_uvicorn_command(host: str = "127.0.0.1", port: int = 8000) -> list[str]:
+        return [
+            "uv",
+            "run",
+            "uvicorn",
+            APP_IMPORT_TARGET,
+            "--factory",
+            "--host",
+            host,
+            "--port",
+            str(port),
+        ]
+commonWrongApproaches:
+  - Returning API keys from health endpoints.
+  - Omitting --factory for an app factory target.
+  - Depending on the current working directory.
+  - Letting prod start with missing required directories.
+expectedSolutionCharacteristics:
+  - Defines a stable APP_IMPORT_TARGET.
+  - Builds a deterministic uvicorn command.
+  - Exposes safe health metadata.
+  - Performs startup checks before serving.
+  - Keeps secrets out of runtime metadata.

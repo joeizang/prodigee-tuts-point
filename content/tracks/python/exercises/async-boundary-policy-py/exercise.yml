@@ -1,0 +1,153 @@
+id: async-boundary-policy-py
+title: AsyncBoundaryPolicy
+kind: focused
+workspace:
+  runtime: python-pytest
+  starter: tracks/python/exercises/async-boundary-policy-py/async_notes_api.py
+  entryPoint: create_app
+  visibleTest: |
+    from pathlib import Path
+
+    from fastapi.testclient import TestClient
+
+    from async_notes_api import ASYNC_BOUNDARY_POLICY, create_app
+
+
+    def test_async_policy_documents_sync_sqlite_boundary() -> None:
+        assert ASYNC_BOUNDARY_POLICY["route_handlers"] == "async"
+        assert ASYNC_BOUNDARY_POLICY["sqlite_repository"] == "sync"
+        assert "threadpool" in ASYNC_BOUNDARY_POLICY["blocking_work"]
+
+
+    def test_async_routes_create_and_list_notes(tmp_path: Path) -> None:
+        client = TestClient(create_app(tmp_path / "notes.db"))
+
+        created = client.post("/notes", json={"title": "Async", "body": "boundary", "tags": ["sqlite"]})
+        listed = client.get("/notes")
+
+        assert created.status_code == 201
+        assert listed.json() == [{"title": "async", "body": "boundary", "tags": ["sqlite"]}]
+  hiddenTest: |
+    import inspect
+    from pathlib import Path
+
+    from fastapi.testclient import TestClient
+
+    import async_notes_api
+    from async_notes_api import create_app
+
+
+    def test_route_helpers_are_async_and_use_threadpool_boundary() -> None:
+        assert inspect.iscoroutinefunction(async_notes_api.list_notes)
+        assert inspect.iscoroutinefunction(async_notes_api.create_note)
+        assert "run_in_threadpool" in async_notes_api.list_notes.__code__.co_names
+        assert "run_in_threadpool" in async_notes_api.create_note.__code__.co_names
+
+
+    def test_duplicate_create_still_maps_to_409(tmp_path: Path) -> None:
+        client = TestClient(create_app(tmp_path / "notes.db"))
+        client.post("/notes", json={"title": "Async", "body": "one", "tags": []})
+
+        response = client.post("/notes", json={"title": " async ", "body": "two", "tags": []})
+
+        assert response.status_code == 409
+        assert response.json()["detail"] == "note already exists: async"
+hints:
+  - id: conceptual
+    level: conceptual
+    title: Async is a boundary decision
+    body: sqlite3 is synchronous, so async handlers must isolate service calls rather than calling blocking code directly.
+  - id: api-approach
+    level: api-approach
+    title: Use run_in_threadpool
+    body: Import run_in_threadpool from starlette.concurrency and await it around sync service calls.
+  - id: structural
+    level: structural
+    title: Export route helpers
+    body: Hidden tests inspect list_notes and create_note, so they must be top-level async functions registered with the app.
+solution:
+  title: Model solution
+  body: The solution keeps sqlite3-backed service methods synchronous and uses async route functions with run_in_threadpool as the explicit blocking-work boundary.
+  code: |
+    import sqlite3
+    from pathlib import Path
+
+    from fastapi import FastAPI, HTTPException, Request, status
+    from pydantic import BaseModel, Field
+    from starlette.concurrency import run_in_threadpool
+
+
+    ASYNC_BOUNDARY_POLICY: dict[str, str] = {
+        "route_handlers": "async",
+        "sqlite_repository": "sync",
+        "blocking_work": "sync service calls run through run_in_threadpool",
+    }
+
+
+    class NoteCreate(BaseModel):
+        title: str = Field(min_length=1)
+        body: str = Field(min_length=1)
+        tags: list[str] = Field(default_factory=list)
+
+
+    class NotesService:
+        def __init__(self, path: Path) -> None:
+            self.path = path
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            with sqlite3.connect(self.path) as connection:
+                connection.execute(
+                    "CREATE TABLE IF NOT EXISTS notes (title TEXT PRIMARY KEY, body TEXT NOT NULL, tags TEXT NOT NULL)"
+                )
+
+        def list_notes(self) -> list[dict[str, object]]:
+            with sqlite3.connect(self.path) as connection:
+                rows = connection.execute("SELECT title, body, tags FROM notes ORDER BY title").fetchall()
+            return [{"title": row[0], "body": row[1], "tags": row[2].split(",") if row[2] else []} for row in rows]
+
+        def create_note(self, title: str, body: str, tags: list[str]) -> dict[str, object]:
+            note = {
+                "title": " ".join(title.split()).lower(),
+                "body": body.strip(),
+                "tags": [tag.strip().lower() for tag in tags if tag.strip()],
+            }
+            try:
+                with sqlite3.connect(self.path) as connection:
+                    connection.execute(
+                        "INSERT INTO notes (title, body, tags) VALUES (?, ?, ?)",
+                        (note["title"], note["body"], ",".join(note["tags"])),
+                    )
+            except sqlite3.IntegrityError as error:
+                raise ValueError(f"note already exists: {note['title']}") from error
+            return note
+
+
+    async def list_notes(request: Request) -> list[dict[str, object]]:
+        service = NotesService(request.app.state.database_path)
+        return await run_in_threadpool(service.list_notes)
+
+
+    async def create_note(request: Request, body: NoteCreate) -> dict[str, object]:
+        service = NotesService(request.app.state.database_path)
+        try:
+            return await run_in_threadpool(service.create_note, body.title, body.body, body.tags)
+        except ValueError as error:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(error)) from error
+
+
+    def create_app(database_path: Path) -> FastAPI:
+        app = FastAPI()
+        app.state.database_path = database_path
+        app.add_api_route("/notes", list_notes, methods=["GET"])
+        app.add_api_route("/notes", create_note, methods=["POST"], status_code=201)
+        return app
+commonWrongApproaches:
+  - Marking routes async while calling sqlite3 directly.
+  - Making repository methods async even though sqlite3 is sync.
+  - Omitting an explicit async policy.
+  - Hiding route functions inside create_app so they cannot be inspected.
+expectedSolutionCharacteristics:
+  - Exports ASYNC_BOUNDARY_POLICY with clear layer decisions.
+  - Uses top-level async route functions.
+  - Calls sync service methods through run_in_threadpool.
+  - Preserves existing HTTP behavior under async handlers.
+  - Keeps sqlite3 usage synchronous and isolated.

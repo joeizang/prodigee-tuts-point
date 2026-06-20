@@ -1,0 +1,105 @@
+id: configure-alembic-environment-py
+title: ConfigureAlembicEnvironment
+kind: focused
+workspace:
+  runtime: python-pytest
+  starter: tracks/python/exercises/configure-alembic-environment-py/alembic_environment.py
+  entryPoint: alembic_environment_plan
+  visibleTest: |
+    from alembic_environment import alembic_environment_plan
+
+
+    def test_environment_plan_defines_files_and_metadata_import() -> None:
+        plan = alembic_environment_plan()
+
+        assert "alembic.ini" in plan["files"]
+        assert "migrations/env.py" in plan["files"]
+        assert "migrations/versions" in plan["files"]
+        assert plan["target_metadata"] == "notes_api.models.Base.metadata"
+        assert plan["database_url_source"] == "AppSettings.database_url"
+
+
+    def test_commands_include_revision_upgrade_and_smoke_tests() -> None:
+        plan = alembic_environment_plan()
+
+        assert "uv run alembic revision --autogenerate -m <message>" in plan["commands"]
+        assert "uv run alembic upgrade head" in plan["commands"]
+        assert "uv run pytest tests/test_migrations.py" in plan["commands"]
+  hiddenTest: |
+    from alembic_environment import alembic_environment_plan
+
+
+    def test_review_policy_rejects_unsafe_autogenerate_behavior() -> None:
+        plan = alembic_environment_plan()
+
+        assert plan["uses_create_all_in_production"] is False
+        assert "manual_review_required" in plan["revision_review"]
+        assert "no_unreviewed_drop_table" in plan["revision_review"]
+        assert "data_backfill_plan_checked" in plan["revision_review"]
+
+
+    def test_smoke_tests_cover_fresh_and_existing_databases() -> None:
+        plan = alembic_environment_plan()
+
+        assert plan["smoke_tests"] == [
+            "upgrade_head_on_fresh_database",
+            "upgrade_head_preserves_existing_notes",
+            "repository_can_read_and_write_after_upgrade",
+        ]
+hints:
+  - id: conceptual
+    level: conceptual
+    title: Alembic needs application metadata
+    body: The environment should import the same metadata that the SQLAlchemy repository models use.
+  - id: api-approach
+    level: api-approach
+    title: Commands are part of the contract
+    body: Include the revision, upgrade, and migration smoke test commands the team should run.
+  - id: structural
+    level: structural
+    title: Production should not create all
+    body: Once migrations exist, production startup should verify schema instead of creating tables casually.
+solution:
+  title: Model solution
+  body: The model solution defines the Alembic file layout, metadata import, command sequence, review policy, and smoke tests for the notes API.
+  code: |
+    def alembic_environment_plan() -> dict[str, object]:
+        return {
+            "files": [
+                "alembic.ini",
+                "migrations/env.py",
+                "migrations/script.py.mako",
+                "migrations/versions",
+            ],
+            "target_metadata": "notes_api.models.Base.metadata",
+            "database_url_source": "AppSettings.database_url",
+            "commands": [
+                "uv run alembic revision --autogenerate -m <message>",
+                "uv run alembic upgrade head",
+                "uv run pytest tests/test_migrations.py",
+            ],
+            "revision_review": [
+                "manual_review_required",
+                "no_unreviewed_drop_table",
+                "data_backfill_plan_checked",
+                "downgrade_behavior_documented",
+                "postgresql_portability_checked",
+            ],
+            "smoke_tests": [
+                "upgrade_head_on_fresh_database",
+                "upgrade_head_preserves_existing_notes",
+                "repository_can_read_and_write_after_upgrade",
+            ],
+            "uses_create_all_in_production": False,
+        }
+commonWrongApproaches:
+  - Pointing Alembic at test-only metadata.
+  - Trusting autogenerate without review.
+  - Creating production tables during app startup.
+  - Skipping upgraded-database migration tests.
+expectedSolutionCharacteristics:
+  - Defines Alembic file layout.
+  - Imports application metadata explicitly.
+  - Names safe migration commands.
+  - Requires deliberate revision review.
+  - Includes migration smoke tests.

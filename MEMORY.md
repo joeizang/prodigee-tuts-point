@@ -20,3 +20,4 @@
 - Local AI review defaults should match the user's actual Ollama models, currently `gemma4:31b-mlx` and `qwen3.6:35b-mlx`; do not ship stale placeholder model names such as `llama3.1`.
 - Form control rows must not inherit unrelated button spacing that breaks vertical alignment. Override global margins within dense control groups and verify select/button heights line up.
 - The Node.js Servers curriculum track should target Fastify as the production framework after native Node boundaries are understood. Do not introduce Express.js into roadmap, content, or future task plans unless the user explicitly changes direction.
+- For the Python/FastAPI curriculum, prefer larger coherent progression batches over tiny one-slice increments when the concepts naturally belong together. Maintain depth and verification, but move at a faster curriculum-building cadence.

@@ -1,0 +1,283 @@
+id: run-note-command-py
+title: RunNoteCommand
+kind: focused
+workspace:
+  runtime: python-pytest
+  starter: tracks/python/exercises/run-note-command-py/note_cli.py
+  entryPoint: run_note_command
+  visibleTest: |
+    import json
+    from pathlib import Path
+
+    from note_cli import run_note_command
+
+
+    def write_notes(path: Path) -> None:
+        path.write_text(
+            json.dumps(
+                [
+                    {"title": "learn python", "body": "Practice daily", "tags": ["python", "cli"]},
+                    {"title": "learn fastapi", "body": "Build routes", "tags": ["python", "api"]},
+                ]
+            ),
+            encoding="utf-8",
+        )
+
+
+    def test_list_renders_all_notes(tmp_path: Path) -> None:
+        notes_path = tmp_path / "notes.json"
+        write_notes(notes_path)
+
+        assert run_note_command(["list"], notes_path) == (
+            "1. learn python [python, cli]\n"
+            "2. learn fastapi [python, api]"
+        )
+
+
+    def test_search_by_tag_renders_matching_notes(tmp_path: Path) -> None:
+        notes_path = tmp_path / "notes.json"
+        write_notes(notes_path)
+
+        assert run_note_command(["search", "--tag", "api"], notes_path) == "1. learn fastapi [python, api]"
+
+
+    def test_update_changes_existing_note_body(tmp_path: Path) -> None:
+        notes_path = tmp_path / "notes.json"
+        write_notes(notes_path)
+
+        message = run_note_command(
+            ["update", "--title", " Learn Python ", "--body", "Practice with pytest"],
+            notes_path,
+        )
+
+        assert message == "Updated note: learn python"
+        assert json.loads(notes_path.read_text(encoding="utf-8"))[0]["body"] == "Practice with pytest"
+  hiddenTest: |
+    import json
+    from pathlib import Path
+
+    import pytest
+
+    from note_cli import run_note_command
+
+
+    def write_notes(path: Path) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            json.dumps(
+                [
+                    {"title": "learn python", "body": "Practice daily", "tags": ["python", "cli"]},
+                    {"title": "learn fastapi", "body": "Build routes", "tags": ["python", "api"]},
+                ]
+            ),
+            encoding="utf-8",
+        )
+
+
+    def test_delete_removes_existing_note_and_saves_pretty_json(tmp_path: Path) -> None:
+        notes_path = tmp_path / "nested" / "notes.json"
+        write_notes(notes_path)
+
+        message = run_note_command(["delete", "--title", "learn fastapi"], notes_path)
+
+        assert message == "Deleted note: learn fastapi"
+        assert notes_path.read_text(encoding="utf-8") == (
+            '[\n'
+            '  {\n'
+            '    "body": "Practice daily",\n'
+            '    "tags": [\n'
+            '      "python",\n'
+            '      "cli"\n'
+            '    ],\n'
+            '    "title": "learn python"\n'
+            '  }\n'
+            ']\n'
+        )
+
+
+    def test_query_commands_do_not_rewrite_storage(tmp_path: Path) -> None:
+        notes_path = tmp_path / "notes.json"
+        write_notes(notes_path)
+        before = notes_path.read_text(encoding="utf-8")
+
+        assert run_note_command(["search", "--tag", "missing"], notes_path) == "No notes found."
+
+        assert notes_path.read_text(encoding="utf-8") == before
+
+
+    def test_update_missing_note_fails_without_writing(tmp_path: Path) -> None:
+        notes_path = tmp_path / "notes.json"
+        write_notes(notes_path)
+        before = notes_path.read_text(encoding="utf-8")
+
+        with pytest.raises(ValueError, match="note not found: missing"):
+            run_note_command(["update", "--title", "missing", "--body", "new"], notes_path)
+
+        assert notes_path.read_text(encoding="utf-8") == before
+
+
+    def test_delete_missing_note_fails_without_writing(tmp_path: Path) -> None:
+        notes_path = tmp_path / "notes.json"
+        write_notes(notes_path)
+        before = notes_path.read_text(encoding="utf-8")
+
+        with pytest.raises(ValueError, match="note not found: missing"):
+            run_note_command(["delete", "--title", "missing"], notes_path)
+
+        assert notes_path.read_text(encoding="utf-8") == before
+hints:
+  - id: conceptual
+    level: conceptual
+    title: Separate query and mutation commands
+    body: List and search should only read. Update and delete should read, change the trusted notes list, and save only after success.
+  - id: api-approach
+    level: api-approach
+    title: Dispatch from the first token
+    body: Treat args[0] as the command name and pass the remaining tokens to command-specific parsing helpers.
+  - id: structural
+    level: structural
+    title: Keep service helpers reusable
+    body: Functions such as search_notes_by_tag, update_note_body, and delete_note should work with notes data rather than command-line strings.
+solution:
+  title: Model solution
+  body: The model solution uses a dispatcher, small parsers, reusable service helpers, deterministic rendering, and stable JSON saving.
+  code: |
+    import json
+    from pathlib import Path
+
+
+    def run_note_command(args: list[str], notes_path: Path) -> str:
+        if not args:
+            raise ValueError("command is required")
+
+        command = args[0]
+        command_args = args[1:]
+
+        if command == "list":
+            return render_note_list(load_notes_or_empty(notes_path))
+        if command == "search":
+            tag = parse_single_option(command_args, "--tag")
+            return render_note_list(search_notes_by_tag(load_notes_or_empty(notes_path), tag))
+        if command == "update":
+            values = parse_options(command_args, {"--title", "--body"})
+            title = normalize_title(values["--title"])
+            body = values["--body"].strip()
+            if not body:
+                raise ValueError("--body is required")
+            notes = load_notes_or_empty(notes_path)
+            if not update_note_body(notes, title, body):
+                raise ValueError(f"note not found: {title}")
+            save_notes(notes_path, notes)
+            return f"Updated note: {title}"
+        if command == "delete":
+            title = normalize_title(parse_single_option(command_args, "--title"))
+            notes = load_notes_or_empty(notes_path)
+            if not delete_note(notes, title):
+                raise ValueError(f"note not found: {title}")
+            save_notes(notes_path, notes)
+            return f"Deleted note: {title}"
+
+        raise ValueError(f"unknown command: {command}")
+
+
+    def parse_single_option(args: list[str], option: str) -> str:
+        return parse_options(args, {option})[option]
+
+
+    def parse_options(args: list[str], required: set[str]) -> dict[str, str]:
+        values: dict[str, str] = {}
+        index = 0
+        while index < len(args):
+            option = args[index]
+            if option not in required:
+                raise ValueError(f"unknown option: {option}")
+            index += 1
+            if index >= len(args):
+                raise ValueError(f"{option} requires a value")
+            values[option] = args[index]
+            index += 1
+
+        missing = required - values.keys()
+        if missing:
+            raise ValueError(f"{sorted(missing)[0]} is required")
+        return values
+
+
+    def normalize_title(raw_title: str) -> str:
+        words = raw_title.split()
+        if not words:
+            raise ValueError("--title is required")
+        return " ".join(words).lower()
+
+
+    def load_notes_or_empty(path: Path) -> list[dict[str, object]]:
+        if not path.exists():
+            return []
+        decoded = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(decoded, list):
+            raise ValueError("notes file must contain a list")
+
+        notes: list[dict[str, object]] = []
+        for value in decoded:
+            if not isinstance(value, dict):
+                raise ValueError("each note must be an object")
+            title = value.get("title")
+            body = value.get("body")
+            tags = value.get("tags")
+            if not isinstance(title, str) or not isinstance(body, str):
+                raise ValueError("note title and body must be text")
+            if not isinstance(tags, list) or not all(isinstance(tag, str) for tag in tags):
+                raise ValueError("note tags must be a list of strings")
+            notes.append({"title": title, "body": body, "tags": list(tags)})
+        return notes
+
+
+    def save_notes(path: Path, notes: list[dict[str, object]]) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(notes, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+    def render_note_list(notes: list[dict[str, object]]) -> str:
+        if not notes:
+            return "No notes found."
+        lines: list[str] = []
+        for index, note in enumerate(notes, start=1):
+            tags = ", ".join(str(tag) for tag in note["tags"])
+            tag_text = f" [{tags}]" if tags else ""
+            lines.append(f"{index}. {note['title']}{tag_text}")
+        return "\n".join(lines)
+
+
+    def search_notes_by_tag(notes: list[dict[str, object]], tag: str) -> list[dict[str, object]]:
+        normalized = tag.strip().lower()
+        if not normalized:
+            raise ValueError("--tag is required")
+        return [note for note in notes if normalized in note["tags"]]
+
+
+    def update_note_body(notes: list[dict[str, object]], title: str, body: str) -> bool:
+        for note in notes:
+            if note["title"] == title:
+                note["body"] = body
+                return True
+        return False
+
+
+    def delete_note(notes: list[dict[str, object]], title: str) -> bool:
+        for index, note in enumerate(notes):
+            if note["title"] == title:
+                del notes[index]
+                return True
+        return False
+commonWrongApproaches:
+  - Rewriting the JSON file during list or search.
+  - Swallowing missing update/delete targets and returning success.
+  - Duplicating JSON parsing and saving inside every command branch.
+  - Matching titles without applying the same normalization rule used by add.
+  - Returning Python lists directly instead of deterministic CLI text.
+expectedSolutionCharacteristics:
+  - Dispatches by command name.
+  - Keeps query commands read-only.
+  - Saves only after successful mutations.
+  - Raises ValueError for missing required options and missing target notes.
+  - Uses stable indented JSON with sorted keys and one trailing newline.

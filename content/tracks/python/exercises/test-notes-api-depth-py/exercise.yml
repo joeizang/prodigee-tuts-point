@@ -1,0 +1,253 @@
+id: test-notes-api-depth-py
+title: TestNotesApiDepth
+kind: focused
+workspace:
+  runtime: python-pytest
+  starter: tracks/python/exercises/test-notes-api-depth-py/notes_api_testing.py
+  entryPoint: create_app
+  visibleTest: |
+    from pathlib import Path
+
+    from notes_api_testing import make_test_client
+
+
+    def test_make_test_client_uses_isolated_storage(tmp_path: Path) -> None:
+        first = make_test_client(tmp_path / "first.json")
+        second = make_test_client(tmp_path / "second.json")
+
+        first.post("/notes", json={"title": "Python", "body": "one", "tags": []})
+
+        assert first.get("/notes").json() == [{"title": "python", "body": "one", "tags": []}]
+        assert second.get("/notes").json() == []
+
+
+    def test_conflict_and_missing_paths_are_covered(tmp_path: Path) -> None:
+        client = make_test_client(tmp_path / "notes.json")
+        client.post("/notes", json={"title": "Python", "body": "one", "tags": []})
+
+        duplicate = client.post("/notes", json={"title": " python ", "body": "two", "tags": []})
+        missing = client.patch("/notes/missing", json={"body": "new"})
+
+        assert duplicate.status_code == 409
+        assert duplicate.json()["detail"] == "note already exists: python"
+        assert missing.status_code == 404
+        assert missing.json()["detail"] == "note not found: missing"
+  hiddenTest: |
+    from pathlib import Path
+
+    from fastapi.testclient import TestClient
+
+    from notes_api_testing import create_app, get_notes_service, make_test_client
+
+
+    class FakeService:
+        def list_notes(self) -> list[dict[str, object]]:
+            return [{"title": "fake", "body": "override", "tags": ["test"]}]
+
+        def create_note(self, title: str, body: str, tags: list[str]) -> dict[str, object]:
+            return {"title": title, "body": body, "tags": tags}
+
+        def update_note(self, title: str, *, body: str) -> dict[str, object]:
+            return {"title": title, "body": body, "tags": []}
+
+        def delete_note(self, title: str) -> None:
+            return None
+
+
+    def test_dependency_override_exercises_http_boundary(tmp_path: Path) -> None:
+        app = create_app(tmp_path / "notes.json")
+        app.dependency_overrides[get_notes_service] = lambda: FakeService()
+        client = TestClient(app)
+
+        response = client.get("/notes")
+
+        assert response.status_code == 200
+        assert response.json() == [{"title": "fake", "body": "override", "tags": ["test"]}]
+        assert not (tmp_path / "notes.json").exists()
+
+
+    def test_structural_and_semantic_validation_are_distinct(tmp_path: Path) -> None:
+        client = make_test_client(tmp_path / "notes.json")
+
+        structural = client.post("/notes", json={"title": "Missing body"})
+        semantic = client.post("/notes", json={"title": "Bad", "body": "body", "tags": ["machine learning"]})
+
+        assert structural.status_code == 422
+        assert semantic.status_code == 400
+        assert semantic.json()["detail"] == "tags cannot contain spaces"
+
+
+    def test_delete_contract_is_204_empty_body(tmp_path: Path) -> None:
+        client = make_test_client(tmp_path / "notes.json")
+        client.post("/notes", json={"title": "Python", "body": "body", "tags": []})
+
+        response = client.delete("/notes/python")
+
+        assert response.status_code == 204
+        assert response.content == b""
+hints:
+  - id: conceptual
+    level: conceptual
+    title: Test categories, not just endpoints
+    body: Cover isolation, dependency overrides, structural validation, semantic validation, conflict, not-found, and no-content behavior.
+  - id: api-approach
+    level: api-approach
+    title: Provide a test-client factory
+    body: make_test_client(notes_path) should return a TestClient around a fresh app configured for that storage path.
+  - id: structural
+    level: structural
+    title: Export the dependency provider
+    body: Hidden tests import get_notes_service and override it, so it must be a stable top-level function.
+solution:
+  title: Model solution
+  body: The solution exposes an app factory, dependency provider, test-client factory, and route handlers that preserve HTTP semantics under real storage and overrides.
+  code: |
+    import json
+    from pathlib import Path
+    from typing import Annotated
+
+    from fastapi import Depends, FastAPI, HTTPException, Request, Response, status
+    from fastapi.testclient import TestClient
+    from pydantic import BaseModel, Field
+
+
+    class NoteCreate(BaseModel):
+        title: str = Field(min_length=1)
+        body: str = Field(min_length=1)
+        tags: list[str] = Field(default_factory=list)
+
+
+    class NoteUpdate(BaseModel):
+        body: str = Field(min_length=1)
+
+
+    class NotesService:
+        def __init__(self, path: Path) -> None:
+            self.path = path
+
+        def list_notes(self) -> list[dict[str, object]]:
+            if not self.path.exists():
+                return []
+            return list(json.loads(self.path.read_text(encoding="utf-8")))
+
+        def create_note(self, title: str, body: str, tags: list[str]) -> dict[str, object]:
+            note = {"title": normalize_title(title), "body": normalize_body(body), "tags": normalize_tags(tags)}
+            notes = self.list_notes()
+            if any(existing["title"] == note["title"] for existing in notes):
+                raise ValueError(f"note already exists: {note['title']}")
+            notes.append(note)
+            self.save(notes)
+            return note
+
+        def update_note(self, title: str, *, body: str) -> dict[str, object]:
+            normalized = normalize_title(title)
+            notes = self.list_notes()
+            for note in notes:
+                if note["title"] == normalized:
+                    note["body"] = normalize_body(body)
+                    self.save(notes)
+                    return note
+            raise LookupError(f"note not found: {normalized}")
+
+        def delete_note(self, title: str) -> None:
+            normalized = normalize_title(title)
+            notes = self.list_notes()
+            remaining = [note for note in notes if note["title"] != normalized]
+            if len(remaining) == len(notes):
+                raise LookupError(f"note not found: {normalized}")
+            self.save(remaining)
+
+        def save(self, notes: list[dict[str, object]]) -> None:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            self.path.write_text(json.dumps(notes, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+    def get_notes_service(request: Request) -> NotesService:
+        return NotesService(request.app.state.notes_path)
+
+
+    def create_app(notes_path: Path) -> FastAPI:
+        app = FastAPI()
+        app.state.notes_path = notes_path
+
+        @app.get("/notes")
+        def list_notes(service: Annotated[NotesService, Depends(get_notes_service)]) -> list[dict[str, object]]:
+            return service.list_notes()
+
+        @app.post("/notes", status_code=status.HTTP_201_CREATED)
+        def create_note(
+            request: NoteCreate,
+            service: Annotated[NotesService, Depends(get_notes_service)],
+        ) -> dict[str, object]:
+            try:
+                return service.create_note(request.title, request.body, request.tags)
+            except ValueError as error:
+                message = str(error)
+                if message.startswith("note already exists:"):
+                    raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=message) from error
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=message) from error
+
+        @app.patch("/notes/{title}")
+        def update_note(
+            title: str,
+            request: NoteUpdate,
+            service: Annotated[NotesService, Depends(get_notes_service)],
+        ) -> dict[str, object]:
+            try:
+                return service.update_note(title, body=request.body)
+            except LookupError as error:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error)) from error
+
+        @app.delete("/notes/{title}", status_code=status.HTTP_204_NO_CONTENT)
+        def delete_note(
+            title: str,
+            service: Annotated[NotesService, Depends(get_notes_service)],
+        ) -> Response:
+            try:
+                service.delete_note(title)
+                return Response(status_code=status.HTTP_204_NO_CONTENT)
+            except LookupError as error:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error)) from error
+
+        return app
+
+
+    def make_test_client(notes_path: Path) -> TestClient:
+        return TestClient(create_app(notes_path))
+
+
+    def normalize_title(value: str) -> str:
+        words = value.split()
+        if not words:
+            raise ValueError("title is required")
+        return " ".join(words).lower()
+
+
+    def normalize_body(value: str) -> str:
+        body = value.strip()
+        if not body:
+            raise ValueError("body is required")
+        return body
+
+
+    def normalize_tags(values: list[str]) -> list[str]:
+        tags: list[str] = []
+        for raw_tag in values:
+            tag = raw_tag.strip().lower()
+            if not tag:
+                continue
+            if " " in tag:
+                raise ValueError("tags cannot contain spaces")
+            if tag not in tags:
+                tags.append(tag)
+        return tags
+commonWrongApproaches:
+  - Reusing one global TestClient for all tests.
+  - Forgetting to export get_notes_service for overrides.
+  - Collapsing structural 422 and semantic 400 failures.
+  - Returning a JSON body for 204 deletes.
+expectedSolutionCharacteristics:
+  - Exposes create_app, get_notes_service, and make_test_client.
+  - Uses fresh app storage per test-client factory call.
+  - Supports dependency overrides for isolated route tests.
+  - Preserves 409, 404, 400, 422, and 204 behaviors.

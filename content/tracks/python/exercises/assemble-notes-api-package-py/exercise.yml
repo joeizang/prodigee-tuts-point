@@ -1,0 +1,206 @@
+id: assemble-notes-api-package-py
+title: AssembleNotesApiPackage
+kind: focused
+workspace:
+  runtime: python-pytest
+  starter: tracks/python/exercises/assemble-notes-api-package-py/notes_package.py
+  entryPoint: create_app
+  visibleTest: |
+    from pathlib import Path
+
+    from fastapi.testclient import TestClient
+
+    from notes_package import create_app, package_map
+
+
+    def test_package_map_names_clear_boundaries() -> None:
+        assert package_map() == {
+            "models": "Pydantic request and response contracts",
+            "services": "Application rules and use cases",
+            "repositories": "Persistence implementations",
+            "dependencies": "FastAPI dependency providers",
+            "main": "Application factory and route registration",
+        }
+
+
+    def test_app_factory_composes_working_notes_api(tmp_path: Path) -> None:
+        client = TestClient(create_app(tmp_path / "notes.db"))
+
+        created = client.post("/notes", json={"title": " Python ", "body": "package", "tags": ["API"]})
+        listed = client.get("/notes")
+
+        assert created.status_code == 201
+        assert created.json() == {"title": "python", "body": "package", "tags": ["api"]}
+        assert listed.json() == [{"title": "python", "body": "package", "tags": ["api"]}]
+  hiddenTest: |
+    from pathlib import Path
+
+    from fastapi.testclient import TestClient
+
+    from notes_package import NotesService, create_app
+
+
+    def test_service_layer_does_not_require_fastapi_or_paths() -> None:
+        class FakeRepository:
+            def __init__(self) -> None:
+                self.notes: list[dict[str, object]] = []
+
+            def list_notes(self) -> list[dict[str, object]]:
+                return list(self.notes)
+
+            def add_note(self, note: dict[str, object]) -> None:
+                self.notes.append(note)
+
+        service = NotesService(FakeRepository())
+
+        assert service.create_note("FastAPI", "body", []) == {"title": "fastapi", "body": "body", "tags": []}
+
+
+    def test_dependency_override_still_replaces_service(tmp_path: Path) -> None:
+        app = create_app(tmp_path / "notes.db")
+
+        class FakeService:
+            def list_notes(self) -> list[dict[str, object]]:
+                return [{"title": "fake", "body": "override", "tags": []}]
+
+            def create_note(self, title: str, body: str, tags: list[str]) -> dict[str, object]:
+                return {"title": title, "body": body, "tags": tags}
+
+        app.dependency_overrides[app.state.get_notes_service] = lambda: FakeService()
+        client = TestClient(app)
+
+        assert client.get("/notes").json() == [{"title": "fake", "body": "override", "tags": []}]
+hints:
+  - id: conceptual
+    level: conceptual
+    title: One boundary per owner
+    body: Models, services, repositories, dependencies, and main/app composition each own different decisions.
+  - id: api-approach
+    level: api-approach
+    title: Keep create_app as composition root
+    body: create_app should choose concrete dependencies and expose override seams without hiding business rules.
+  - id: structural
+    level: structural
+    title: Export testable pieces
+    body: Hidden tests import NotesService directly, so the service must remain usable without FastAPI.
+solution:
+  title: Model solution
+  body: The solution assembles a production-shaped FastAPI app in one file while preserving model, service, repository, dependency, and app ownership boundaries.
+  code: |
+    import sqlite3
+    from pathlib import Path
+    from typing import Annotated, Protocol
+
+    from fastapi import Depends, FastAPI, Request
+    from pydantic import BaseModel, Field
+
+
+    class NoteCreate(BaseModel):
+        title: str = Field(min_length=1)
+        body: str = Field(min_length=1)
+        tags: list[str] = Field(default_factory=list)
+
+
+    class NoteRead(BaseModel):
+        title: str
+        body: str
+        tags: list[str]
+
+
+    class NoteRepository(Protocol):
+        def list_notes(self) -> list[dict[str, object]]: ...
+        def add_note(self, note: dict[str, object]) -> None: ...
+
+
+    class NotesService:
+        def __init__(self, repository: NoteRepository) -> None:
+            self.repository = repository
+
+        def list_notes(self) -> list[dict[str, object]]:
+            return self.repository.list_notes()
+
+        def create_note(self, title: str, body: str, tags: list[str]) -> dict[str, object]:
+            note = {"title": normalize_title(title), "body": body.strip(), "tags": normalize_tags(tags)}
+            self.repository.add_note(note)
+            return note
+
+
+    class SqliteNoteRepository:
+        def __init__(self, path: Path) -> None:
+            self.path = path
+            self.initialize()
+
+        def initialize(self) -> None:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            with sqlite3.connect(self.path) as connection:
+                connection.execute(
+                    "CREATE TABLE IF NOT EXISTS notes (title TEXT PRIMARY KEY, body TEXT NOT NULL, tags TEXT NOT NULL)"
+                )
+
+        def list_notes(self) -> list[dict[str, object]]:
+            with sqlite3.connect(self.path) as connection:
+                rows = connection.execute("SELECT title, body, tags FROM notes ORDER BY title").fetchall()
+            return [{"title": row[0], "body": row[1], "tags": row[2].split(",") if row[2] else []} for row in rows]
+
+        def add_note(self, note: dict[str, object]) -> None:
+            tags = ",".join(str(tag) for tag in note["tags"])
+            with sqlite3.connect(self.path) as connection:
+                connection.execute(
+                    "INSERT INTO notes (title, body, tags) VALUES (?, ?, ?)",
+                    (note["title"], note["body"], tags),
+                )
+
+
+    def package_map() -> dict[str, str]:
+        return {
+            "models": "Pydantic request and response contracts",
+            "services": "Application rules and use cases",
+            "repositories": "Persistence implementations",
+            "dependencies": "FastAPI dependency providers",
+            "main": "Application factory and route registration",
+        }
+
+
+    def create_app(database_path: Path) -> FastAPI:
+        app = FastAPI()
+        app.state.database_path = database_path
+
+        def get_notes_service(request: Request) -> NotesService:
+            return NotesService(SqliteNoteRepository(request.app.state.database_path))
+
+        app.state.get_notes_service = get_notes_service
+
+        @app.get("/notes", response_model=list[NoteRead])
+        def list_notes(service: Annotated[NotesService, Depends(get_notes_service)]) -> list[dict[str, object]]:
+            return service.list_notes()
+
+        @app.post("/notes", response_model=NoteRead, status_code=201)
+        def create_note(
+            request: NoteCreate,
+            service: Annotated[NotesService, Depends(get_notes_service)],
+        ) -> dict[str, object]:
+            return service.create_note(request.title, request.body, request.tags)
+
+        return app
+
+
+    def normalize_title(value: str) -> str:
+        words = value.split()
+        if not words:
+            raise ValueError("title is required")
+        return " ".join(words).lower()
+
+
+    def normalize_tags(values: list[str]) -> list[str]:
+        return [tag.strip().lower() for tag in values if tag.strip()]
+commonWrongApproaches:
+  - Putting SQL directly in route handlers.
+  - Making NotesService depend on FastAPI Request objects.
+  - Hiding the dependency provider so tests cannot override it.
+  - Returning an empty package map that does not explain ownership.
+expectedSolutionCharacteristics:
+  - Provides package_map with five clear responsibilities.
+  - Exports NotesService for direct service tests.
+  - Builds a working app through create_app.
+  - Keeps SQLite inside a repository class.
+  - Preserves dependency override support.

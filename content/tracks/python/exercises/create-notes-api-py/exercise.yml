@@ -1,0 +1,285 @@
+id: create-notes-api-py
+title: CreateNotesApi
+kind: focused
+workspace:
+  runtime: python-pytest
+  starter: tracks/python/exercises/create-notes-api-py/notes_api.py
+  entryPoint: create_app
+  visibleTest: |
+    from pathlib import Path
+
+    from fastapi.testclient import TestClient
+
+    from notes_api import create_app
+
+
+    def test_create_and_list_notes(tmp_path: Path) -> None:
+        client = TestClient(create_app(tmp_path / "notes.json"))
+
+        created = client.post(
+            "/notes",
+            json={"title": " Learn FastAPI ", "body": "Reuse services", "tags": ["Python", "api"]},
+        )
+        listed = client.get("/notes")
+
+        assert created.status_code == 201
+        assert created.json() == {
+            "title": "learn fastapi",
+            "body": "Reuse services",
+            "tags": ["python", "api"],
+        }
+        assert listed.status_code == 200
+        assert listed.json() == [
+            {"title": "learn fastapi", "body": "Reuse services", "tags": ["python", "api"]}
+        ]
+
+
+    def test_search_by_tag_uses_query_parameter(tmp_path: Path) -> None:
+        client = TestClient(create_app(tmp_path / "notes.json"))
+        client.post("/notes", json={"title": "Python", "body": "cli", "tags": ["python", "cli"]})
+        client.post("/notes", json={"title": "FastAPI", "body": "api", "tags": ["python", "api"]})
+
+        response = client.get("/notes/search", params={"tag": "api"})
+
+        assert response.status_code == 200
+        assert response.json() == [{"title": "fastapi", "body": "api", "tags": ["python", "api"]}]
+  hiddenTest: |
+    import json
+    from pathlib import Path
+
+    from fastapi.testclient import TestClient
+
+    from notes_api import create_app
+
+
+    def test_update_and_delete_note_by_title(tmp_path: Path) -> None:
+        notes_path = tmp_path / "notes.json"
+        client = TestClient(create_app(notes_path))
+        client.post("/notes", json={"title": "Python", "body": "old", "tags": ["python"]})
+
+        updated = client.patch("/notes/python", json={"body": "new body"})
+        deleted = client.delete("/notes/python")
+
+        assert updated.status_code == 200
+        assert updated.json() == {"title": "python", "body": "new body", "tags": ["python"]}
+        assert deleted.status_code == 200
+        assert deleted.json() == {"message": "Deleted note: python"}
+        assert json.loads(notes_path.read_text(encoding="utf-8")) == []
+
+
+    def test_missing_note_returns_404(tmp_path: Path) -> None:
+        client = TestClient(create_app(tmp_path / "notes.json"))
+
+        response = client.patch("/notes/missing", json={"body": "new"})
+
+        assert response.status_code == 404
+        assert response.json()["detail"] == "note not found: missing"
+
+
+    def test_invalid_tags_return_400_without_writing(tmp_path: Path) -> None:
+        notes_path = tmp_path / "notes.json"
+        client = TestClient(create_app(notes_path))
+
+        response = client.post(
+            "/notes",
+            json={"title": "Bad", "body": "body", "tags": ["machine learning"]},
+        )
+
+        assert response.status_code == 400
+        assert response.json()["detail"] == "tags cannot contain spaces"
+        assert not notes_path.exists()
+hints:
+  - id: conceptual
+    level: conceptual
+    title: FastAPI is an adapter
+    body: Route handlers should translate HTTP requests into service calls; they should not own the core notes rules.
+  - id: api-approach
+    level: api-approach
+    title: Use Pydantic request models
+    body: Define models for create and update request bodies, then let FastAPI parse JSON into those models.
+  - id: structural
+    level: structural
+    title: Use an app factory
+    body: create_app(notes_path) lets each test isolate storage with tmp_path and prevents global mutable state from leaking between tests.
+solution:
+  title: Model solution
+  body: The model solution builds a small NotesService, Pydantic request/response models, and thin FastAPI handlers that translate errors deliberately.
+  code: |
+    import json
+    from pathlib import Path
+
+    from fastapi import FastAPI, HTTPException
+    from pydantic import BaseModel, Field
+
+
+    class CreateNoteRequest(BaseModel):
+        title: str = Field(min_length=1)
+        body: str = Field(min_length=1)
+        tags: list[str] = []
+
+
+    class UpdateNoteRequest(BaseModel):
+        body: str = Field(min_length=1)
+
+
+    class NoteResponse(BaseModel):
+        title: str
+        body: str
+        tags: list[str]
+
+
+    class DeleteResponse(BaseModel):
+        message: str
+
+
+    class NotesService:
+        def __init__(self, path: Path) -> None:
+            self.path = path
+
+        def list_notes(self) -> list[dict[str, object]]:
+            return load_notes_or_empty(self.path)
+
+        def create_note(self, title: str, body: str, tags: list[str]) -> dict[str, object]:
+            record = build_note_record(normalize_title(title), body, parse_tags(tags))
+            notes = self.list_notes()
+            notes.append(record)
+            save_notes(self.path, notes)
+            return record
+
+        def search_by_tag(self, tag: str) -> list[dict[str, object]]:
+            normalized = tag.strip().lower()
+            if not normalized:
+                raise ValueError("tag is required")
+            return [note for note in self.list_notes() if normalized in note["tags"]]
+
+        def update_body(self, title: str, body: str) -> dict[str, object]:
+            normalized_title = normalize_title(title)
+            clean_body = body.strip()
+            if not clean_body:
+                raise ValueError("body is required")
+            notes = self.list_notes()
+            for note in notes:
+                if note["title"] == normalized_title:
+                    note["body"] = clean_body
+                    save_notes(self.path, notes)
+                    return note
+            raise LookupError(f"note not found: {normalized_title}")
+
+        def delete_note(self, title: str) -> str:
+            normalized_title = normalize_title(title)
+            notes = self.list_notes()
+            for index, note in enumerate(notes):
+                if note["title"] == normalized_title:
+                    del notes[index]
+                    save_notes(self.path, notes)
+                    return f"Deleted note: {normalized_title}"
+            raise LookupError(f"note not found: {normalized_title}")
+
+
+    def create_app(notes_path: Path) -> FastAPI:
+        service = NotesService(notes_path)
+        app = FastAPI()
+
+        @app.post("/notes", response_model=NoteResponse, status_code=201)
+        def create_note(request: CreateNoteRequest) -> dict[str, object]:
+            try:
+                return service.create_note(request.title, request.body, request.tags)
+            except ValueError as error:
+                raise HTTPException(status_code=400, detail=str(error)) from error
+
+        @app.get("/notes", response_model=list[NoteResponse])
+        def list_notes() -> list[dict[str, object]]:
+            return service.list_notes()
+
+        @app.get("/notes/search", response_model=list[NoteResponse])
+        def search_notes(tag: str) -> list[dict[str, object]]:
+            try:
+                return service.search_by_tag(tag)
+            except ValueError as error:
+                raise HTTPException(status_code=400, detail=str(error)) from error
+
+        @app.patch("/notes/{title}", response_model=NoteResponse)
+        def update_note(title: str, request: UpdateNoteRequest) -> dict[str, object]:
+            try:
+                return service.update_body(title, request.body)
+            except LookupError as error:
+                raise HTTPException(status_code=404, detail=str(error)) from error
+            except ValueError as error:
+                raise HTTPException(status_code=400, detail=str(error)) from error
+
+        @app.delete("/notes/{title}", response_model=DeleteResponse)
+        def delete_note(title: str) -> dict[str, str]:
+            try:
+                return {"message": service.delete_note(title)}
+            except LookupError as error:
+                raise HTTPException(status_code=404, detail=str(error)) from error
+            except ValueError as error:
+                raise HTTPException(status_code=400, detail=str(error)) from error
+
+        return app
+
+
+    def normalize_title(raw_title: str) -> str:
+        words = raw_title.split()
+        if not words:
+            raise ValueError("title is required")
+        return " ".join(words).lower()
+
+
+    def parse_tags(raw_tags: list[str]) -> list[str]:
+        tags: list[str] = []
+        for raw_tag in raw_tags:
+            tag = raw_tag.strip().lower()
+            if not tag:
+                continue
+            if " " in tag:
+                raise ValueError("tags cannot contain spaces")
+            if tag not in tags:
+                tags.append(tag)
+        return tags
+
+
+    def build_note_record(title: str, body: str, tags: list[str]) -> dict[str, object]:
+        clean_body = body.strip()
+        if not clean_body:
+            raise ValueError("body is required")
+        return {"title": title, "body": clean_body, "tags": list(tags)}
+
+
+    def load_notes_or_empty(path: Path) -> list[dict[str, object]]:
+        if not path.exists():
+            return []
+        decoded = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(decoded, list):
+            raise ValueError("notes file must contain a list")
+        return [validate_note(value) for value in decoded]
+
+
+    def validate_note(value: object) -> dict[str, object]:
+        if not isinstance(value, dict):
+            raise ValueError("each note must be an object")
+        title = value.get("title")
+        body = value.get("body")
+        tags = value.get("tags")
+        if not isinstance(title, str) or not isinstance(body, str):
+            raise ValueError("note title and body must be text")
+        if not isinstance(tags, list) or not all(isinstance(tag, str) for tag in tags):
+            raise ValueError("note tags must be a list of strings")
+        return {"title": title, "body": body, "tags": list(tags)}
+
+
+    def save_notes(path: Path, notes: list[dict[str, object]]) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(notes, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+commonWrongApproaches:
+  - Calling CLI command strings from FastAPI handlers.
+  - Keeping notes in a global list shared between tests.
+  - Returning unhandled ValueError exceptions as 500 responses.
+  - Writing file persistence code directly in every route.
+  - Skipping Pydantic models and accepting raw dictionaries everywhere.
+expectedSolutionCharacteristics:
+  - Provides create_app(notes_path) and returns a FastAPI app.
+  - Uses Pydantic request and response models.
+  - Keeps route handlers thin.
+  - Returns 201 for created notes, 404 for missing notes, and 400 for semantic validation errors.
+  - Persists notes through deterministic JSON storage.

@@ -137,6 +137,364 @@ public sealed class CurriculumEndpointTests
     }
 
     [Fact]
+    public async Task PythonCommandRunnerMilestoneReturnsLessonsExercisesAndSources()
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+
+        var project = await client.GetFromJsonAsync<ProjectDetailTestResponse>(
+            "/api/curriculum/projects/py-notes-cli",
+            TestContext.Current.CancellationToken);
+        var milestone = await client.GetFromJsonAsync<MilestoneDetailTestResponse>(
+            "/api/curriculum/projects/py-notes-cli/milestones/py-notes-command-runner",
+            TestContext.Current.CancellationToken);
+        var cluster = await client.GetFromJsonAsync<TheoryClusterTestResponse>(
+            "/api/curriculum/projects/py-notes-cli/milestones/py-notes-command-runner/theory-cluster",
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(project);
+        Assert.Contains(project.Milestones, item => item.Id == "py-notes-command-runner");
+
+        Assert.NotNull(milestone);
+        Assert.Equal("Command runner composition", milestone.Title);
+        var lesson = Assert.Single(milestone.Lessons);
+        Assert.Equal("command-runner-composition-python", lesson.Id);
+        var exercise = Assert.Single(milestone.Exercises);
+        Assert.Equal("run-add-command-py", exercise.Id);
+        Assert.Equal("Python", exercise.Language);
+        Assert.NotEmpty(milestone.Sources);
+        Assert.Contains("reads, appends, saves", milestone.Summary, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("validation succeeds", milestone.Markdown, StringComparison.OrdinalIgnoreCase);
+
+        Assert.NotNull(cluster);
+        var clusterItem = Assert.Single(cluster.Items);
+        Assert.Equal("command-runner-composition-python", clusterItem.LessonId);
+        Assert.NotEmpty(clusterItem.Sources);
+    }
+
+    [Fact]
+    public async Task PythonQueryMutationMilestoneReturnsLessonsExercisesAndSources()
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+
+        var project = await client.GetFromJsonAsync<ProjectDetailTestResponse>(
+            "/api/curriculum/projects/py-notes-cli",
+            TestContext.Current.CancellationToken);
+        var milestone = await client.GetFromJsonAsync<MilestoneDetailTestResponse>(
+            "/api/curriculum/projects/py-notes-cli/milestones/py-notes-query-and-mutation-commands",
+            TestContext.Current.CancellationToken);
+        var cluster = await client.GetFromJsonAsync<TheoryClusterTestResponse>(
+            "/api/curriculum/projects/py-notes-cli/milestones/py-notes-query-and-mutation-commands/theory-cluster",
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(project);
+        Assert.Contains(project.Milestones, item => item.Id == "py-notes-query-and-mutation-commands");
+
+        Assert.NotNull(milestone);
+        Assert.Equal("Query and mutation commands", milestone.Title);
+        var lesson = Assert.Single(milestone.Lessons);
+        Assert.Equal("note-commands-update-list-delete-search-python", lesson.Id);
+        var exercise = Assert.Single(milestone.Exercises);
+        Assert.Equal("run-note-command-py", exercise.Id);
+        Assert.Equal("Python", exercise.Language);
+        Assert.NotEmpty(milestone.Sources);
+        Assert.Contains("list, search, update, and delete", milestone.Markdown, StringComparison.OrdinalIgnoreCase);
+
+        Assert.NotNull(cluster);
+        var clusterItem = Assert.Single(cluster.Items);
+        Assert.Equal("note-commands-update-list-delete-search-python", clusterItem.LessonId);
+        Assert.NotEmpty(clusterItem.Sources);
+    }
+
+    [Fact]
+    public async Task PythonFastApiAdapterMilestoneReturnsLessonsExercisesAndSources()
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+
+        var project = await client.GetFromJsonAsync<ProjectDetailTestResponse>(
+            "/api/curriculum/projects/py-notes-cli",
+            TestContext.Current.CancellationToken);
+        var milestone = await client.GetFromJsonAsync<MilestoneDetailTestResponse>(
+            "/api/curriculum/projects/py-notes-cli/milestones/py-notes-fastapi-service-adapter",
+            TestContext.Current.CancellationToken);
+        var cluster = await client.GetFromJsonAsync<TheoryClusterTestResponse>(
+            "/api/curriculum/projects/py-notes-cli/milestones/py-notes-fastapi-service-adapter/theory-cluster",
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(project);
+        Assert.Contains(project.Milestones, item => item.Id == "py-notes-fastapi-service-adapter");
+
+        Assert.NotNull(milestone);
+        Assert.Equal("FastAPI service adapter", milestone.Title);
+        var lesson = Assert.Single(milestone.Lessons);
+        Assert.Equal("fastapi-service-adapters-python", lesson.Id);
+        var exercise = Assert.Single(milestone.Exercises);
+        Assert.Equal("create-notes-api-py", exercise.Id);
+        Assert.Equal("Python", exercise.Language);
+        Assert.NotEmpty(milestone.Sources);
+        Assert.Contains("FastAPI", milestone.Markdown, StringComparison.Ordinal);
+
+        Assert.NotNull(cluster);
+        var clusterItem = Assert.Single(cluster.Items);
+        Assert.Equal("fastapi-service-adapters-python", clusterItem.LessonId);
+        Assert.NotEmpty(clusterItem.Sources);
+    }
+
+    [Theory]
+    [InlineData(
+        "py-notes-fastapi-dependency-boundaries",
+        "FastAPI dependency boundaries",
+        "fastapi-dependency-boundaries-python",
+        "inject-notes-service-py",
+        "dependency overrides")]
+    [InlineData(
+        "py-notes-pydantic-contract-rigor",
+        "Pydantic contract rigor",
+        "pydantic-request-response-rigor-python",
+        "define-note-contracts-py",
+        "request and response shapes")]
+    [InlineData(
+        "py-notes-http-semantics",
+        "HTTP semantics",
+        "http-semantics-fastapi-python",
+        "map-notes-http-semantics-py",
+        "status codes")]
+    public async Task PythonFastApiProductionMilestonesReturnLessonsExercisesAndSources(
+        string milestoneId,
+        string expectedTitle,
+        string expectedLessonId,
+        string expectedExerciseId,
+        string expectedMarkdown)
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+
+        var project = await client.GetFromJsonAsync<ProjectDetailTestResponse>(
+            "/api/curriculum/projects/py-notes-cli",
+            TestContext.Current.CancellationToken);
+        var milestone = await client.GetFromJsonAsync<MilestoneDetailTestResponse>(
+            $"/api/curriculum/projects/py-notes-cli/milestones/{milestoneId}",
+            TestContext.Current.CancellationToken);
+        var cluster = await client.GetFromJsonAsync<TheoryClusterTestResponse>(
+            $"/api/curriculum/projects/py-notes-cli/milestones/{milestoneId}/theory-cluster",
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(project);
+        Assert.Contains(project.Milestones, item => item.Id == milestoneId);
+
+        Assert.NotNull(milestone);
+        Assert.Equal(expectedTitle, milestone.Title);
+        var lesson = Assert.Single(milestone.Lessons);
+        Assert.Equal(expectedLessonId, lesson.Id);
+        var exercise = Assert.Single(milestone.Exercises);
+        Assert.Equal(expectedExerciseId, exercise.Id);
+        Assert.Equal("Python", exercise.Language);
+        Assert.NotEmpty(milestone.Sources);
+        Assert.Contains(expectedMarkdown, milestone.Markdown, StringComparison.OrdinalIgnoreCase);
+
+        Assert.NotNull(cluster);
+        var clusterItem = Assert.Single(cluster.Items);
+        Assert.Equal(expectedLessonId, clusterItem.LessonId);
+        Assert.NotEmpty(clusterItem.Sources);
+    }
+
+    [Theory]
+    [InlineData(
+        "py-notes-persistence-abstraction",
+        "Persistence abstraction",
+        "persistence-abstractions-python",
+        "abstract-note-repository-py",
+        "repository boundary")]
+    [InlineData(
+        "py-notes-fastapi-testing-depth",
+        "FastAPI testing depth",
+        "fastapi-testing-depth-python",
+        "test-notes-api-depth-py",
+        "dependency overrides")]
+    [InlineData(
+        "py-notes-sqlite-persistence",
+        "SQLite persistence",
+        "sqlite-persistence-python",
+        "sqlite-note-repository-py",
+        "parameterized")]
+    public async Task PythonPersistenceMilestonesReturnLessonsExercisesAndSources(
+        string milestoneId,
+        string expectedTitle,
+        string expectedLessonId,
+        string expectedExerciseId,
+        string expectedMarkdown)
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+
+        var project = await client.GetFromJsonAsync<ProjectDetailTestResponse>(
+            "/api/curriculum/projects/py-notes-cli",
+            TestContext.Current.CancellationToken);
+        var milestone = await client.GetFromJsonAsync<MilestoneDetailTestResponse>(
+            $"/api/curriculum/projects/py-notes-cli/milestones/{milestoneId}",
+            TestContext.Current.CancellationToken);
+        var cluster = await client.GetFromJsonAsync<TheoryClusterTestResponse>(
+            $"/api/curriculum/projects/py-notes-cli/milestones/{milestoneId}/theory-cluster",
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(project);
+        Assert.Contains(project.Milestones, item => item.Id == milestoneId);
+
+        Assert.NotNull(milestone);
+        Assert.Equal(expectedTitle, milestone.Title);
+        var lesson = Assert.Single(milestone.Lessons);
+        Assert.Equal(expectedLessonId, lesson.Id);
+        var exercise = Assert.Single(milestone.Exercises);
+        Assert.Equal(expectedExerciseId, exercise.Id);
+        Assert.Equal("Python", exercise.Language);
+        Assert.NotEmpty(milestone.Sources);
+        Assert.Contains(expectedMarkdown, milestone.Markdown, StringComparison.OrdinalIgnoreCase);
+
+        Assert.NotNull(cluster);
+        var clusterItem = Assert.Single(cluster.Items);
+        Assert.Equal(expectedLessonId, clusterItem.LessonId);
+        Assert.NotEmpty(clusterItem.Sources);
+    }
+
+    [Theory]
+    [InlineData(
+        "py-notes-production-api-structure",
+        "Production API structure",
+        "production-api-package-structure-python",
+        "assemble-notes-api-package-py",
+        "model, service, repository")]
+    [InlineData(
+        "py-notes-sqlite-fastapi-integration",
+        "SQLite-backed FastAPI integration",
+        "sqlite-backed-fastapi-integration-python",
+        "integrate-sqlite-notes-api-py",
+        "SQLite")]
+    [InlineData(
+        "py-notes-pagination-filtering",
+        "Pagination and filtering",
+        "pagination-filtering-fastapi-python",
+        "paginate-filter-notes-py",
+        "limit/offset")]
+    [InlineData(
+        "py-notes-transaction-boundaries",
+        "Transaction boundaries",
+        "transaction-boundaries-python",
+        "transactional-note-writes-py",
+        "rollback")]
+    [InlineData(
+        "py-notes-async-boundaries",
+        "Async boundaries",
+        "async-boundary-discipline-python",
+        "async-boundary-policy-py",
+        "event loop")]
+    [InlineData(
+        "py-notes-settings-configuration",
+        "Settings and configuration",
+        "settings-configuration-python",
+        "load-app-settings-py",
+        "production")]
+    [InlineData(
+        "py-notes-observability",
+        "Logging and observability",
+        "logging-observability-python",
+        "observe-notes-api-py",
+        "request IDs")]
+    [InlineData(
+        "py-notes-api-key-auth",
+        "API key authentication",
+        "api-key-auth-fastapi-python",
+        "protect-notes-api-py",
+        "401")]
+    [InlineData(
+        "py-notes-sqlite-migrations",
+        "SQLite migrations",
+        "sqlite-migrations-python",
+        "migrate-sqlite-schema-py",
+        "schema version")]
+    [InlineData(
+        "py-notes-packaging-running",
+        "Packaging and running",
+        "packaging-running-fastapi-python",
+        "package-run-notes-api-py",
+        "uvicorn")]
+    [InlineData(
+        "py-notes-orm-boundaries",
+        "SQLAlchemy and SQLModel boundaries",
+        "orm-boundaries-python",
+        "design-orm-note-mapping-py",
+        "ORM")]
+    [InlineData(
+        "py-notes-alembic-migrations",
+        "Alembic migrations",
+        "alembic-migration-workflow-python",
+        "plan-alembic-revision-py",
+        "upgrade")]
+    [InlineData(
+        "py-notes-postgresql-readiness",
+        "PostgreSQL readiness",
+        "postgresql-readiness-python",
+        "prepare-postgres-settings-py",
+        "PostgreSQL")]
+    [InlineData(
+        "py-notes-sqlalchemy-implementation",
+        "SQLAlchemy repository implementation",
+        "sqlalchemy-repository-implementation-python",
+        "implement-sqlalchemy-repository-py",
+        "SQLAlchemy")]
+    [InlineData(
+        "py-notes-alembic-environment",
+        "Alembic environment wiring",
+        "alembic-environment-python",
+        "configure-alembic-environment-py",
+        "Alembic")]
+    [InlineData(
+        "py-notes-postgres-engine",
+        "PostgreSQL engine configuration",
+        "postgres-engine-configuration-python",
+        "configure-postgres-engine-py",
+        "PostgreSQL")]
+    public async Task PythonProductionApiMilestonesReturnLessonsExercisesAndSources(
+        string milestoneId,
+        string expectedTitle,
+        string expectedLessonId,
+        string expectedExerciseId,
+        string expectedMarkdown)
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+
+        var project = await client.GetFromJsonAsync<ProjectDetailTestResponse>(
+            "/api/curriculum/projects/py-notes-cli",
+            TestContext.Current.CancellationToken);
+        var milestone = await client.GetFromJsonAsync<MilestoneDetailTestResponse>(
+            $"/api/curriculum/projects/py-notes-cli/milestones/{milestoneId}",
+            TestContext.Current.CancellationToken);
+        var cluster = await client.GetFromJsonAsync<TheoryClusterTestResponse>(
+            $"/api/curriculum/projects/py-notes-cli/milestones/{milestoneId}/theory-cluster",
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(project);
+        Assert.Contains(project.Milestones, item => item.Id == milestoneId);
+
+        Assert.NotNull(milestone);
+        Assert.Equal(expectedTitle, milestone.Title);
+        var lesson = Assert.Single(milestone.Lessons);
+        Assert.Equal(expectedLessonId, lesson.Id);
+        var exercise = Assert.Single(milestone.Exercises);
+        Assert.Equal(expectedExerciseId, exercise.Id);
+        Assert.Equal("Python", exercise.Language);
+        Assert.NotEmpty(milestone.Sources);
+        Assert.Contains(expectedMarkdown, milestone.Markdown, StringComparison.OrdinalIgnoreCase);
+
+        Assert.NotNull(cluster);
+        var clusterItem = Assert.Single(cluster.Items);
+        Assert.Equal(expectedLessonId, clusterItem.LessonId);
+        Assert.NotEmpty(clusterItem.Sources);
+    }
+
+    [Fact]
     public async Task MilestoneEndpointReturnsLessonsExercisesAndSources()
     {
         await using var factory = new WebApplicationFactory<Program>();

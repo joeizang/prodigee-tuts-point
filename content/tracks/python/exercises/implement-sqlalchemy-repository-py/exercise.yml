@@ -1,0 +1,136 @@
+id: implement-sqlalchemy-repository-py
+title: ImplementSqlAlchemyRepository
+kind: focused
+workspace:
+  runtime: python-pytest
+  starter: tracks/python/exercises/implement-sqlalchemy-repository-py/sqlalchemy_repository.py
+  entryPoint: build_repository_blueprint
+  visibleTest: |
+    from sqlalchemy_repository import build_repository_blueprint, dependency_manifest
+
+
+    def test_dependency_manifest_names_real_orm_packages() -> None:
+        dependencies = dependency_manifest()
+
+        assert "sqlalchemy>=2.0.36" in dependencies
+        assert "sqlmodel>=0.0.22" in dependencies
+        assert "alembic>=1.14.0" in dependencies
+        assert "psycopg[binary]>=3.2.0" in dependencies
+
+
+    def test_blueprint_defines_note_row_and_repository_boundary() -> None:
+        blueprint = build_repository_blueprint()
+
+        assert blueprint["orm_model"]["name"] == "NoteRow"
+        assert blueprint["orm_model"]["table"] == "notes"
+        assert blueprint["orm_model"]["columns"]["title"]["primary_key"] is True
+        assert blueprint["session_owner"] == "SqlAlchemyNoteRepository"
+        assert blueprint["service_imports_sqlalchemy"] is False
+  hiddenTest: |
+    from sqlalchemy_repository import build_repository_blueprint
+
+
+    def test_repository_methods_and_mapping_are_explicit() -> None:
+        blueprint = build_repository_blueprint()
+
+        assert set(blueprint["repository_methods"]) == {
+            "list_notes",
+            "get_by_title",
+            "add",
+            "update",
+            "delete",
+            "search",
+        }
+        assert blueprint["mapping"]["row_to_record"] == "NoteRow -> NoteRecord"
+        assert blueprint["mapping"]["record_to_response"] == "NoteRecord -> NoteRead"
+
+
+    def test_code_samples_use_sqlalchemy_two_style_and_transaction_rules() -> None:
+        blueprint = build_repository_blueprint()
+        code_samples = "\n".join(blueprint["code_samples"])
+
+        assert "from sqlalchemy.orm import Mapped, mapped_column" in code_samples
+        assert "class NoteRow(Base):" in code_samples
+        assert "session.commit()" in code_samples
+        assert "session.rollback()" in code_samples
+        assert "return NoteRecord(" in code_samples
+hints:
+  - id: conceptual
+    level: conceptual
+    title: SQLAlchemy stays below services
+    body: The blueprint should make the repository responsible for sessions, SQL, commits, rollbacks, and row mapping.
+  - id: api-approach
+    level: api-approach
+    title: Use SQLAlchemy two style
+    body: The intended implementation should use typed mapped columns rather than older untyped mapping examples.
+  - id: structural
+    level: structural
+    title: Keep mapping explicit
+    body: Rows, service records, and Pydantic response models should remain separate named concepts.
+solution:
+  title: Model solution
+  body: The model solution declares the real ORM dependency set and a concrete SQLAlchemy repository blueprint while keeping imports dependency-gated for this environment.
+  code: |
+    def build_repository_blueprint() -> dict[str, object]:
+        return {
+            "orm_model": {
+                "name": "NoteRow",
+                "table": "notes",
+                "columns": {
+                    "title": {"type": "String(200)", "primary_key": True, "nullable": False},
+                    "body": {"type": "Text", "nullable": False},
+                    "tags": {"type": "JSON", "nullable": False, "default": []},
+                    "archived": {"type": "Boolean", "nullable": False, "default": False},
+                    "created_at": {"type": "DateTime", "nullable": False},
+                    "updated_at": {"type": "DateTime", "nullable": False},
+                },
+                "indexes": ["ix_notes_archived", "ix_notes_updated_at"],
+            },
+            "session_owner": "SqlAlchemyNoteRepository",
+            "service_imports_sqlalchemy": False,
+            "repository_methods": [
+                "list_notes",
+                "get_by_title",
+                "add",
+                "update",
+                "delete",
+                "search",
+            ],
+            "mapping": {
+                "row_to_record": "NoteRow -> NoteRecord",
+                "record_to_response": "NoteRecord -> NoteRead",
+            },
+            "transaction_rules": [
+                "open one session per repository operation",
+                "commit successful mutations",
+                "rollback failed mutations",
+                "close sessions through context managers",
+            ],
+            "code_samples": [
+                "from sqlalchemy.orm import Mapped, mapped_column",
+                "class NoteRow(Base):",
+                "session.commit()",
+                "session.rollback()",
+                "return NoteRecord(",
+            ],
+        }
+
+
+    def dependency_manifest() -> list[str]:
+        return [
+            "sqlalchemy>=2.0.36",
+            "sqlmodel>=0.0.22",
+            "alembic>=1.14.0",
+            "psycopg[binary]>=3.2.0",
+        ]
+commonWrongApproaches:
+  - Returning ORM row objects from route handlers.
+  - Importing SQLAlchemy sessions inside service functions.
+  - Treating response models as table models.
+  - Skipping rollback behavior on mutation failures.
+expectedSolutionCharacteristics:
+  - Names real ORM dependencies.
+  - Defines the NoteRow table shape.
+  - Keeps services independent from SQLAlchemy.
+  - Includes explicit row mapping.
+  - Documents transaction ownership rules.

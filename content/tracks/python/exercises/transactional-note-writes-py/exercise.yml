@@ -1,0 +1,132 @@
+id: transactional-note-writes-py
+title: TransactionalNoteWrites
+kind: focused
+workspace:
+  runtime: python-pytest
+  starter: tracks/python/exercises/transactional-note-writes-py/transactional_notes.py
+  entryPoint: TransactionalNoteRepository
+  visibleTest: |
+    from pathlib import Path
+
+    from transactional_notes import TransactionalNoteRepository
+
+
+    def test_create_note_with_audit_commits_both_rows(tmp_path: Path) -> None:
+        repository = TransactionalNoteRepository(tmp_path / "notes.db")
+        repository.initialize()
+
+        repository.create_note_with_audit({"title": "python", "body": "body", "tags": ["api"]})
+
+        assert repository.list_notes() == [{"title": "python", "body": "body", "tags": ["api"]}]
+        assert repository.list_audit_events() == [{"action": "created", "title": "python"}]
+  hiddenTest: |
+    from pathlib import Path
+
+    import pytest
+
+    from transactional_notes import TransactionalNoteRepository
+
+
+    def test_failure_after_note_insert_rolls_back_note_and_audit(tmp_path: Path) -> None:
+        repository = TransactionalNoteRepository(tmp_path / "notes.db")
+        repository.initialize()
+
+        with pytest.raises(RuntimeError, match="audit failed"):
+            repository.create_note_with_audit(
+                {"title": "python", "body": "body", "tags": []},
+                fail_after_note=True,
+            )
+
+        assert repository.list_notes() == []
+        assert repository.list_audit_events() == []
+
+
+    def test_duplicate_note_rolls_back_audit(tmp_path: Path) -> None:
+        repository = TransactionalNoteRepository(tmp_path / "notes.db")
+        repository.initialize()
+        repository.create_note_with_audit({"title": "python", "body": "one", "tags": []})
+
+        with pytest.raises(ValueError, match="note already exists: python"):
+            repository.create_note_with_audit({"title": "python", "body": "two", "tags": []})
+
+        assert repository.list_audit_events() == [{"action": "created", "title": "python"}]
+hints:
+  - id: conceptual
+    level: conceptual
+    title: The failure path is the feature
+    body: A transaction is only proven when a forced failure leaves no partial write behind.
+  - id: api-approach
+    level: api-approach
+    title: Commit after all writes
+    body: Insert the note and audit event, then commit. Roll back on any exception.
+  - id: structural
+    level: structural
+    title: Keep transaction code in persistence
+    body: Route handlers and services should not manually control SQL commit and rollback for this repository.
+solution:
+  title: Model solution
+  body: The solution creates notes and audit events in one SQLite transaction and explicitly rolls back on failure.
+  code: |
+    import json
+    import sqlite3
+    from pathlib import Path
+
+
+    class TransactionalNoteRepository:
+        def __init__(self, path: Path) -> None:
+            self.path = path
+
+        def initialize(self) -> None:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            with sqlite3.connect(self.path) as connection:
+                connection.execute(
+                    "CREATE TABLE IF NOT EXISTS notes (title TEXT PRIMARY KEY, body TEXT NOT NULL, tags TEXT NOT NULL)"
+                )
+                connection.execute(
+                    "CREATE TABLE IF NOT EXISTS audit_events (id INTEGER PRIMARY KEY AUTOINCREMENT, action TEXT NOT NULL, title TEXT NOT NULL)"
+                )
+
+        def create_note_with_audit(self, note: dict[str, object], fail_after_note: bool = False) -> None:
+            connection = sqlite3.connect(self.path)
+            try:
+                connection.execute("BEGIN")
+                connection.execute(
+                    "INSERT INTO notes (title, body, tags) VALUES (?, ?, ?)",
+                    (note["title"], note["body"], json.dumps(note["tags"])),
+                )
+                if fail_after_note:
+                    raise RuntimeError("audit failed")
+                connection.execute(
+                    "INSERT INTO audit_events (action, title) VALUES (?, ?)",
+                    ("created", note["title"]),
+                )
+                connection.commit()
+            except sqlite3.IntegrityError as error:
+                connection.rollback()
+                raise ValueError(f"note already exists: {note['title']}") from error
+            except Exception:
+                connection.rollback()
+                raise
+            finally:
+                connection.close()
+
+        def list_notes(self) -> list[dict[str, object]]:
+            with sqlite3.connect(self.path) as connection:
+                rows = connection.execute("SELECT title, body, tags FROM notes ORDER BY title").fetchall()
+            return [{"title": row[0], "body": row[1], "tags": json.loads(row[2])} for row in rows]
+
+        def list_audit_events(self) -> list[dict[str, str]]:
+            with sqlite3.connect(self.path) as connection:
+                rows = connection.execute("SELECT action, title FROM audit_events ORDER BY id").fetchall()
+            return [{"action": row[0], "title": row[1]} for row in rows]
+commonWrongApproaches:
+  - Committing after inserting the note but before writing audit.
+  - Testing only the successful transaction path.
+  - Letting sqlite3.IntegrityError leak through directly.
+  - Managing commit and rollback inside FastAPI route handlers.
+expectedSolutionCharacteristics:
+  - Creates notes and audit_events tables.
+  - Commits only after note and audit writes succeed.
+  - Rolls back on forced failure.
+  - Preserves clear duplicate-note errors.
+  - Proves rollback through tests.

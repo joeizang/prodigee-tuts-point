@@ -1,0 +1,127 @@
+id: load-app-settings-py
+title: LoadAppSettings
+kind: focused
+workspace:
+  runtime: python-pytest
+  starter: tracks/python/exercises/load-app-settings-py/settings_config.py
+  entryPoint: load_settings
+  visibleTest: |
+    from pathlib import Path
+
+    from settings_config import load_settings
+
+
+    def test_dev_settings_use_safe_defaults() -> None:
+        settings = load_settings({})
+
+        assert settings.environment == "dev"
+        assert settings.database_path == Path("data/notes-dev.db")
+        assert settings.debug is True
+        assert settings.api_key == "dev-only-change-me"
+
+
+    def test_explicit_test_settings_are_parsed() -> None:
+        settings = load_settings(
+            {
+                "APP_ENV": "test",
+                "DATABASE_PATH": "/tmp/test.db",
+                "DEBUG": "false",
+                "API_KEY": "test-key",
+            }
+        )
+
+        assert settings.environment == "test"
+        assert settings.database_path == Path("/tmp/test.db")
+        assert settings.debug is False
+        assert settings.api_key == "test-key"
+  hiddenTest: |
+    import pytest
+
+    from settings_config import load_settings
+
+
+    def test_prod_requires_api_key_and_database_path() -> None:
+        with pytest.raises(ValueError, match="API_KEY is required in prod"):
+            load_settings({"APP_ENV": "prod", "DATABASE_PATH": "/srv/notes.db"})
+
+        with pytest.raises(ValueError, match="DATABASE_PATH is required in prod"):
+            load_settings({"APP_ENV": "prod", "API_KEY": "secret"})
+
+
+    def test_invalid_environment_and_debug_are_rejected() -> None:
+        with pytest.raises(ValueError, match="APP_ENV"):
+            load_settings({"APP_ENV": "staging"})
+
+        with pytest.raises(ValueError, match="DEBUG"):
+            load_settings({"DEBUG": "maybe"})
+hints:
+  - id: conceptual
+    level: conceptual
+    title: Raw config is input
+    body: Treat environment values like user input; parse and validate them at one boundary.
+  - id: api-approach
+    level: api-approach
+    title: Fail fast in production
+    body: Production must not silently use development defaults for secrets or database paths.
+  - id: structural
+    level: structural
+    title: Avoid global environment reads
+    body: Accept an environment-like dictionary so tests stay isolated and deterministic.
+solution:
+  title: Model solution
+  body: The model solution parses environment-like dictionaries into typed settings and rejects unsafe production configuration.
+  code: |
+    from dataclasses import dataclass
+    from pathlib import Path
+
+
+    @dataclass(frozen=True)
+    class AppSettings:
+        environment: str
+        database_path: Path
+        api_key: str
+        debug: bool
+
+
+    def load_settings(env: dict[str, str]) -> AppSettings:
+        environment = env.get("APP_ENV", "dev").lower()
+        if environment not in {"dev", "test", "prod"}:
+            raise ValueError("APP_ENV must be dev, test, or prod")
+
+        database_path_raw = env.get("DATABASE_PATH")
+        api_key = env.get("API_KEY")
+
+        if environment == "prod":
+            if not database_path_raw:
+                raise ValueError("DATABASE_PATH is required in prod")
+            if not api_key:
+                raise ValueError("API_KEY is required in prod")
+
+        database_path = Path(database_path_raw or f"data/notes-{environment}.db")
+        debug = parse_bool(env.get("DEBUG", "true" if environment != "prod" else "false"))
+        return AppSettings(
+            environment=environment,
+            database_path=database_path,
+            api_key=api_key or "dev-only-change-me",
+            debug=debug,
+        )
+
+
+    def parse_bool(value: str) -> bool:
+        lowered = value.lower()
+        if lowered in {"1", "true", "yes", "on"}:
+            return True
+        if lowered in {"0", "false", "no", "off"}:
+            return False
+        raise ValueError("DEBUG must be true or false")
+commonWrongApproaches:
+  - Reading os.environ inside every route handler.
+  - Allowing production to use development secrets.
+  - Leaving boolean settings as raw strings.
+  - Mutating real environment variables in tests.
+expectedSolutionCharacteristics:
+  - Parses dev, test, and prod environments.
+  - Converts database paths to Path values.
+  - Converts debug strings to booleans.
+  - Rejects unsafe production configuration.
+  - Keeps tests isolated from process environment.

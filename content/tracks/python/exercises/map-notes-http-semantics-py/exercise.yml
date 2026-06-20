@@ -1,0 +1,234 @@
+id: map-notes-http-semantics-py
+title: MapNotesHttpSemantics
+kind: focused
+workspace:
+  runtime: python-pytest
+  starter: tracks/python/exercises/map-notes-http-semantics-py/notes_http.py
+  entryPoint: create_app
+  visibleTest: |
+    from pathlib import Path
+
+    from fastapi.testclient import TestClient
+
+    from notes_http import create_app
+
+
+    def test_create_returns_201_and_duplicate_returns_409(tmp_path: Path) -> None:
+        client = TestClient(create_app(tmp_path / "notes.json"))
+
+        created = client.post("/notes", json={"title": "Python", "body": "one", "tags": ["python"]})
+        duplicate = client.post("/notes", json={"title": " Python ", "body": "two", "tags": []})
+
+        assert created.status_code == 201
+        assert created.json() == {"title": "python", "body": "one", "tags": ["python"]}
+        assert duplicate.status_code == 409
+        assert duplicate.json()["detail"] == "note already exists: python"
+
+
+    def test_delete_returns_204_with_no_body(tmp_path: Path) -> None:
+        client = TestClient(create_app(tmp_path / "notes.json"))
+        client.post("/notes", json={"title": "Python", "body": "one", "tags": []})
+
+        response = client.delete("/notes/python")
+
+        assert response.status_code == 204
+        assert response.content == b""
+  hiddenTest: |
+    from pathlib import Path
+
+    from fastapi.testclient import TestClient
+
+    from notes_http import create_app
+
+
+    def test_missing_update_returns_404(tmp_path: Path) -> None:
+        client = TestClient(create_app(tmp_path / "notes.json"))
+
+        response = client.patch("/notes/missing", json={"body": "new"})
+
+        assert response.status_code == 404
+        assert response.json()["detail"] == "note not found: missing"
+
+
+    def test_semantic_validation_returns_400(tmp_path: Path) -> None:
+        client = TestClient(create_app(tmp_path / "notes.json"))
+
+        response = client.post("/notes", json={"title": "Bad", "body": "body", "tags": ["machine learning"]})
+
+        assert response.status_code == 400
+        assert response.json()["detail"] == "tags cannot contain spaces"
+
+
+    def test_structural_validation_stays_422(tmp_path: Path) -> None:
+        client = TestClient(create_app(tmp_path / "notes.json"))
+
+        response = client.post("/notes", json={"title": "Missing body"})
+
+        assert response.status_code == 422
+
+
+    def test_successful_update_returns_200_and_read_model(tmp_path: Path) -> None:
+        client = TestClient(create_app(tmp_path / "notes.json"))
+        client.post("/notes", json={"title": "Python", "body": "old", "tags": ["python"]})
+
+        response = client.patch("/notes/python", json={"body": "new"})
+
+        assert response.status_code == 200
+        assert response.json() == {"title": "python", "body": "new", "tags": ["python"]}
+hints:
+  - id: conceptual
+    level: conceptual
+    title: Status codes are part of the contract
+    body: Creation, conflict, missing records, invalid semantic data, and deletion should not all look like HTTP 200.
+  - id: api-approach
+    level: api-approach
+    title: Translate service errors at the edge
+    body: Raise domain-specific exceptions in the service, then map them to HTTPException in route handlers.
+  - id: structural
+    level: structural
+    title: Let 422 remain structural
+    body: Missing required JSON fields should be handled by FastAPI/Pydantic, while semantic rules like tag spaces can return 400.
+solution:
+  title: Model solution
+  body: The solution uses explicit exceptions, Pydantic request/response models, and route handlers that map each service outcome to deliberate HTTP semantics.
+  code: |
+    import json
+    from pathlib import Path
+
+    from fastapi import FastAPI, HTTPException, Response, status
+    from pydantic import BaseModel, Field
+
+
+    class DuplicateNoteError(Exception):
+        pass
+
+
+    class NoteNotFoundError(Exception):
+        pass
+
+
+    class NoteCreate(BaseModel):
+        title: str = Field(min_length=1)
+        body: str = Field(min_length=1)
+        tags: list[str] = Field(default_factory=list)
+
+
+    class NoteUpdate(BaseModel):
+        body: str = Field(min_length=1)
+
+
+    class NoteRead(BaseModel):
+        title: str
+        body: str
+        tags: list[str]
+
+
+    class NotesService:
+        def __init__(self, path: Path) -> None:
+            self.path = path
+
+        def list_notes(self) -> list[dict[str, object]]:
+            if not self.path.exists():
+                return []
+            decoded = json.loads(self.path.read_text(encoding="utf-8"))
+            return list(decoded)
+
+        def create(self, request: NoteCreate) -> dict[str, object]:
+            title = normalize_title(request.title)
+            tags = normalize_tags(request.tags)
+            notes = self.list_notes()
+            if any(note["title"] == title for note in notes):
+                raise DuplicateNoteError(f"note already exists: {title}")
+            note = {"title": title, "body": request.body.strip(), "tags": tags}
+            notes.append(note)
+            save_notes(self.path, notes)
+            return note
+
+        def update(self, title: str, request: NoteUpdate) -> dict[str, object]:
+            normalized = normalize_title(title)
+            notes = self.list_notes()
+            for note in notes:
+                if note["title"] == normalized:
+                    note["body"] = request.body.strip()
+                    save_notes(self.path, notes)
+                    return note
+            raise NoteNotFoundError(f"note not found: {normalized}")
+
+        def delete(self, title: str) -> None:
+            normalized = normalize_title(title)
+            notes = self.list_notes()
+            for index, note in enumerate(notes):
+                if note["title"] == normalized:
+                    del notes[index]
+                    save_notes(self.path, notes)
+                    return
+            raise NoteNotFoundError(f"note not found: {normalized}")
+
+
+    def create_app(notes_path: Path) -> FastAPI:
+        service = NotesService(notes_path)
+        app = FastAPI()
+
+        @app.post("/notes", response_model=NoteRead, status_code=status.HTTP_201_CREATED)
+        def create_note(request: NoteCreate) -> dict[str, object]:
+            try:
+                return service.create(request)
+            except DuplicateNoteError as error:
+                raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(error)) from error
+            except ValueError as error:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error)) from error
+
+        @app.patch("/notes/{title}", response_model=NoteRead)
+        def update_note(title: str, request: NoteUpdate) -> dict[str, object]:
+            try:
+                return service.update(title, request)
+            except NoteNotFoundError as error:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error)) from error
+
+        @app.delete("/notes/{title}", status_code=status.HTTP_204_NO_CONTENT)
+        def delete_note(title: str) -> Response:
+            try:
+                service.delete(title)
+                return Response(status_code=status.HTTP_204_NO_CONTENT)
+            except NoteNotFoundError as error:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error)) from error
+
+        return app
+
+
+    def normalize_title(value: str) -> str:
+        words = value.split()
+        if not words:
+            raise ValueError("title is required")
+        return " ".join(words).lower()
+
+
+    def normalize_tags(values: list[str]) -> list[str]:
+        tags: list[str] = []
+        for raw_tag in values:
+            tag = raw_tag.strip().lower()
+            if not tag:
+                continue
+            if " " in tag:
+                raise ValueError("tags cannot contain spaces")
+            if tag not in tags:
+                tags.append(tag)
+        return tags
+
+
+    def save_notes(path: Path, notes: list[dict[str, object]]) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(notes, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+commonWrongApproaches:
+  - Returning 200 for every successful operation.
+  - Returning a message body for 204 deletes.
+  - Treating duplicate creation as an update.
+  - Catching structural validation errors and converting them to 400.
+  - Returning 404 for semantic validation failures.
+expectedSolutionCharacteristics:
+  - Returns 201 for creation.
+  - Returns 409 for duplicate create.
+  - Returns 400 for semantic validation failures.
+  - Lets missing required fields produce 422.
+  - Returns 404 for missing records.
+  - Returns 204 with an empty body for deletion.

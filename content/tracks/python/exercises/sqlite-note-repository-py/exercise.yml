@@ -1,0 +1,188 @@
+id: sqlite-note-repository-py
+title: SqliteNoteRepository
+kind: focused
+workspace:
+  runtime: python-pytest
+  starter: tracks/python/exercises/sqlite-note-repository-py/sqlite_repository.py
+  entryPoint: SqliteNoteRepository
+  visibleTest: |
+    from pathlib import Path
+
+    from sqlite_repository import SqliteNoteRepository
+
+
+    def test_sqlite_repository_adds_gets_and_lists_notes(tmp_path: Path) -> None:
+        repository = SqliteNoteRepository(tmp_path / "notes.db")
+        repository.initialize()
+
+        repository.add_note({"title": "python", "body": "body", "tags": ["api", "sqlite"]})
+
+        assert repository.get_note("python") == {"title": "python", "body": "body", "tags": ["api", "sqlite"]}
+        assert repository.list_notes() == [{"title": "python", "body": "body", "tags": ["api", "sqlite"]}]
+
+
+    def test_sqlite_repository_updates_and_deletes_notes(tmp_path: Path) -> None:
+        repository = SqliteNoteRepository(tmp_path / "notes.db")
+        repository.initialize()
+        repository.add_note({"title": "python", "body": "old", "tags": []})
+
+        updated = repository.update_note("python", {"body": "new", "tags": ["sqlite"]})
+        repository.delete_note("python")
+
+        assert updated == {"title": "python", "body": "new", "tags": ["sqlite"]}
+        assert repository.list_notes() == []
+  hiddenTest: |
+    import sqlite3
+    from pathlib import Path
+
+    import pytest
+
+    from sqlite_repository import SqliteNoteRepository
+
+
+    def test_duplicate_title_raises_value_error(tmp_path: Path) -> None:
+        repository = SqliteNoteRepository(tmp_path / "notes.db")
+        repository.initialize()
+        repository.add_note({"title": "python", "body": "one", "tags": []})
+
+        with pytest.raises(ValueError, match="note already exists: python"):
+            repository.add_note({"title": "python", "body": "two", "tags": []})
+
+
+    def test_missing_update_and_delete_raise_lookup_error(tmp_path: Path) -> None:
+        repository = SqliteNoteRepository(tmp_path / "notes.db")
+        repository.initialize()
+
+        with pytest.raises(LookupError, match="note not found: missing"):
+            repository.update_note("missing", {"body": "new"})
+
+        with pytest.raises(LookupError, match="note not found: missing"):
+            repository.delete_note("missing")
+
+
+    def test_uses_parameterized_queries_for_titles_with_quotes(tmp_path: Path) -> None:
+        repository = SqliteNoteRepository(tmp_path / "notes.db")
+        repository.initialize()
+        title = "quote ' title"
+
+        repository.add_note({"title": title, "body": "body", "tags": ["sql"]})
+
+        assert repository.get_note(title) == {"title": title, "body": "body", "tags": ["sql"]}
+
+
+    def test_schema_contains_primary_key_title(tmp_path: Path) -> None:
+        repository = SqliteNoteRepository(tmp_path / "notes.db")
+        repository.initialize()
+
+        with sqlite3.connect(tmp_path / "notes.db") as connection:
+            columns = connection.execute("PRAGMA table_info(notes)").fetchall()
+
+        assert any(column[1] == "title" and column[5] == 1 for column in columns)
+hints:
+  - id: conceptual
+    level: conceptual
+    title: SQLite is an implementation
+    body: Keep SQLite behind SqliteNoteRepository so services and route handlers still see note dictionaries.
+  - id: api-approach
+    level: api-approach
+    title: Initialize schema explicitly
+    body: Provide initialize() and create the notes table before repository operations run.
+  - id: structural
+    level: structural
+    title: Parameterize every value
+    body: Use ? placeholders and argument tuples for all user values, including title and body.
+solution:
+  title: Model solution
+  body: The model solution initializes a SQLite schema, stores tags as JSON text, maps rows into stable note dictionaries, and uses parameterized SQL for all values.
+  code: |
+    import json
+    import sqlite3
+    from pathlib import Path
+
+
+    class SqliteNoteRepository:
+        def __init__(self, path: Path) -> None:
+            self.path = path
+
+        def initialize(self) -> None:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            with self.connect() as connection:
+                connection.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS notes (
+                        title TEXT PRIMARY KEY,
+                        body TEXT NOT NULL,
+                        tags TEXT NOT NULL
+                    )
+                    """
+                )
+
+        def list_notes(self) -> list[dict[str, object]]:
+            with self.connect() as connection:
+                rows = connection.execute(
+                    "SELECT title, body, tags FROM notes ORDER BY title"
+                ).fetchall()
+            return [self.map_row(row) for row in rows]
+
+        def get_note(self, title: str) -> dict[str, object] | None:
+            with self.connect() as connection:
+                row = connection.execute(
+                    "SELECT title, body, tags FROM notes WHERE title = ?",
+                    (title,),
+                ).fetchone()
+            return None if row is None else self.map_row(row)
+
+        def add_note(self, note: dict[str, object]) -> None:
+            try:
+                with self.connect() as connection:
+                    connection.execute(
+                        "INSERT INTO notes (title, body, tags) VALUES (?, ?, ?)",
+                        (note["title"], note["body"], json.dumps(note["tags"])),
+                    )
+            except sqlite3.IntegrityError as error:
+                raise ValueError(f"note already exists: {note['title']}") from error
+
+        def update_note(self, title: str, changes: dict[str, object]) -> dict[str, object]:
+            current = self.get_note(title)
+            if current is None:
+                raise LookupError(f"note not found: {title}")
+
+            updated = dict(current)
+            updated.update(changes)
+            with self.connect() as connection:
+                connection.execute(
+                    "UPDATE notes SET body = ?, tags = ? WHERE title = ?",
+                    (updated["body"], json.dumps(updated["tags"]), title),
+                )
+            return updated
+
+        def delete_note(self, title: str) -> None:
+            with self.connect() as connection:
+                cursor = connection.execute("DELETE FROM notes WHERE title = ?", (title,))
+                if cursor.rowcount == 0:
+                    raise LookupError(f"note not found: {title}")
+
+        def connect(self) -> sqlite3.Connection:
+            connection = sqlite3.connect(self.path)
+            connection.row_factory = sqlite3.Row
+            return connection
+
+        @staticmethod
+        def map_row(row: sqlite3.Row) -> dict[str, object]:
+            return {
+                "title": row["title"],
+                "body": row["body"],
+                "tags": json.loads(row["tags"]),
+            }
+commonWrongApproaches:
+  - Building SQL with f-strings and user data.
+  - Returning sqlite3.Row objects directly.
+  - Forgetting to create the schema before operations.
+  - Letting duplicate title errors leak as raw sqlite3.IntegrityError.
+  - Changing the service-facing note dictionary shape.
+expectedSolutionCharacteristics:
+  - Creates a notes table with title as primary key.
+  - Uses parameterized SQL for all user data.
+  - Stores and loads tags deterministically.
+  - Raises clear ValueError and LookupError exceptions.
+  - Keeps SQLite details inside SqliteNoteRepository.

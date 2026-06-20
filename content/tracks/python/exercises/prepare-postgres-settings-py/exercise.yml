@@ -1,0 +1,131 @@
+id: prepare-postgres-settings-py
+title: PreparePostgresSettings
+kind: focused
+workspace:
+  runtime: python-pytest
+  starter: tracks/python/exercises/prepare-postgres-settings-py/postgres_readiness.py
+  entryPoint: parse_database_url
+  visibleTest: |
+    from postgres_readiness import parse_database_url, portability_warnings
+
+
+    def test_parse_postgresql_url() -> None:
+        parsed = parse_database_url("postgresql+psycopg://user:secret@localhost:5432/notes")
+
+        assert parsed == {
+            "provider": "postgresql",
+            "driver": "psycopg",
+            "username": "user",
+            "host": "localhost",
+            "port": 5432,
+            "database": "notes",
+            "production_ready": True,
+        }
+
+
+    def test_parse_sqlite_url_for_dev_only() -> None:
+        parsed = parse_database_url("sqlite:///tmp/notes.db")
+
+        assert parsed["provider"] == "sqlite"
+        assert parsed["production_ready"] is False
+
+
+    def test_portability_warnings_detect_sqlite_assumptions() -> None:
+        warnings = portability_warnings(["PRAGMA table_info(notes)", "archived INTEGER NOT NULL DEFAULT 0"])
+
+        assert "SQLite PRAGMA is not PostgreSQL portable" in warnings
+        assert "Use a real boolean column instead of INTEGER boolean flags" in warnings
+  hiddenTest: |
+    import pytest
+
+    from postgres_readiness import parse_database_url, portability_warnings
+
+
+    def test_invalid_or_incomplete_urls_are_rejected() -> None:
+        with pytest.raises(ValueError, match="unsupported database provider"):
+            parse_database_url("mysql://user@localhost/db")
+
+        with pytest.raises(ValueError, match="database name is required"):
+            parse_database_url("postgresql+psycopg://user:secret@localhost:5432")
+
+
+    def test_postgres_readiness_flags_autoincrement_and_sqlite_placeholders() -> None:
+        warnings = portability_warnings(["INTEGER PRIMARY KEY AUTOINCREMENT", "WHERE title = ?"])
+
+        assert "SQLite autoincrement syntax is not PostgreSQL portable" in warnings
+        assert "Use SQLAlchemy parameter binding instead of sqlite3 question placeholders" in warnings
+hints:
+  - id: conceptual
+    level: conceptual
+    title: PostgreSQL is not SQLite with a new URL
+    body: Validate database URLs and flag provider-specific assumptions before integration tests arrive.
+  - id: api-approach
+    level: api-approach
+    title: Parse the URL into decisions
+    body: The app should know provider, driver, host, port, database name, and whether the URL is production-ready.
+  - id: structural
+    level: structural
+    title: Keep portability checks explicit
+    body: SQL snippets can reveal SQLite assumptions that should move behind SQLAlchemy or migration tooling.
+solution:
+  title: Model solution
+  body: The model solution validates SQLite and PostgreSQL URLs and reports portability warnings for SQLite-specific SQL assumptions.
+  code: |
+    from urllib.parse import urlparse
+
+
+    def parse_database_url(url: str) -> dict[str, object]:
+        parsed = urlparse(url)
+        if parsed.scheme == "sqlite":
+            if not parsed.path:
+                raise ValueError("database name is required")
+            return {
+                "provider": "sqlite",
+                "driver": "sqlite3",
+                "username": None,
+                "host": None,
+                "port": None,
+                "database": parsed.path.lstrip("/"),
+                "production_ready": False,
+            }
+
+        if parsed.scheme == "postgresql+psycopg":
+            database = parsed.path.lstrip("/")
+            if not database:
+                raise ValueError("database name is required")
+            return {
+                "provider": "postgresql",
+                "driver": "psycopg",
+                "username": parsed.username,
+                "host": parsed.hostname,
+                "port": parsed.port,
+                "database": database,
+                "production_ready": True,
+            }
+
+        raise ValueError("unsupported database provider")
+
+
+    def portability_warnings(sql_snippets: list[str]) -> list[str]:
+        warnings: list[str] = []
+        joined = "\n".join(sql_snippets).upper()
+        if "PRAGMA" in joined:
+            warnings.append("SQLite PRAGMA is not PostgreSQL portable")
+        if "INTEGER PRIMARY KEY AUTOINCREMENT" in joined:
+            warnings.append("SQLite autoincrement syntax is not PostgreSQL portable")
+        if "ARCHIVED INTEGER" in joined or "DEFAULT 0" in joined:
+            warnings.append("Use a real boolean column instead of INTEGER boolean flags")
+        if "?" in joined:
+            warnings.append("Use SQLAlchemy parameter binding instead of sqlite3 question placeholders")
+        return warnings
+commonWrongApproaches:
+  - Treating PostgreSQL as a string replacement for SQLite.
+  - Allowing production to use sqlite URLs silently.
+  - Ignoring SQLite-specific SQL syntax.
+  - Assuming SQLite tests prove PostgreSQL behavior.
+expectedSolutionCharacteristics:
+  - Parses PostgreSQL and SQLite URLs.
+  - Rejects unsupported database providers.
+  - Marks SQLite as not production-ready.
+  - Detects common SQLite portability assumptions.
+  - Prepares future SQLAlchemy/PostgreSQL integration tests.

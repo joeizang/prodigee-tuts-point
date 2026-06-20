@@ -1,0 +1,187 @@
+id: define-note-contracts-py
+title: DefineNoteContracts
+kind: focused
+workspace:
+  runtime: python-pytest
+  starter: tracks/python/exercises/define-note-contracts-py/note_contracts.py
+  entryPoint: NoteCreate
+  visibleTest: |
+    import pytest
+    from pydantic import ValidationError
+
+    from note_contracts import ErrorResponse, NoteCreate, NoteRead, NoteUpdate
+
+
+    def test_note_create_normalizes_title_and_tags() -> None:
+        note = NoteCreate(title=" Learn FastAPI ", body=" Build APIs ", tags=["Python", " api ", "python"])
+
+        assert note.model_dump() == {
+            "title": "learn fastapi",
+            "body": "Build APIs",
+            "tags": ["python", "api"],
+        }
+
+
+    def test_note_update_requires_at_least_one_field() -> None:
+        with pytest.raises(ValidationError):
+            NoteUpdate()
+
+        assert NoteUpdate(body=" Updated ").model_dump(exclude_none=True) == {"body": "Updated"}
+
+
+    def test_read_and_error_models_serialize_stable_shape() -> None:
+        read = NoteRead(title="learn python", body="body", tags=["python"], internal_id="hidden")
+        error = ErrorResponse(detail="note not found", code="not_found")
+
+        assert read.model_dump() == {"title": "learn python", "body": "body", "tags": ["python"]}
+        assert error.model_dump() == {"detail": "note not found", "code": "not_found"}
+  hiddenTest: |
+    import pytest
+    from pydantic import ValidationError
+
+    from note_contracts import NoteCreate, NoteRead, NoteUpdate
+
+
+    def test_extra_request_fields_are_forbidden() -> None:
+        with pytest.raises(ValidationError) as error:
+            NoteCreate(title="Python", body="Body", unexpected=True)
+
+        assert "extra_forbidden" in str(error.value)
+
+
+    def test_invalid_tag_with_spaces_is_rejected() -> None:
+        with pytest.raises(ValidationError) as error:
+            NoteCreate(title="Python", body="Body", tags=["machine learning"])
+
+        assert "tags cannot contain spaces" in str(error.value)
+
+
+    def test_response_model_filters_unknown_fields() -> None:
+        note = NoteRead.model_validate(
+            {"title": "python", "body": "body", "tags": [], "storage_version": 3}
+        )
+
+        assert note.model_dump() == {"title": "python", "body": "body", "tags": []}
+
+
+    def test_blank_update_body_is_rejected() -> None:
+        with pytest.raises(ValidationError):
+            NoteUpdate(body="   ")
+hints:
+  - id: conceptual
+    level: conceptual
+    title: Models are API contracts
+    body: Request models, update models, read models, and error models each represent a different direction of data flow.
+  - id: api-approach
+    level: api-approach
+    title: Use Pydantic v2 validators
+    body: field_validator and model_validator let you normalize titles and tags while rejecting invalid semantic input.
+  - id: structural
+    level: structural
+    title: Forbid extras on inputs
+    body: Use ConfigDict(extra="forbid") on request models so misspelled client fields do not silently disappear.
+solution:
+  title: Model solution
+  body: The solution defines strict request models, filtered response models, a stable error model, and validators for title, body, tags, and partial updates.
+  code: |
+    from typing import Self
+
+    from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+
+    def normalize_title(value: str) -> str:
+        words = value.split()
+        if not words:
+            raise ValueError("title is required")
+        return " ".join(words).lower()
+
+
+    def normalize_body(value: str) -> str:
+        body = value.strip()
+        if not body:
+            raise ValueError("body is required")
+        return body
+
+
+    def normalize_tags(values: list[str]) -> list[str]:
+        tags: list[str] = []
+        for raw_tag in values:
+            tag = raw_tag.strip().lower()
+            if not tag:
+                continue
+            if " " in tag:
+                raise ValueError("tags cannot contain spaces")
+            if tag not in tags:
+                tags.append(tag)
+        return tags
+
+
+    class NoteCreate(BaseModel):
+        model_config = ConfigDict(extra="forbid")
+
+        title: str = Field(min_length=1)
+        body: str = Field(min_length=1)
+        tags: list[str] = Field(default_factory=list)
+
+        @field_validator("title")
+        @classmethod
+        def validate_title(cls, value: str) -> str:
+            return normalize_title(value)
+
+        @field_validator("body")
+        @classmethod
+        def validate_body(cls, value: str) -> str:
+            return normalize_body(value)
+
+        @field_validator("tags")
+        @classmethod
+        def validate_tags(cls, value: list[str]) -> list[str]:
+            return normalize_tags(value)
+
+
+    class NoteUpdate(BaseModel):
+        model_config = ConfigDict(extra="forbid")
+
+        body: str | None = None
+        tags: list[str] | None = None
+
+        @field_validator("body")
+        @classmethod
+        def validate_body(cls, value: str | None) -> str | None:
+            return None if value is None else normalize_body(value)
+
+        @field_validator("tags")
+        @classmethod
+        def validate_tags(cls, value: list[str] | None) -> list[str] | None:
+            return None if value is None else normalize_tags(value)
+
+        @model_validator(mode="after")
+        def require_at_least_one_field(self) -> Self:
+            if self.body is None and self.tags is None:
+                raise ValueError("at least one update field is required")
+            return self
+
+
+    class NoteRead(BaseModel):
+        model_config = ConfigDict(extra="ignore")
+
+        title: str
+        body: str
+        tags: list[str] = Field(default_factory=list)
+
+
+    class ErrorResponse(BaseModel):
+        detail: str
+        code: str
+commonWrongApproaches:
+  - Reusing one model for create, update, read, and errors.
+  - "Using tags: list[str] = [] instead of Field(default_factory=list)."
+  - Allowing extra request fields on public input models.
+  - Letting response models expose internal storage fields.
+  - Treating blank body text as valid because it is technically a string.
+expectedSolutionCharacteristics:
+  - Uses Pydantic v2 BaseModel classes.
+  - Normalizes titles and tags.
+  - Forbids extra fields on request/update models.
+  - Filters extra fields on response models.
+  - Requires NoteUpdate to include at least one meaningful field.

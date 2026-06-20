@@ -32,6 +32,12 @@ concepts:
   - id: py-command-runner
     title: Command Runner Composition
     description: Composing parsing, validation, storage, and rendering helpers into one testable application workflow.
+  - id: py-note-mutations
+    title: Note Mutations and Queries
+    description: Updating, deleting, listing, and searching stored records while preserving deterministic command behavior.
+  - id: py-service-boundaries
+    title: Service Boundaries
+    description: Isolating reusable application operations so CLI commands and FastAPI routes can share the same core.
   - id: py-pytest-basics
     title: pytest Basics
     description: Using assertions and exception tests to turn beginner mental models into executable evidence.
@@ -40,7 +46,76 @@ concepts:
     description: Using Pyright, Ruff, diagnostics, hover, and formatting as part of the learning loop.
   - id: fastapi-request-models
     title: FastAPI Request Models
-    description: Future concept for connecting plain Python type hints and validation to FastAPI request bodies.
+    description: Connecting Python type hints and validation to FastAPI request bodies and response models.
+  - id: fastapi-route-handlers
+    title: FastAPI Route Handlers
+    description: Writing thin HTTP adapters that call reusable Python service functions.
+  - id: fastapi-dependencies
+    title: FastAPI Dependencies
+    description: Using Depends, app factories, and dependency overrides to keep route handlers decoupled and testable.
+  - id: pydantic-contract-models
+    title: Pydantic Contract Models
+    description: Designing request, response, and error models with explicit validation and serialization rules.
+  - id: http-semantics
+    title: HTTP Semantics
+    description: Choosing status codes, response bodies, and error categories deliberately instead of treating HTTP as generic function calls.
+  - id: py-repository-boundaries
+    title: Repository Boundaries
+    description: Hiding persistence details behind explicit interfaces so services and route handlers do not depend on storage mechanics.
+  - id: fastapi-test-depth
+    title: FastAPI Testing Depth
+    description: Testing dependency overrides, validation paths, error semantics, persistence isolation, and route contracts deliberately.
+  - id: py-sqlite-persistence
+    title: SQLite Persistence
+    description: Using Python's sqlite3 module for durable local storage with schema creation, parameterized queries, and row mapping.
+  - id: py-package-structure
+    title: Python Package Structure
+    description: Organizing FastAPI code into app, models, services, repositories, and dependencies modules with clear ownership.
+  - id: py-pagination-filtering
+    title: Pagination and Filtering
+    description: Designing list endpoints with query validation, deterministic ordering, tag/text filtering, limits, and offsets.
+  - id: py-transactions
+    title: Transaction Boundaries
+    description: Keeping multi-step persistence changes atomic with explicit commit and rollback behavior.
+  - id: py-async-boundaries
+    title: Async Boundary Discipline
+    description: Deciding where async belongs, where sync work must be isolated, and how to keep blocking persistence out of the event loop.
+  - id: py-production-api-assembly
+    title: Production API Assembly
+    description: Combining package structure, dependencies, SQLite persistence, tests, HTTP semantics, and async policy into a coherent API.
+  - id: py-settings-configuration
+    title: Settings and Configuration
+    description: Loading validated application settings from environment-like inputs with safe defaults and explicit production requirements.
+  - id: py-observability
+    title: Logging and Observability
+    description: Emitting structured request logs, request IDs, timings, and safe error telemetry.
+  - id: fastapi-api-key-auth
+    title: API Key Authentication
+    description: Protecting write routes with API keys while preserving public reads and clear 401/403 behavior.
+  - id: py-schema-migrations
+    title: Schema Migrations
+    description: Versioning SQLite schema changes with idempotent migrations and startup checks.
+  - id: py-packaging-running
+    title: Packaging and Running
+    description: Defining app import paths, uvicorn targets, run commands, and production-ish startup checks.
+  - id: py-orm-boundaries
+    title: ORM Boundaries
+    description: Mapping domain records to ORM table models while keeping services independent from SQLAlchemy or SQLModel details.
+  - id: py-alembic-migrations
+    title: Alembic Migrations
+    description: Planning Alembic revisions with upgrade, downgrade, schema-review, and migration-test discipline.
+  - id: py-postgres-readiness
+    title: PostgreSQL Readiness
+    description: Preparing settings, connection strings, portability checks, and tests for moving beyond SQLite assumptions.
+  - id: py-sqlalchemy-implementation
+    title: SQLAlchemy Implementation
+    description: Turning repository contracts into concrete SQLAlchemy models, sessions, row mapping, and transaction ownership.
+  - id: py-alembic-environment
+    title: Alembic Environment
+    description: Wiring Alembic configuration, metadata discovery, revision commands, and migration smoke tests deliberately.
+  - id: py-postgres-engine
+    title: PostgreSQL Engine Configuration
+    description: Configuring PostgreSQL drivers, engine options, session factories, pool settings, and production database guards.
 modules:
   - id: py-notes-foundations
     title: Python Notes Foundations
@@ -201,6 +276,609 @@ lessons:
         chapter: How to use temporary directories and files in tests
         topic: testing workflows with tmp_path
         usage: QualityAnchor
+  - id: note-commands-update-list-delete-search-python
+    moduleId: py-notes-foundations
+    title: Update, List, Delete, and Search Commands
+    summary: Grow py-notes-cli from one add workflow into a small command surface with deterministic reads and safe mutations.
+    markdown: tracks/python/lessons/note-commands-update-list-delete-search-python.md
+    order: 7
+    concepts:
+      - py-functions
+      - py-collections
+      - py-validation
+      - py-file-io
+      - py-json-storage
+      - py-cli-boundaries
+      - py-command-runner
+      - py-note-mutations
+      - py-service-boundaries
+      - py-pytest-basics
+    sourceReferences:
+      - book: python-official-tutorial
+        chapter: Data Structures
+        topic: list filtering, dictionary records, and membership checks
+        usage: QualityAnchor
+      - book: python-standard-library
+        chapter: json
+        topic: preserving stored collection shape across mutations
+        usage: QualityAnchor
+      - book: pytest-docs
+        chapter: How to use temporary directories and files in tests
+        topic: testing read and write command workflows with tmp_path
+        usage: QualityAnchor
+  - id: fastapi-service-adapters-python
+    moduleId: py-notes-foundations
+    title: FastAPI Service Adapters
+    summary: Turn the notes service boundary into FastAPI route handlers with Pydantic request models and explicit response contracts.
+    markdown: tracks/python/lessons/fastapi-service-adapters-python.md
+    order: 8
+    concepts:
+      - py-functions
+      - py-collections
+      - py-validation
+      - py-json-storage
+      - py-service-boundaries
+      - fastapi-request-models
+      - fastapi-route-handlers
+      - py-pytest-basics
+    sourceReferences:
+      - book: fastapi-docs
+        chapter: Request Body
+        topic: Pydantic models as request bodies
+        usage: QualityAnchor
+      - book: fastapi-docs
+        chapter: Path Parameters
+        topic: route parameters and handler functions
+        usage: QualityAnchor
+      - book: fastapi-docs
+        chapter: Testing
+        topic: TestClient for HTTP adapter tests
+        usage: QualityAnchor
+  - id: fastapi-dependency-boundaries-python
+    moduleId: py-notes-foundations
+    title: FastAPI Dependency Boundaries
+    summary: Use Depends, app state, and dependency overrides to keep FastAPI handlers thin and testable.
+    markdown: tracks/python/lessons/fastapi-dependency-boundaries-python.md
+    order: 9
+    concepts:
+      - py-functions
+      - py-service-boundaries
+      - fastapi-route-handlers
+      - fastapi-dependencies
+      - py-pytest-basics
+    sourceReferences:
+      - book: fastapi-docs
+        chapter: Dependencies
+        topic: Depends and dependency functions
+        usage: QualityAnchor
+      - book: fastapi-docs
+        chapter: Testing Dependencies with Overrides
+        topic: app.dependency_overrides in tests
+        usage: QualityAnchor
+      - book: fastapi-docs
+        chapter: Bigger Applications
+        topic: app factories and application structure
+        usage: QualityAnchor
+  - id: pydantic-request-response-rigor-python
+    moduleId: py-notes-foundations
+    title: Pydantic Request and Response Rigor
+    summary: Design strict Pydantic input, output, and error contracts for the notes API.
+    markdown: tracks/python/lessons/pydantic-request-response-rigor-python.md
+    order: 10
+    concepts:
+      - py-validation
+      - py-service-boundaries
+      - fastapi-request-models
+      - pydantic-contract-models
+      - py-pytest-basics
+    sourceReferences:
+      - book: fastapi-docs
+        chapter: Request Body
+        topic: Pydantic models and request validation
+        usage: QualityAnchor
+      - book: fastapi-docs
+        chapter: Response Model
+        topic: response filtering and declared output shape
+        usage: QualityAnchor
+      - book: fastapi-docs
+        chapter: Body - Fields
+        topic: Field constraints and metadata
+        usage: QualityAnchor
+  - id: http-semantics-fastapi-python
+    moduleId: py-notes-foundations
+    title: HTTP Semantics in FastAPI
+    summary: Map notes API outcomes to deliberate HTTP status codes, response bodies, and error details.
+    markdown: tracks/python/lessons/http-semantics-fastapi-python.md
+    order: 11
+    concepts:
+      - py-validation
+      - py-service-boundaries
+      - fastapi-route-handlers
+      - pydantic-contract-models
+      - http-semantics
+      - py-pytest-basics
+    sourceReferences:
+      - book: fastapi-docs
+        chapter: Response Status Code
+        topic: declaring successful HTTP status codes
+        usage: QualityAnchor
+      - book: fastapi-docs
+        chapter: Handling Errors
+        topic: HTTPException and error responses
+        usage: QualityAnchor
+      - book: fastapi-docs
+        chapter: Testing
+        topic: asserting status codes and response bodies
+        usage: QualityAnchor
+  - id: persistence-abstractions-python
+    moduleId: py-notes-foundations
+    title: Persistence Abstractions
+    summary: Introduce repository protocols so notes services can use JSON or SQLite storage without changing route handlers.
+    markdown: tracks/python/lessons/persistence-abstractions-python.md
+    order: 12
+    concepts:
+      - py-functions
+      - py-collections
+      - py-service-boundaries
+      - py-repository-boundaries
+      - py-json-storage
+      - fastapi-dependencies
+      - py-pytest-basics
+    sourceReferences:
+      - book: python-official-tutorial
+        chapter: Classes
+        topic: objects, methods, and small collaborating types
+        usage: QualityAnchor
+      - book: python-standard-library
+        chapter: typing
+        topic: Protocol and structural subtyping
+        usage: QualityAnchor
+      - book: pytest-docs
+        chapter: How to use temporary directories and files in tests
+        topic: swapping persistence implementations under the same tests
+        usage: QualityAnchor
+  - id: fastapi-testing-depth-python
+    moduleId: py-notes-foundations
+    title: FastAPI Testing Depth
+    summary: Test FastAPI behavior across dependency overrides, validation errors, persistence isolation, and route contracts.
+    markdown: tracks/python/lessons/fastapi-testing-depth-python.md
+    order: 13
+    concepts:
+      - py-service-boundaries
+      - fastapi-dependencies
+      - pydantic-contract-models
+      - http-semantics
+      - fastapi-test-depth
+      - py-pytest-basics
+    sourceReferences:
+      - book: fastapi-docs
+        chapter: Testing
+        topic: TestClient route tests
+        usage: QualityAnchor
+      - book: fastapi-docs
+        chapter: Testing Dependencies with Overrides
+        topic: dependency overrides for isolated tests
+        usage: QualityAnchor
+      - book: pytest-docs
+        chapter: How to use temporary directories and files in tests
+        topic: tmp_path and test isolation
+        usage: QualityAnchor
+  - id: sqlite-persistence-python
+    moduleId: py-notes-foundations
+    title: SQLite Persistence with sqlite3
+    summary: Replace JSON storage with a SQLite repository while keeping the service and FastAPI boundaries stable.
+    markdown: tracks/python/lessons/sqlite-persistence-python.md
+    order: 14
+    concepts:
+      - py-functions
+      - py-validation
+      - py-service-boundaries
+      - py-repository-boundaries
+      - py-sqlite-persistence
+      - http-semantics
+      - py-pytest-basics
+    sourceReferences:
+      - book: python-standard-library
+        chapter: sqlite3
+        topic: connections, parameterized queries, schema creation, and row mapping
+        usage: QualityAnchor
+      - book: python-standard-library
+        chapter: contextlib
+        topic: managing resource boundaries deliberately
+        usage: QualityAnchor
+      - book: pytest-docs
+        chapter: How to use temporary directories and files in tests
+        topic: isolated database files with tmp_path
+        usage: QualityAnchor
+  - id: production-api-package-structure-python
+    moduleId: py-notes-foundations
+    title: Production API Package Structure
+    summary: Organize the notes API into model, service, repository, dependency, and app boundaries.
+    markdown: tracks/python/lessons/production-api-package-structure-python.md
+    order: 15
+    concepts:
+      - py-package-structure
+      - py-service-boundaries
+      - py-repository-boundaries
+      - fastapi-dependencies
+      - py-production-api-assembly
+    sourceReferences:
+      - book: fastapi-docs
+        chapter: Bigger Applications
+        topic: application layout and route organization
+        usage: QualityAnchor
+      - book: python-official-tutorial
+        chapter: Modules
+        topic: module boundaries and import ownership
+        usage: QualityAnchor
+      - book: pytest-docs
+        chapter: How to use fixtures
+        topic: organizing test setup around application factories
+        usage: QualityAnchor
+  - id: sqlite-backed-fastapi-integration-python
+    moduleId: py-notes-foundations
+    title: SQLite-Backed FastAPI Integration
+    summary: Wire SqliteNoteRepository into FastAPI dependencies while preserving API tests and override seams.
+    markdown: tracks/python/lessons/sqlite-backed-fastapi-integration-python.md
+    order: 16
+    concepts:
+      - py-sqlite-persistence
+      - py-repository-boundaries
+      - fastapi-dependencies
+      - http-semantics
+      - py-production-api-assembly
+    sourceReferences:
+      - book: fastapi-docs
+        chapter: Dependencies
+        topic: dependency-provided persistence adapters
+        usage: QualityAnchor
+      - book: python-standard-library
+        chapter: sqlite3
+        topic: durable local database integration
+        usage: QualityAnchor
+      - book: fastapi-docs
+        chapter: Testing Dependencies with Overrides
+        topic: replacing persistence during tests
+        usage: QualityAnchor
+  - id: pagination-filtering-fastapi-python
+    moduleId: py-notes-foundations
+    title: Pagination and Filtering in FastAPI
+    summary: Design list endpoints with tag/text filters, limit/offset validation, deterministic ordering, and response envelopes.
+    markdown: tracks/python/lessons/pagination-filtering-fastapi-python.md
+    order: 17
+    concepts:
+      - py-pagination-filtering
+      - pydantic-contract-models
+      - http-semantics
+      - py-repository-boundaries
+      - py-pytest-basics
+    sourceReferences:
+      - book: fastapi-docs
+        chapter: Query Parameters
+        topic: validated query parameters
+        usage: QualityAnchor
+      - book: fastapi-docs
+        chapter: Response Model
+        topic: response envelopes and serialized shapes
+        usage: QualityAnchor
+      - book: pytest-docs
+        chapter: How to write and report assertions in tests
+        topic: asserting list endpoint contracts
+        usage: QualityAnchor
+  - id: transaction-boundaries-python
+    moduleId: py-notes-foundations
+    title: Transaction Boundaries
+    summary: Make multi-step SQLite writes atomic with explicit transaction control and rollback tests.
+    markdown: tracks/python/lessons/transaction-boundaries-python.md
+    order: 18
+    concepts:
+      - py-transactions
+      - py-sqlite-persistence
+      - py-repository-boundaries
+      - py-service-boundaries
+      - py-pytest-basics
+    sourceReferences:
+      - book: python-standard-library
+        chapter: sqlite3
+        topic: transaction control and connection context managers
+        usage: QualityAnchor
+      - book: python-standard-library
+        chapter: contextlib
+        topic: explicit resource and transaction boundaries
+        usage: QualityAnchor
+      - book: pytest-docs
+        chapter: How to use temporary directories and files in tests
+        topic: rollback verification with isolated database files
+        usage: QualityAnchor
+  - id: async-boundary-discipline-python
+    moduleId: py-notes-foundations
+    title: Async Boundary Discipline
+    summary: Decide when FastAPI handlers should be async and how to isolate blocking SQLite work safely.
+    markdown: tracks/python/lessons/async-boundary-discipline-python.md
+    order: 19
+    concepts:
+      - py-async-boundaries
+      - py-sqlite-persistence
+      - fastapi-route-handlers
+      - fastapi-test-depth
+      - py-production-api-assembly
+    sourceReferences:
+      - book: fastapi-docs
+        chapter: Async
+        topic: sync versus async path operations
+        usage: QualityAnchor
+      - book: python-standard-library
+        chapter: asyncio
+        topic: event loop boundaries and blocking work
+        usage: QualityAnchor
+      - book: fastapi-docs
+        chapter: Testing
+        topic: testing async-shaped route behavior through TestClient
+        usage: QualityAnchor
+  - id: settings-configuration-python
+    moduleId: py-notes-foundations
+    title: Settings and Configuration
+    summary: Load validated dev/test/prod settings for the notes API without hiding unsafe production defaults.
+    markdown: tracks/python/lessons/settings-configuration-python.md
+    order: 20
+    concepts:
+      - py-settings-configuration
+      - pydantic-contract-models
+      - fastapi-dependencies
+      - py-production-api-assembly
+    sourceReferences:
+      - book: python-standard-library
+        chapter: os
+        topic: environment variables and process configuration
+        usage: QualityAnchor
+      - book: fastapi-docs
+        chapter: Settings and Environment Variables
+        topic: application settings patterns
+        usage: QualityAnchor
+      - book: pytest-docs
+        chapter: How to monkeypatch/mock modules and environments
+        topic: configuration tests without leaking environment state
+        usage: QualityAnchor
+  - id: logging-observability-python
+    moduleId: py-notes-foundations
+    title: Logging and Observability
+    summary: Add structured request logs, request IDs, timing, and safe error telemetry to the notes API.
+    markdown: tracks/python/lessons/logging-observability-python.md
+    order: 21
+    concepts:
+      - py-observability
+      - fastapi-route-handlers
+      - http-semantics
+      - fastapi-test-depth
+    sourceReferences:
+      - book: python-standard-library
+        chapter: logging
+        topic: structured application logging
+        usage: QualityAnchor
+      - book: fastapi-docs
+        chapter: Middleware
+        topic: request middleware boundaries
+        usage: QualityAnchor
+      - book: pytest-docs
+        chapter: How to write and report assertions in tests
+        topic: asserting emitted telemetry
+        usage: QualityAnchor
+  - id: api-key-auth-fastapi-python
+    moduleId: py-notes-foundations
+    title: API Key Authentication
+    summary: Protect write routes with API-key dependencies while preserving public reads and precise auth failures.
+    markdown: tracks/python/lessons/api-key-auth-fastapi-python.md
+    order: 22
+    concepts:
+      - fastapi-api-key-auth
+      - fastapi-dependencies
+      - http-semantics
+      - fastapi-test-depth
+    sourceReferences:
+      - book: fastapi-docs
+        chapter: Security
+        topic: API key security dependencies
+        usage: QualityAnchor
+      - book: fastapi-docs
+        chapter: Dependencies
+        topic: route-level authorization dependencies
+        usage: QualityAnchor
+      - book: fastapi-docs
+        chapter: Testing
+        topic: testing protected routes
+        usage: QualityAnchor
+  - id: sqlite-migrations-python
+    moduleId: py-notes-foundations
+    title: SQLite Schema Migrations
+    summary: Version SQLite schema changes with idempotent migrations and startup checks.
+    markdown: tracks/python/lessons/sqlite-migrations-python.md
+    order: 23
+    concepts:
+      - py-schema-migrations
+      - py-sqlite-persistence
+      - py-transactions
+      - py-production-api-assembly
+    sourceReferences:
+      - book: python-standard-library
+        chapter: sqlite3
+        topic: schema changes and PRAGMA table inspection
+        usage: QualityAnchor
+      - book: python-standard-library
+        chapter: contextlib
+        topic: migration transaction boundaries
+        usage: QualityAnchor
+      - book: pytest-docs
+        chapter: How to use temporary directories and files in tests
+        topic: isolated migration tests
+        usage: QualityAnchor
+  - id: packaging-running-fastapi-python
+    moduleId: py-notes-foundations
+    title: Packaging and Running FastAPI
+    summary: Define app import targets, uvicorn commands, startup checks, and production-ish runtime metadata.
+    markdown: tracks/python/lessons/packaging-running-fastapi-python.md
+    order: 24
+    concepts:
+      - py-packaging-running
+      - py-settings-configuration
+      - py-production-api-assembly
+      - fastapi-test-depth
+    sourceReferences:
+      - book: fastapi-docs
+        chapter: First Steps
+        topic: ASGI app import targets
+        usage: QualityAnchor
+      - book: fastapi-docs
+        chapter: Deployment
+        topic: running FastAPI with an ASGI server
+        usage: QualityAnchor
+      - book: python-official-tutorial
+        chapter: Modules
+        topic: package import paths and module execution
+        usage: QualityAnchor
+  - id: orm-boundaries-python
+    moduleId: py-notes-foundations
+    title: SQLAlchemy and SQLModel Boundaries
+    summary: Plan ORM models, repositories, and service seams without letting ORM objects leak through the API.
+    markdown: tracks/python/lessons/orm-boundaries-python.md
+    order: 25
+    concepts:
+      - py-orm-boundaries
+      - py-repository-boundaries
+      - py-service-boundaries
+      - pydantic-contract-models
+    sourceReferences:
+      - book: python-official-tutorial
+        chapter: Classes
+        topic: object collaboration and data ownership
+        usage: QualityAnchor
+      - book: fastapi-docs
+        chapter: SQL Databases
+        topic: ORM-backed FastAPI structure
+        usage: QualityAnchor
+      - book: pytest-docs
+        chapter: How to write and report assertions in tests
+        topic: repository contract tests
+        usage: QualityAnchor
+  - id: alembic-migration-workflow-python
+    moduleId: py-notes-foundations
+    title: Alembic Migration Workflow
+    summary: Design Alembic-style revisions with upgrade, downgrade, review notes, and migration test expectations.
+    markdown: tracks/python/lessons/alembic-migration-workflow-python.md
+    order: 26
+    concepts:
+      - py-alembic-migrations
+      - py-schema-migrations
+      - py-transactions
+      - py-production-api-assembly
+    sourceReferences:
+      - book: fastapi-docs
+        chapter: SQL Databases
+        topic: schema evolution with database-backed apps
+        usage: QualityAnchor
+      - book: python-standard-library
+        chapter: sqlite3
+        topic: schema inspection and migration verification
+        usage: QualityAnchor
+      - book: pytest-docs
+        chapter: How to use temporary directories and files in tests
+        topic: isolated migration tests
+        usage: QualityAnchor
+  - id: postgresql-readiness-python
+    moduleId: py-notes-foundations
+    title: PostgreSQL Readiness
+    summary: Prepare settings, connection strings, portability checks, and tests for moving from SQLite to PostgreSQL.
+    markdown: tracks/python/lessons/postgresql-readiness-python.md
+    order: 27
+    concepts:
+      - py-postgres-readiness
+      - py-settings-configuration
+      - py-orm-boundaries
+      - py-production-api-assembly
+    sourceReferences:
+      - book: fastapi-docs
+        chapter: SQL Databases
+        topic: database URL configuration and sessions
+        usage: QualityAnchor
+      - book: python-standard-library
+        chapter: urllib.parse
+        topic: URL parsing and connection string validation
+        usage: QualityAnchor
+      - book: pytest-docs
+        chapter: How to write and report assertions in tests
+        topic: configuration and portability contract tests
+        usage: QualityAnchor
+  - id: sqlalchemy-repository-implementation-python
+    moduleId: py-notes-foundations
+    title: SQLAlchemy Repository Implementation
+    summary: Convert the ORM boundary plan into a concrete SQLAlchemy repository with explicit model, session, and mapping decisions.
+    markdown: tracks/python/lessons/sqlalchemy-repository-implementation-python.md
+    order: 28
+    concepts:
+      - py-sqlalchemy-implementation
+      - py-orm-boundaries
+      - py-repository-boundaries
+      - py-transactions
+    sourceReferences:
+      - book: fastapi-docs
+        chapter: SQL Databases
+        topic: SQLAlchemy models and sessions
+        usage: QualityAnchor
+      - book: python-official-tutorial
+        chapter: Classes
+        topic: class attributes and object mapping
+        usage: QualityAnchor
+      - book: pytest-docs
+        chapter: How to use fixtures
+        topic: database-backed repository fixtures
+        usage: QualityAnchor
+  - id: alembic-environment-python
+    moduleId: py-notes-foundations
+    title: Alembic Environment
+    summary: Wire an Alembic environment around SQLAlchemy metadata, deterministic revision commands, and migration smoke tests.
+    markdown: tracks/python/lessons/alembic-environment-python.md
+    order: 29
+    concepts:
+      - py-alembic-environment
+      - py-alembic-migrations
+      - py-sqlalchemy-implementation
+      - py-postgres-engine
+    sourceReferences:
+      - book: fastapi-docs
+        chapter: SQL Databases
+        topic: metadata-backed database apps
+        usage: QualityAnchor
+      - book: python-official-tutorial
+        chapter: Modules
+        topic: importable application metadata
+        usage: QualityAnchor
+      - book: pytest-docs
+        chapter: How to use temporary directories and files in tests
+        topic: migration smoke tests
+        usage: QualityAnchor
+  - id: postgres-engine-configuration-python
+    moduleId: py-notes-foundations
+    title: PostgreSQL Engine Configuration
+    summary: Configure database URLs, SQLAlchemy engine options, session factories, and production guards for PostgreSQL.
+    markdown: tracks/python/lessons/postgres-engine-configuration-python.md
+    order: 30
+    concepts:
+      - py-postgres-engine
+      - py-postgres-readiness
+      - py-settings-configuration
+      - py-async-boundaries
+    sourceReferences:
+      - book: fastapi-docs
+        chapter: SQL Databases
+        topic: sessions and dependency cleanup
+        usage: QualityAnchor
+      - book: python-standard-library
+        chapter: urllib.parse
+        topic: database URL validation
+        usage: QualityAnchor
+      - book: pytest-docs
+        chapter: How to write and report assertions in tests
+        topic: settings matrix tests
+        usage: QualityAnchor
 exercises:
   - id: normalize-note-title-py
     moduleId: py-notes-foundations
@@ -290,6 +968,295 @@ exercises:
       - py-cli-boundaries
       - py-command-runner
       - py-pytest-basics
+  - id: run-note-command-py
+    moduleId: py-notes-foundations
+    title: RunNoteCommand
+    summary: Dispatch list, search, update, and delete commands through reusable storage helpers without duplicating persistence logic.
+    directory: tracks/python/exercises/run-note-command-py
+    order: 8
+    concepts:
+      - py-functions
+      - py-collections
+      - py-validation
+      - py-file-io
+      - py-json-storage
+      - py-cli-boundaries
+      - py-command-runner
+      - py-note-mutations
+      - py-service-boundaries
+      - py-pytest-basics
+  - id: create-notes-api-py
+    moduleId: py-notes-foundations
+    title: CreateNotesApi
+    summary: Expose the same notes service operations through FastAPI request models, route handlers, and deterministic HTTP responses.
+    directory: tracks/python/exercises/create-notes-api-py
+    order: 9
+    concepts:
+      - py-functions
+      - py-collections
+      - py-validation
+      - py-json-storage
+      - py-service-boundaries
+      - fastapi-request-models
+      - fastapi-route-handlers
+      - py-pytest-basics
+  - id: inject-notes-service-py
+    moduleId: py-notes-foundations
+    title: InjectNotesService
+    summary: Build a FastAPI app that resolves NotesService through Depends and supports dependency overrides in tests.
+    directory: tracks/python/exercises/inject-notes-service-py
+    order: 10
+    concepts:
+      - py-functions
+      - py-service-boundaries
+      - fastapi-route-handlers
+      - fastapi-dependencies
+      - py-pytest-basics
+  - id: define-note-contracts-py
+    moduleId: py-notes-foundations
+    title: DefineNoteContracts
+    summary: Define Pydantic request, response, and error models with strict field behavior and predictable serialization.
+    directory: tracks/python/exercises/define-note-contracts-py
+    order: 11
+    concepts:
+      - py-validation
+      - fastapi-request-models
+      - pydantic-contract-models
+      - py-pytest-basics
+  - id: map-notes-http-semantics-py
+    moduleId: py-notes-foundations
+    title: MapNotesHttpSemantics
+    summary: Implement FastAPI routes that distinguish create, conflict, validation, missing records, and no-content deletion.
+    directory: tracks/python/exercises/map-notes-http-semantics-py
+    order: 12
+    concepts:
+      - py-validation
+      - py-service-boundaries
+      - fastapi-route-handlers
+      - pydantic-contract-models
+      - http-semantics
+      - py-pytest-basics
+  - id: abstract-note-repository-py
+    moduleId: py-notes-foundations
+    title: AbstractNoteRepository
+    summary: Extract a repository protocol and JSON repository so the notes service no longer knows persistence details.
+    directory: tracks/python/exercises/abstract-note-repository-py
+    order: 13
+    concepts:
+      - py-functions
+      - py-collections
+      - py-service-boundaries
+      - py-repository-boundaries
+      - py-json-storage
+      - py-pytest-basics
+  - id: test-notes-api-depth-py
+    moduleId: py-notes-foundations
+    title: TestNotesApiDepth
+    summary: Build a FastAPI app and test harness that proves dependency overrides, isolated storage, validation, and HTTP semantics.
+    directory: tracks/python/exercises/test-notes-api-depth-py
+    order: 14
+    concepts:
+      - py-service-boundaries
+      - fastapi-dependencies
+      - pydantic-contract-models
+      - http-semantics
+      - fastapi-test-depth
+      - py-pytest-basics
+  - id: sqlite-note-repository-py
+    moduleId: py-notes-foundations
+    title: SqliteNoteRepository
+    summary: Implement a SQLite-backed note repository with schema initialization, parameterized queries, and deterministic row mapping.
+    directory: tracks/python/exercises/sqlite-note-repository-py
+    order: 15
+    concepts:
+      - py-validation
+      - py-service-boundaries
+      - py-repository-boundaries
+      - py-sqlite-persistence
+      - py-pytest-basics
+  - id: assemble-notes-api-package-py
+    moduleId: py-notes-foundations
+    title: AssembleNotesApiPackage
+    summary: Assemble a production-shaped FastAPI notes app with clear model, service, repository, dependency, and app boundaries.
+    directory: tracks/python/exercises/assemble-notes-api-package-py
+    order: 16
+    concepts:
+      - py-package-structure
+      - py-service-boundaries
+      - py-repository-boundaries
+      - fastapi-dependencies
+      - py-production-api-assembly
+      - py-pytest-basics
+  - id: integrate-sqlite-notes-api-py
+    moduleId: py-notes-foundations
+    title: IntegrateSqliteNotesApi
+    summary: Wire SQLite persistence into FastAPI dependencies without losing dependency overrides or HTTP semantics.
+    directory: tracks/python/exercises/integrate-sqlite-notes-api-py
+    order: 17
+    concepts:
+      - py-sqlite-persistence
+      - py-repository-boundaries
+      - fastapi-dependencies
+      - http-semantics
+      - py-production-api-assembly
+      - py-pytest-basics
+  - id: paginate-filter-notes-py
+    moduleId: py-notes-foundations
+    title: PaginateFilterNotes
+    summary: Implement a filtered and paginated notes endpoint with validated query parameters and deterministic response envelopes.
+    directory: tracks/python/exercises/paginate-filter-notes-py
+    order: 18
+    concepts:
+      - py-pagination-filtering
+      - pydantic-contract-models
+      - http-semantics
+      - py-repository-boundaries
+      - py-pytest-basics
+  - id: transactional-note-writes-py
+    moduleId: py-notes-foundations
+    title: TransactionalNoteWrites
+    summary: Use SQLite transactions to keep note and audit writes atomic under success and failure paths.
+    directory: tracks/python/exercises/transactional-note-writes-py
+    order: 19
+    concepts:
+      - py-transactions
+      - py-sqlite-persistence
+      - py-repository-boundaries
+      - py-service-boundaries
+      - py-pytest-basics
+  - id: async-boundary-policy-py
+    moduleId: py-notes-foundations
+    title: AsyncBoundaryPolicy
+    summary: Build async FastAPI handlers that isolate blocking SQLite work and document when async is appropriate.
+    directory: tracks/python/exercises/async-boundary-policy-py
+    order: 20
+    concepts:
+      - py-async-boundaries
+      - py-sqlite-persistence
+      - fastapi-route-handlers
+      - fastapi-test-depth
+      - py-production-api-assembly
+  - id: load-app-settings-py
+    moduleId: py-notes-foundations
+    title: LoadAppSettings
+    summary: Load validated FastAPI settings from environment-style inputs with safe dev defaults and strict production requirements.
+    directory: tracks/python/exercises/load-app-settings-py
+    order: 21
+    concepts:
+      - py-settings-configuration
+      - pydantic-contract-models
+      - fastapi-dependencies
+      - py-production-api-assembly
+  - id: observe-notes-api-py
+    moduleId: py-notes-foundations
+    title: ObserveNotesApi
+    summary: Add structured request telemetry, request IDs, timing, and safe error records to a FastAPI app.
+    directory: tracks/python/exercises/observe-notes-api-py
+    order: 22
+    concepts:
+      - py-observability
+      - fastapi-route-handlers
+      - http-semantics
+      - fastapi-test-depth
+  - id: protect-notes-api-py
+    moduleId: py-notes-foundations
+    title: ProtectNotesApi
+    summary: Protect notes write routes with API-key dependencies while keeping read routes public and auth failures precise.
+    directory: tracks/python/exercises/protect-notes-api-py
+    order: 23
+    concepts:
+      - fastapi-api-key-auth
+      - fastapi-dependencies
+      - http-semantics
+      - fastapi-test-depth
+  - id: migrate-sqlite-schema-py
+    moduleId: py-notes-foundations
+    title: MigrateSqliteSchema
+    summary: Apply idempotent SQLite schema migrations with schema version tracking and startup verification.
+    directory: tracks/python/exercises/migrate-sqlite-schema-py
+    order: 24
+    concepts:
+      - py-schema-migrations
+      - py-sqlite-persistence
+      - py-transactions
+      - py-production-api-assembly
+  - id: package-run-notes-api-py
+    moduleId: py-notes-foundations
+    title: PackageRunNotesApi
+    summary: Define app import targets, uvicorn run commands, and startup metadata for a production-shaped FastAPI app.
+    directory: tracks/python/exercises/package-run-notes-api-py
+    order: 25
+    concepts:
+      - py-packaging-running
+      - py-settings-configuration
+      - py-production-api-assembly
+      - fastapi-test-depth
+  - id: design-orm-note-mapping-py
+    moduleId: py-notes-foundations
+    title: DesignOrmNoteMapping
+    summary: Design SQLAlchemy/SQLModel table mappings and repository contracts without leaking ORM rows into services or responses.
+    directory: tracks/python/exercises/design-orm-note-mapping-py
+    order: 26
+    concepts:
+      - py-orm-boundaries
+      - py-repository-boundaries
+      - py-service-boundaries
+      - pydantic-contract-models
+  - id: plan-alembic-revision-py
+    moduleId: py-notes-foundations
+    title: PlanAlembicRevision
+    summary: Generate Alembic-style revision metadata and upgrade/downgrade operations with review and test expectations.
+    directory: tracks/python/exercises/plan-alembic-revision-py
+    order: 27
+    concepts:
+      - py-alembic-migrations
+      - py-schema-migrations
+      - py-transactions
+      - py-production-api-assembly
+  - id: prepare-postgres-settings-py
+    moduleId: py-notes-foundations
+    title: PreparePostgresSettings
+    summary: Validate database URLs, flag SQLite portability assumptions, and prepare PostgreSQL-ready runtime settings.
+    directory: tracks/python/exercises/prepare-postgres-settings-py
+    order: 28
+    concepts:
+      - py-postgres-readiness
+      - py-settings-configuration
+      - py-orm-boundaries
+      - py-production-api-assembly
+  - id: implement-sqlalchemy-repository-py
+    moduleId: py-notes-foundations
+    title: ImplementSqlAlchemyRepository
+    summary: Specify the concrete SQLAlchemy model, session boundary, repository methods, and row-to-domain mapping for notes.
+    directory: tracks/python/exercises/implement-sqlalchemy-repository-py
+    order: 29
+    concepts:
+      - py-sqlalchemy-implementation
+      - py-orm-boundaries
+      - py-repository-boundaries
+      - py-transactions
+  - id: configure-alembic-environment-py
+    moduleId: py-notes-foundations
+    title: ConfigureAlembicEnvironment
+    summary: Define Alembic files, metadata imports, commands, and migration smoke tests for the notes schema.
+    directory: tracks/python/exercises/configure-alembic-environment-py
+    order: 30
+    concepts:
+      - py-alembic-environment
+      - py-alembic-migrations
+      - py-sqlalchemy-implementation
+      - py-production-api-assembly
+  - id: configure-postgres-engine-py
+    moduleId: py-notes-foundations
+    title: ConfigurePostgresEngine
+    summary: Build PostgreSQL-ready SQLAlchemy engine/session settings with SQLite development fallback and production guards.
+    directory: tracks/python/exercises/configure-postgres-engine-py
+    order: 31
+    concepts:
+      - py-postgres-engine
+      - py-postgres-readiness
+      - py-settings-configuration
+      - py-async-boundaries
 projects:
   - id: py-notes-cli
     title: py-notes-cli
@@ -404,4 +1371,532 @@ projects:
           - book: pytest-docs
             chapter: How to use temporary directories and files in tests
             topic: workflow tests with tmp_path
+            usage: QualityAnchor
+      - id: py-notes-query-and-mutation-commands
+        title: Query and mutation commands
+        summary: Add list, search, update, and delete workflows while keeping storage and command dispatch explicit.
+        markdown: tracks/python/projects/py-notes-cli/query-and-mutation-commands.md
+        order: 6
+        lessons:
+          - note-commands-update-list-delete-search-python
+        exercises:
+          - run-note-command-py
+        sourceReferences:
+          - book: python-official-tutorial
+            chapter: Data Structures
+            topic: list filtering and dictionary updates
+            usage: QualityAnchor
+          - book: python-standard-library
+            chapter: json
+            topic: stable persisted state after record updates
+            usage: QualityAnchor
+          - book: pytest-docs
+            chapter: How to use temporary directories and files in tests
+            topic: command workflow tests with isolated files
+            usage: QualityAnchor
+      - id: py-notes-fastapi-service-adapter
+        title: FastAPI service adapter
+        summary: Reuse the notes service boundary behind FastAPI handlers with Pydantic requests and TestClient coverage.
+        markdown: tracks/python/projects/py-notes-cli/fastapi-service-adapter.md
+        order: 7
+        lessons:
+          - fastapi-service-adapters-python
+        exercises:
+          - create-notes-api-py
+        sourceReferences:
+          - book: fastapi-docs
+            chapter: Request Body
+            topic: Pydantic request models
+            usage: QualityAnchor
+          - book: fastapi-docs
+            chapter: Response Model
+            topic: explicit response shape
+            usage: QualityAnchor
+          - book: fastapi-docs
+            chapter: Testing
+            topic: TestClient route tests
+            usage: QualityAnchor
+      - id: py-notes-fastapi-dependency-boundaries
+        title: FastAPI dependency boundaries
+        summary: Move service creation behind Depends and prove route handlers can be tested with dependency overrides.
+        markdown: tracks/python/projects/py-notes-cli/fastapi-dependency-boundaries.md
+        order: 8
+        lessons:
+          - fastapi-dependency-boundaries-python
+        exercises:
+          - inject-notes-service-py
+        sourceReferences:
+          - book: fastapi-docs
+            chapter: Dependencies
+            topic: dependency functions and Depends
+            usage: QualityAnchor
+          - book: fastapi-docs
+            chapter: Testing Dependencies with Overrides
+            topic: test-time dependency replacement
+            usage: QualityAnchor
+          - book: fastapi-docs
+            chapter: Bigger Applications
+            topic: application structure and app factories
+            usage: QualityAnchor
+      - id: py-notes-pydantic-contract-rigor
+        title: Pydantic contract rigor
+        summary: Define strict request, response, and error models before the API surface grows.
+        markdown: tracks/python/projects/py-notes-cli/pydantic-contract-rigor.md
+        order: 9
+        lessons:
+          - pydantic-request-response-rigor-python
+        exercises:
+          - define-note-contracts-py
+        sourceReferences:
+          - book: fastapi-docs
+            chapter: Request Body
+            topic: request body models
+            usage: QualityAnchor
+          - book: fastapi-docs
+            chapter: Response Model
+            topic: response model filtering
+            usage: QualityAnchor
+          - book: fastapi-docs
+            chapter: Body - Fields
+            topic: Field constraints
+            usage: QualityAnchor
+      - id: py-notes-http-semantics
+        title: HTTP semantics
+        summary: Map notes API outcomes to precise status codes, response bodies, and error contracts.
+        markdown: tracks/python/projects/py-notes-cli/http-semantics.md
+        order: 10
+        lessons:
+          - http-semantics-fastapi-python
+        exercises:
+          - map-notes-http-semantics-py
+        sourceReferences:
+          - book: fastapi-docs
+            chapter: Response Status Code
+            topic: status code declarations
+            usage: QualityAnchor
+          - book: fastapi-docs
+            chapter: Handling Errors
+            topic: HTTPException and error details
+            usage: QualityAnchor
+          - book: fastapi-docs
+            chapter: Testing
+            topic: route behavior tests
+            usage: QualityAnchor
+      - id: py-notes-persistence-abstraction
+        title: Persistence abstraction
+        summary: Extract a repository boundary so the notes service can move from JSON to SQLite without changing API handlers.
+        markdown: tracks/python/projects/py-notes-cli/persistence-abstraction.md
+        order: 11
+        lessons:
+          - persistence-abstractions-python
+        exercises:
+          - abstract-note-repository-py
+        sourceReferences:
+          - book: python-official-tutorial
+            chapter: Classes
+            topic: service and repository collaboration
+            usage: QualityAnchor
+          - book: python-standard-library
+            chapter: typing
+            topic: Protocol-based repository contracts
+            usage: QualityAnchor
+          - book: pytest-docs
+            chapter: How to use temporary directories and files in tests
+            topic: testing multiple persistence implementations
+            usage: QualityAnchor
+      - id: py-notes-fastapi-testing-depth
+        title: FastAPI testing depth
+        summary: Expand API tests beyond happy paths with dependency overrides, validation errors, isolation, and semantic status checks.
+        markdown: tracks/python/projects/py-notes-cli/fastapi-testing-depth.md
+        order: 12
+        lessons:
+          - fastapi-testing-depth-python
+        exercises:
+          - test-notes-api-depth-py
+        sourceReferences:
+          - book: fastapi-docs
+            chapter: Testing
+            topic: TestClient behavior checks
+            usage: QualityAnchor
+          - book: fastapi-docs
+            chapter: Testing Dependencies with Overrides
+            topic: replacing dependencies during tests
+            usage: QualityAnchor
+          - book: pytest-docs
+            chapter: How to use temporary directories and files in tests
+            topic: isolated storage in API tests
+            usage: QualityAnchor
+      - id: py-notes-sqlite-persistence
+        title: SQLite persistence
+        summary: Implement durable SQLite-backed notes storage behind the repository boundary.
+        markdown: tracks/python/projects/py-notes-cli/sqlite-persistence.md
+        order: 13
+        lessons:
+          - sqlite-persistence-python
+        exercises:
+          - sqlite-note-repository-py
+        sourceReferences:
+          - book: python-standard-library
+            chapter: sqlite3
+            topic: SQLite connections, parameterized queries, and schema initialization
+            usage: QualityAnchor
+          - book: python-standard-library
+            chapter: contextlib
+            topic: predictable resource management
+            usage: QualityAnchor
+          - book: pytest-docs
+            chapter: How to use temporary directories and files in tests
+            topic: isolated sqlite database files
+            usage: QualityAnchor
+      - id: py-notes-production-api-structure
+        title: Production API structure
+        summary: Organize the notes API into explicit model, service, repository, dependency, and app boundaries.
+        markdown: tracks/python/projects/py-notes-cli/production-api-structure.md
+        order: 14
+        lessons:
+          - production-api-package-structure-python
+        exercises:
+          - assemble-notes-api-package-py
+        sourceReferences:
+          - book: fastapi-docs
+            chapter: Bigger Applications
+            topic: application package organization
+            usage: QualityAnchor
+          - book: python-official-tutorial
+            chapter: Modules
+            topic: module boundaries and imports
+            usage: QualityAnchor
+          - book: pytest-docs
+            chapter: How to use fixtures
+            topic: test setup for app factories
+            usage: QualityAnchor
+      - id: py-notes-sqlite-fastapi-integration
+        title: SQLite-backed FastAPI integration
+        summary: Use FastAPI dependencies to provide SQLite-backed repositories while preserving test overrides.
+        markdown: tracks/python/projects/py-notes-cli/sqlite-fastapi-integration.md
+        order: 15
+        lessons:
+          - sqlite-backed-fastapi-integration-python
+        exercises:
+          - integrate-sqlite-notes-api-py
+        sourceReferences:
+          - book: fastapi-docs
+            chapter: Dependencies
+            topic: dependency-provided persistence
+            usage: QualityAnchor
+          - book: python-standard-library
+            chapter: sqlite3
+            topic: sqlite-backed repositories
+            usage: QualityAnchor
+          - book: fastapi-docs
+            chapter: Testing Dependencies with Overrides
+            topic: replacing concrete persistence in tests
+            usage: QualityAnchor
+      - id: py-notes-pagination-filtering
+        title: Pagination and filtering
+        summary: Add validated tag/text filtering, limit/offset pagination, deterministic ordering, and response metadata.
+        markdown: tracks/python/projects/py-notes-cli/pagination-filtering.md
+        order: 16
+        lessons:
+          - pagination-filtering-fastapi-python
+        exercises:
+          - paginate-filter-notes-py
+        sourceReferences:
+          - book: fastapi-docs
+            chapter: Query Parameters
+            topic: query validation
+            usage: QualityAnchor
+          - book: fastapi-docs
+            chapter: Response Model
+            topic: list response envelopes
+            usage: QualityAnchor
+          - book: pytest-docs
+            chapter: How to write and report assertions in tests
+            topic: list endpoint contract assertions
+            usage: QualityAnchor
+      - id: py-notes-transaction-boundaries
+        title: Transaction boundaries
+        summary: Keep multi-step SQLite writes atomic with explicit commit, rollback, and audit verification.
+        markdown: tracks/python/projects/py-notes-cli/transaction-boundaries.md
+        order: 17
+        lessons:
+          - transaction-boundaries-python
+        exercises:
+          - transactional-note-writes-py
+        sourceReferences:
+          - book: python-standard-library
+            chapter: sqlite3
+            topic: transaction control
+            usage: QualityAnchor
+          - book: python-standard-library
+            chapter: contextlib
+            topic: resource boundary management
+            usage: QualityAnchor
+          - book: pytest-docs
+            chapter: How to use temporary directories and files in tests
+            topic: rollback testing
+            usage: QualityAnchor
+      - id: py-notes-async-boundaries
+        title: Async boundaries
+        summary: Use async FastAPI handlers deliberately while isolating blocking SQLite work.
+        markdown: tracks/python/projects/py-notes-cli/async-boundaries.md
+        order: 18
+        lessons:
+          - async-boundary-discipline-python
+        exercises:
+          - async-boundary-policy-py
+        sourceReferences:
+          - book: fastapi-docs
+            chapter: Async
+            topic: sync versus async handlers
+            usage: QualityAnchor
+          - book: python-standard-library
+            chapter: asyncio
+            topic: blocking work and event-loop boundaries
+            usage: QualityAnchor
+          - book: fastapi-docs
+            chapter: Testing
+            topic: testing async-shaped routes
+            usage: QualityAnchor
+      - id: py-notes-settings-configuration
+        title: Settings and configuration
+        summary: Load validated dev/test/prod settings and fail fast on unsafe production configuration.
+        markdown: tracks/python/projects/py-notes-cli/settings-configuration.md
+        order: 19
+        lessons:
+          - settings-configuration-python
+        exercises:
+          - load-app-settings-py
+        sourceReferences:
+          - book: python-standard-library
+            chapter: os
+            topic: environment variables
+            usage: QualityAnchor
+          - book: fastapi-docs
+            chapter: Settings and Environment Variables
+            topic: app configuration
+            usage: QualityAnchor
+          - book: pytest-docs
+            chapter: How to monkeypatch/mock modules and environments
+            topic: isolated config tests
+            usage: QualityAnchor
+      - id: py-notes-observability
+        title: Logging and observability
+        summary: Add request IDs, structured request events, timing, and safe error telemetry.
+        markdown: tracks/python/projects/py-notes-cli/logging-observability.md
+        order: 20
+        lessons:
+          - logging-observability-python
+        exercises:
+          - observe-notes-api-py
+        sourceReferences:
+          - book: python-standard-library
+            chapter: logging
+            topic: structured logging
+            usage: QualityAnchor
+          - book: fastapi-docs
+            chapter: Middleware
+            topic: request middleware
+            usage: QualityAnchor
+          - book: pytest-docs
+            chapter: How to write and report assertions in tests
+            topic: telemetry assertions
+            usage: QualityAnchor
+      - id: py-notes-api-key-auth
+        title: API key authentication
+        summary: Protect write routes with API keys and test public reads, missing credentials, and invalid credentials.
+        markdown: tracks/python/projects/py-notes-cli/api-key-authentication.md
+        order: 21
+        lessons:
+          - api-key-auth-fastapi-python
+        exercises:
+          - protect-notes-api-py
+        sourceReferences:
+          - book: fastapi-docs
+            chapter: Security
+            topic: API key dependencies
+            usage: QualityAnchor
+          - book: fastapi-docs
+            chapter: Dependencies
+            topic: route protection
+            usage: QualityAnchor
+          - book: fastapi-docs
+            chapter: Testing
+            topic: protected route tests
+            usage: QualityAnchor
+      - id: py-notes-sqlite-migrations
+        title: SQLite migrations
+        summary: Version SQLite schema changes with idempotent migrations and startup checks.
+        markdown: tracks/python/projects/py-notes-cli/sqlite-migrations.md
+        order: 22
+        lessons:
+          - sqlite-migrations-python
+        exercises:
+          - migrate-sqlite-schema-py
+        sourceReferences:
+          - book: python-standard-library
+            chapter: sqlite3
+            topic: schema changes and PRAGMA inspection
+            usage: QualityAnchor
+          - book: python-standard-library
+            chapter: contextlib
+            topic: migration transactions
+            usage: QualityAnchor
+          - book: pytest-docs
+            chapter: How to use temporary directories and files in tests
+            topic: isolated migration tests
+            usage: QualityAnchor
+      - id: py-notes-packaging-running
+        title: Packaging and running
+        summary: Define ASGI import targets, uvicorn commands, startup checks, and runtime metadata.
+        markdown: tracks/python/projects/py-notes-cli/packaging-running.md
+        order: 23
+        lessons:
+          - packaging-running-fastapi-python
+        exercises:
+          - package-run-notes-api-py
+        sourceReferences:
+          - book: fastapi-docs
+            chapter: First Steps
+            topic: app import targets
+            usage: QualityAnchor
+          - book: fastapi-docs
+            chapter: Deployment
+            topic: ASGI server startup
+            usage: QualityAnchor
+          - book: python-official-tutorial
+            chapter: Modules
+            topic: import paths
+            usage: QualityAnchor
+      - id: py-notes-orm-boundaries
+        title: SQLAlchemy and SQLModel boundaries
+        summary: Introduce ORM table mapping and repository contracts without letting ORM objects leak across service boundaries.
+        markdown: tracks/python/projects/py-notes-cli/orm-boundaries.md
+        order: 24
+        lessons:
+          - orm-boundaries-python
+        exercises:
+          - design-orm-note-mapping-py
+        sourceReferences:
+          - book: fastapi-docs
+            chapter: SQL Databases
+            topic: ORM-backed app structure
+            usage: QualityAnchor
+          - book: python-official-tutorial
+            chapter: Classes
+            topic: object collaboration
+            usage: QualityAnchor
+          - book: pytest-docs
+            chapter: How to write and report assertions in tests
+            topic: repository contract tests
+            usage: QualityAnchor
+      - id: py-notes-alembic-migrations
+        title: Alembic migrations
+        summary: Plan Alembic-style revisions with upgrade, downgrade, schema review, and migration-test expectations.
+        markdown: tracks/python/projects/py-notes-cli/alembic-migrations.md
+        order: 25
+        lessons:
+          - alembic-migration-workflow-python
+        exercises:
+          - plan-alembic-revision-py
+        sourceReferences:
+          - book: fastapi-docs
+            chapter: SQL Databases
+            topic: schema evolution for database-backed APIs
+            usage: QualityAnchor
+          - book: python-standard-library
+            chapter: sqlite3
+            topic: schema verification during migration tests
+            usage: QualityAnchor
+          - book: pytest-docs
+            chapter: How to use temporary directories and files in tests
+            topic: migration test isolation
+            usage: QualityAnchor
+      - id: py-notes-postgresql-readiness
+        title: PostgreSQL readiness
+        summary: Prepare settings, connection strings, portability checks, and migration expectations for PostgreSQL.
+        markdown: tracks/python/projects/py-notes-cli/postgresql-readiness.md
+        order: 26
+        lessons:
+          - postgresql-readiness-python
+        exercises:
+          - prepare-postgres-settings-py
+        sourceReferences:
+          - book: fastapi-docs
+            chapter: SQL Databases
+            topic: database URL and session configuration
+            usage: QualityAnchor
+          - book: python-standard-library
+            chapter: urllib.parse
+            topic: connection URL validation
+            usage: QualityAnchor
+          - book: pytest-docs
+            chapter: How to write and report assertions in tests
+            topic: portability checks
+            usage: QualityAnchor
+      - id: py-notes-sqlalchemy-implementation
+        title: SQLAlchemy repository implementation
+        summary: Convert the ORM boundary plan into concrete SQLAlchemy model, session, repository, and mapping decisions.
+        markdown: tracks/python/projects/py-notes-cli/sqlalchemy-repository-implementation.md
+        order: 27
+        lessons:
+          - sqlalchemy-repository-implementation-python
+        exercises:
+          - implement-sqlalchemy-repository-py
+        sourceReferences:
+          - book: fastapi-docs
+            chapter: SQL Databases
+            topic: SQLAlchemy-backed FastAPI apps
+            usage: QualityAnchor
+          - book: python-official-tutorial
+            chapter: Classes
+            topic: table model object design
+            usage: QualityAnchor
+          - book: pytest-docs
+            chapter: How to use fixtures
+            topic: repository integration fixtures
+            usage: QualityAnchor
+      - id: py-notes-alembic-environment
+        title: Alembic environment wiring
+        summary: Add Alembic configuration around application metadata with deterministic commands and migration smoke tests.
+        markdown: tracks/python/projects/py-notes-cli/alembic-environment.md
+        order: 28
+        lessons:
+          - alembic-environment-python
+        exercises:
+          - configure-alembic-environment-py
+        sourceReferences:
+          - book: fastapi-docs
+            chapter: SQL Databases
+            topic: database metadata and schema lifecycle
+            usage: QualityAnchor
+          - book: python-official-tutorial
+            chapter: Modules
+            topic: importable metadata modules
+            usage: QualityAnchor
+          - book: pytest-docs
+            chapter: How to use temporary directories and files in tests
+            topic: migration smoke test databases
+            usage: QualityAnchor
+      - id: py-notes-postgres-engine
+        title: PostgreSQL engine configuration
+        summary: Configure SQLAlchemy engine and session factories for PostgreSQL while preserving SQLite development support.
+        markdown: tracks/python/projects/py-notes-cli/postgres-engine-configuration.md
+        order: 29
+        lessons:
+          - postgres-engine-configuration-python
+        exercises:
+          - configure-postgres-engine-py
+        sourceReferences:
+          - book: fastapi-docs
+            chapter: SQL Databases
+            topic: session dependencies and cleanup
+            usage: QualityAnchor
+          - book: python-standard-library
+            chapter: urllib.parse
+            topic: connection URL parsing
+            usage: QualityAnchor
+          - book: pytest-docs
+            chapter: How to write and report assertions in tests
+            topic: production settings matrix
             usage: QualityAnchor

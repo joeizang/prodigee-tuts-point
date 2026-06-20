@@ -1,0 +1,135 @@
+id: configure-postgres-engine-py
+title: ConfigurePostgresEngine
+kind: focused
+workspace:
+  runtime: python-pytest
+  starter: tracks/python/exercises/configure-postgres-engine-py/postgres_engine.py
+  entryPoint: database_engine_settings
+  visibleTest: |
+    import pytest
+
+    from postgres_engine import database_engine_settings, session_dependency_contract
+
+
+    def test_postgresql_url_selects_psycopg_and_pool_options() -> None:
+        settings = database_engine_settings(
+            "postgresql+psycopg://user:secret@localhost:5432/notes",
+            "production",
+        )
+
+        assert settings["provider"] == "postgresql"
+        assert settings["driver"] == "psycopg"
+        assert settings["engine_options"]["pool_pre_ping"] is True
+        assert settings["engine_options"]["pool_size"] == 5
+        assert settings["production_ready"] is True
+
+
+    def test_sqlite_is_allowed_for_development_only() -> None:
+        settings = database_engine_settings("sqlite:///tmp/notes.db", "development")
+
+        assert settings["provider"] == "sqlite"
+        assert settings["engine_options"]["connect_args"] == {"check_same_thread": False}
+        assert settings["production_ready"] is False
+
+        with pytest.raises(ValueError, match="production requires PostgreSQL"):
+            database_engine_settings("sqlite:///tmp/notes.db", "production")
+  hiddenTest: |
+    import pytest
+
+    from postgres_engine import database_engine_settings, session_dependency_contract
+
+
+    def test_invalid_urls_are_rejected_precisely() -> None:
+        with pytest.raises(ValueError, match="unsupported database provider"):
+            database_engine_settings("mysql://user@localhost/notes", "development")
+
+        with pytest.raises(ValueError, match="database name is required"):
+            database_engine_settings("postgresql+psycopg://user:secret@localhost:5432", "production")
+
+
+    def test_session_dependency_keeps_sessions_below_routes() -> None:
+        contract = session_dependency_contract()
+
+        assert contract["factory"] == "sessionmaker(bind=engine, expire_on_commit=False)"
+        assert contract["yield_dependency"] == "get_session"
+        assert contract["routes_create_sessions"] is False
+        assert contract["repository_receives_session"] is True
+        assert contract["async_policy"] == "sync SQLAlchemy isolated behind repository boundary"
+hints:
+  - id: conceptual
+    level: conceptual
+    title: URLs select operational behavior
+    body: Parse the provider and driver first, then choose engine options and production guards deliberately.
+  - id: api-approach
+    level: api-approach
+    title: Keep session creation centralized
+    body: FastAPI dependencies should yield sessions, while routes should depend on services or repositories.
+  - id: structural
+    level: structural
+    title: Production needs PostgreSQL guardrails
+    body: SQLite can remain useful for development, but production configuration should reject it explicitly.
+solution:
+  title: Model solution
+  body: The model solution parses database URLs, selects provider-specific SQLAlchemy engine options, enforces production guards, and documents the session dependency boundary.
+  code: |
+    from urllib.parse import urlparse
+
+
+    def database_engine_settings(database_url: str, app_env: str) -> dict[str, object]:
+        parsed = urlparse(database_url)
+        environment = app_env.lower()
+
+        if parsed.scheme == "sqlite":
+            if environment == "production":
+                raise ValueError("production requires PostgreSQL")
+            database = parsed.path.lstrip("/")
+            if not database:
+                raise ValueError("database name is required")
+            return {
+                "provider": "sqlite",
+                "driver": "sqlite3",
+                "database": database,
+                "engine_options": {"connect_args": {"check_same_thread": False}},
+                "production_ready": False,
+            }
+
+        if parsed.scheme == "postgresql+psycopg":
+            database = parsed.path.lstrip("/")
+            if not database:
+                raise ValueError("database name is required")
+            return {
+                "provider": "postgresql",
+                "driver": "psycopg",
+                "database": database,
+                "host": parsed.hostname,
+                "port": parsed.port,
+                "engine_options": {
+                    "pool_pre_ping": True,
+                    "pool_size": 5,
+                    "max_overflow": 10,
+                },
+                "production_ready": True,
+            }
+
+        raise ValueError("unsupported database provider")
+
+
+    def session_dependency_contract() -> dict[str, object]:
+        return {
+            "factory": "sessionmaker(bind=engine, expire_on_commit=False)",
+            "yield_dependency": "get_session",
+            "routes_create_sessions": False,
+            "repository_receives_session": True,
+            "async_policy": "sync SQLAlchemy isolated behind repository boundary",
+        }
+commonWrongApproaches:
+  - Letting production use SQLite silently.
+  - Creating sessions directly in route handlers.
+  - Sharing one global session object.
+  - Ignoring provider-specific engine options.
+expectedSolutionCharacteristics:
+  - Parses PostgreSQL and SQLite URLs.
+  - Rejects unsupported database providers.
+  - Blocks SQLite production configuration.
+  - Defines provider-specific engine options.
+  - Documents session dependency ownership.

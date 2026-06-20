@@ -1,0 +1,152 @@
+id: paginate-filter-notes-py
+title: PaginateFilterNotes
+kind: focused
+workspace:
+  runtime: python-pytest
+  starter: tracks/python/exercises/paginate-filter-notes-py/notes_pagination.py
+  entryPoint: create_app
+  visibleTest: |
+    from fastapi.testclient import TestClient
+
+    from notes_pagination import create_app
+
+
+    def seed(client: TestClient) -> None:
+        client.post("/notes", json={"title": "Python API", "body": "FastAPI route", "tags": ["python", "api"]})
+        client.post("/notes", json={"title": "SQLite", "body": "database", "tags": ["python", "db"]})
+        client.post("/notes", json={"title": "Testing", "body": "pytest api", "tags": ["testing"]})
+
+
+    def test_tag_filter_returns_envelope() -> None:
+        client = TestClient(create_app())
+        seed(client)
+
+        response = client.get("/notes", params={"tag": "api"})
+
+        assert response.status_code == 200
+        assert response.json() == {
+            "items": [{"title": "python api", "body": "FastAPI route", "tags": ["python", "api"]}],
+            "total": 1,
+            "limit": 20,
+            "offset": 0,
+        }
+
+
+    def test_limit_and_offset_slice_after_sorting() -> None:
+        client = TestClient(create_app())
+        seed(client)
+
+        response = client.get("/notes", params={"limit": 1, "offset": 1})
+
+        assert response.json()["items"] == [{"title": "sqlite", "body": "database", "tags": ["python", "db"]}]
+        assert response.json()["total"] == 3
+  hiddenTest: |
+    from fastapi.testclient import TestClient
+
+    from notes_pagination import create_app
+
+
+    def test_text_filter_checks_title_and_body() -> None:
+        client = TestClient(create_app())
+        client.post("/notes", json={"title": "Python", "body": "language", "tags": []})
+        client.post("/notes", json={"title": "FastAPI", "body": "python web", "tags": ["api"]})
+
+        response = client.get("/notes", params={"q": "web"})
+
+        assert response.json()["items"] == [{"title": "fastapi", "body": "python web", "tags": ["api"]}]
+
+
+    def test_combined_filters_apply_before_pagination() -> None:
+        client = TestClient(create_app())
+        client.post("/notes", json={"title": "A", "body": "api one", "tags": ["api"]})
+        client.post("/notes", json={"title": "B", "body": "api two", "tags": ["api"]})
+        client.post("/notes", json={"title": "C", "body": "api three", "tags": ["other"]})
+
+        response = client.get("/notes", params={"tag": "api", "q": "api", "limit": 1, "offset": 1})
+
+        assert response.json() == {
+            "items": [{"title": "b", "body": "api two", "tags": ["api"]}],
+            "total": 2,
+            "limit": 1,
+            "offset": 1,
+        }
+
+
+    def test_invalid_limit_returns_422() -> None:
+        client = TestClient(create_app())
+
+        assert client.get("/notes", params={"limit": 0}).status_code == 422
+hints:
+  - id: conceptual
+    level: conceptual
+    title: Filter before slicing
+    body: Apply tag and text filters before calculating total and applying limit/offset.
+  - id: api-approach
+    level: api-approach
+    title: Return an envelope
+    body: Clients need items plus total, limit, and offset metadata for reliable paging.
+  - id: structural
+    level: structural
+    title: Validate query parameters
+    body: Use FastAPI Query constraints so invalid limits and offsets return 422.
+solution:
+  title: Model solution
+  body: The solution implements a small FastAPI app with normalized note creation and a deterministic filtered, paginated response envelope.
+  code: |
+    from fastapi import FastAPI, Query
+    from pydantic import BaseModel, Field
+
+
+    class NoteCreate(BaseModel):
+        title: str = Field(min_length=1)
+        body: str = Field(min_length=1)
+        tags: list[str] = Field(default_factory=list)
+
+
+    def create_app() -> FastAPI:
+        app = FastAPI()
+        notes: list[dict[str, object]] = []
+
+        @app.post("/notes", status_code=201)
+        def create_note(request: NoteCreate) -> dict[str, object]:
+            note = {
+                "title": " ".join(request.title.split()).lower(),
+                "body": request.body.strip(),
+                "tags": [tag.strip().lower() for tag in request.tags if tag.strip()],
+            }
+            notes.append(note)
+            return note
+
+        @app.get("/notes")
+        def list_notes(
+            tag: str | None = None,
+            q: str | None = None,
+            limit: int = Query(default=20, ge=1, le=100),
+            offset: int = Query(default=0, ge=0),
+        ) -> dict[str, object]:
+            results = sorted(notes, key=lambda note: str(note["title"]))
+            if tag is not None:
+                wanted = tag.strip().lower()
+                results = [note for note in results if wanted in note["tags"]]
+            if q is not None:
+                query = q.strip().lower()
+                results = [
+                    note
+                    for note in results
+                    if query in str(note["title"]).lower() or query in str(note["body"]).lower()
+                ]
+            total = len(results)
+            return {"items": results[offset : offset + limit], "total": total, "limit": limit, "offset": offset}
+
+        return app
+commonWrongApproaches:
+  - Slicing results before applying filters.
+  - Returning a bare list without total metadata.
+  - Accepting zero or negative pagination limits.
+  - Relying on insertion order instead of deterministic title ordering.
+expectedSolutionCharacteristics:
+  - Supports tag and text filters.
+  - Applies filters before pagination.
+  - Returns items with total, limit, and offset.
+  - Uses FastAPI query validation.
+  - Returns empty result sets as 200 responses.

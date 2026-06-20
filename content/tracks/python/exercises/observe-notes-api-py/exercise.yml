@@ -1,0 +1,123 @@
+id: observe-notes-api-py
+title: ObserveNotesApi
+kind: focused
+workspace:
+  runtime: python-pytest
+  starter: tracks/python/exercises/observe-notes-api-py/observability_api.py
+  entryPoint: create_app
+  visibleTest: |
+    from fastapi.testclient import TestClient
+
+    from observability_api import create_app
+
+
+    def test_request_id_header_and_event_are_recorded() -> None:
+        app = create_app()
+        client = TestClient(app)
+
+        response = client.get("/health", headers={"X-Request-ID": "req-123"})
+
+        assert response.headers["X-Request-ID"] == "req-123"
+        assert app.state.events[-1]["request_id"] == "req-123"
+        assert app.state.events[-1]["method"] == "GET"
+        assert app.state.events[-1]["path"] == "/health"
+        assert app.state.events[-1]["status_code"] == 200
+
+
+    def test_generated_request_id_is_returned() -> None:
+        client = TestClient(create_app())
+
+        response = client.get("/health")
+
+        assert response.headers["X-Request-ID"]
+  hiddenTest: |
+    from fastapi.testclient import TestClient
+
+    from observability_api import create_app
+
+
+    def test_error_event_is_safe_and_structured() -> None:
+        app = create_app()
+        client = TestClient(app)
+
+        response = client.get("/boom", headers={"X-API-Key": "secret-value"})
+
+        assert response.status_code == 500
+        event = app.state.events[-1]
+        assert event["status_code"] == 500
+        assert event["error"] == "RuntimeError"
+        assert "secret-value" not in str(event)
+        assert event["duration_ms"] >= 0
+hints:
+  - id: conceptual
+    level: conceptual
+    title: Observe every request
+    body: Middleware should record success and error requests consistently instead of each route logging separately.
+  - id: api-approach
+    level: api-approach
+    title: Return request IDs
+    body: The same request ID should appear in response headers and structured events.
+  - id: structural
+    level: structural
+    title: Keep a test event sink
+    body: app.state.events lets tests assert telemetry without depending on console output.
+solution:
+  title: Model solution
+  body: The model solution adds middleware that records safe structured request events and propagates request IDs.
+  code: |
+    import time
+    import uuid
+
+    from fastapi import FastAPI, Request
+    from fastapi.responses import JSONResponse
+
+
+    def create_app() -> FastAPI:
+        app = FastAPI()
+        app.state.events = []
+
+        @app.middleware("http")
+        async def observe_requests(request: Request, call_next):
+            request_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())
+            started = time.perf_counter()
+            error_name: str | None = None
+            try:
+                response = await call_next(request)
+            except Exception as error:
+                error_name = type(error).__name__
+                response = JSONResponse({"detail": "internal server error"}, status_code=500)
+
+            duration_ms = int((time.perf_counter() - started) * 1000)
+            response.headers["X-Request-ID"] = request_id
+            event = {
+                "request_id": request_id,
+                "method": request.method,
+                "path": request.url.path,
+                "status_code": response.status_code,
+                "duration_ms": duration_ms,
+            }
+            if error_name is not None:
+                event["error"] = error_name
+            app.state.events.append(event)
+            return response
+
+        @app.get("/health")
+        def health() -> dict[str, str]:
+            return {"status": "ok"}
+
+        @app.get("/boom")
+        def boom() -> None:
+            raise RuntimeError("boom")
+
+        return app
+commonWrongApproaches:
+  - Logging API keys or request bodies.
+  - Returning request IDs but not recording them.
+  - Recording only successful requests.
+  - Duplicating request logging inside each route.
+expectedSolutionCharacteristics:
+  - Adds request-observing middleware around every route.
+  - Emits structured request event dictionaries.
+  - Propagates X-Request-ID response headers.
+  - Records safe exception class names.
+  - Avoids logging sensitive header values.

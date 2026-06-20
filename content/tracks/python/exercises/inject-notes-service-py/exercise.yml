@@ -1,0 +1,143 @@
+id: inject-notes-service-py
+title: InjectNotesService
+kind: focused
+workspace:
+  runtime: python-pytest
+  starter: tracks/python/exercises/inject-notes-service-py/notes_dependencies.py
+  entryPoint: create_app
+  visibleTest: |
+    from pathlib import Path
+
+    from fastapi.testclient import TestClient
+
+    from notes_dependencies import create_app
+
+
+    def test_default_dependency_persists_notes(tmp_path: Path) -> None:
+        client = TestClient(create_app(tmp_path / "notes.json"))
+
+        created = client.post("/notes", json={"title": " FastAPI ", "body": "Depends", "tags": ["Python"]})
+        listed = client.get("/notes")
+
+        assert created.status_code == 201
+        assert created.json() == {"title": "fastapi", "body": "Depends", "tags": ["python"]}
+        assert listed.json() == [{"title": "fastapi", "body": "Depends", "tags": ["python"]}]
+  hiddenTest: |
+    from pathlib import Path
+
+    from fastapi.testclient import TestClient
+
+    from notes_dependencies import create_app, get_notes_service
+
+
+    class FakeNotesService:
+        def __init__(self) -> None:
+            self.created: list[dict[str, object]] = []
+
+        def list_notes(self) -> list[dict[str, object]]:
+            return [{"title": "fake", "body": "from override", "tags": ["test"]}]
+
+        def create_note(self, title: str, body: str, tags: list[str]) -> dict[str, object]:
+            note = {"title": title, "body": body, "tags": tags}
+            self.created.append(note)
+            return note
+
+
+    def test_dependency_override_replaces_real_service(tmp_path: Path) -> None:
+        app = create_app(tmp_path / "notes.json")
+        fake = FakeNotesService()
+        app.dependency_overrides[get_notes_service] = lambda: fake
+        client = TestClient(app)
+
+        listed = client.get("/notes")
+        created = client.post("/notes", json={"title": "Override", "body": "body", "tags": []})
+
+        assert listed.json() == [{"title": "fake", "body": "from override", "tags": ["test"]}]
+        assert created.status_code == 201
+        assert fake.created == [{"title": "Override", "body": "body", "tags": []}]
+        assert not (tmp_path / "notes.json").exists()
+hints:
+  - id: conceptual
+    level: conceptual
+    title: Route handlers ask for services
+    body: The handler should declare a service dependency with Depends instead of constructing NotesService itself.
+  - id: api-approach
+    level: api-approach
+    title: Make the provider overrideable
+    body: Tests need to import the exact get_notes_service function and replace it through app.dependency_overrides.
+  - id: structural
+    level: structural
+    title: Put runtime path on app state
+    body: create_app(notes_path) can store notes_path on app.state, and the dependency provider can read it from Request.
+solution:
+  title: Model solution
+  body: The solution uses app state, a request-aware dependency provider, thin route handlers, and test-friendly dependency overrides.
+  code: |
+    import json
+    from pathlib import Path
+    from typing import Annotated
+
+    from fastapi import Depends, FastAPI, Request
+    from pydantic import BaseModel
+
+
+    class NoteRequest(BaseModel):
+        title: str
+        body: str
+        tags: list[str] = []
+
+
+    class NotesService:
+        def __init__(self, notes_path: Path) -> None:
+            self.notes_path = notes_path
+
+        def list_notes(self) -> list[dict[str, object]]:
+            if not self.notes_path.exists():
+                return []
+            decoded = json.loads(self.notes_path.read_text(encoding="utf-8"))
+            return list(decoded)
+
+        def create_note(self, title: str, body: str, tags: list[str]) -> dict[str, object]:
+            note = {
+                "title": " ".join(title.split()).lower(),
+                "body": body.strip(),
+                "tags": [tag.strip().lower() for tag in tags if tag.strip()],
+            }
+            notes = self.list_notes()
+            notes.append(note)
+            self.notes_path.parent.mkdir(parents=True, exist_ok=True)
+            self.notes_path.write_text(json.dumps(notes, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            return note
+
+
+    def get_notes_service(request: Request) -> NotesService:
+        return NotesService(request.app.state.notes_path)
+
+
+    def create_app(notes_path: Path) -> FastAPI:
+        app = FastAPI()
+        app.state.notes_path = notes_path
+
+        @app.get("/notes")
+        def list_notes(service: Annotated[NotesService, Depends(get_notes_service)]) -> list[dict[str, object]]:
+            return service.list_notes()
+
+        @app.post("/notes", status_code=201)
+        def create_note(
+            request: NoteRequest,
+            service: Annotated[NotesService, Depends(get_notes_service)],
+        ) -> dict[str, object]:
+            return service.create_note(request.title, request.body, request.tags)
+
+        return app
+commonWrongApproaches:
+  - Creating NotesService directly inside each handler.
+  - Using a global notes path shared by all tests.
+  - Defining get_notes_service inside create_app so tests cannot import and override it.
+  - Mutating app.dependency_overrides on one shared app across unrelated tests.
+expectedSolutionCharacteristics:
+  - Exposes the create_app(notes_path) application factory.
+  - Exposes get_notes_service as an importable dependency provider.
+  - Uses Depends in route handlers.
+  - Supports app.dependency_overrides for tests.
+  - Keeps default file-backed behavior working.
