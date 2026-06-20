@@ -57,26 +57,18 @@ public static class CurriculumEndpoints
 
         group.MapGet("/sources", async (string? trackId, AppDbContext db, CancellationToken ct) =>
         {
-            var referenceQuery = db.SourceReferences.AsNoTracking();
-            if (!string.IsNullOrWhiteSpace(trackId))
-            {
-                referenceQuery = referenceQuery.Where(reference =>
-                    reference.Lesson != null && reference.Lesson.TrackId == trackId
-                    || reference.ProjectMilestone != null
-                    && reference.ProjectMilestone.Project != null
-                    && reference.ProjectMilestone.Project.TrackId == trackId);
-            }
-
-            var sourceBookIds = await referenceQuery
-                .Select(reference => reference.SourceBookId)
-                .Distinct()
-                .ToListAsync(ct);
+            var activeTrackId = string.IsNullOrWhiteSpace(trackId) ? null : trackId.Trim();
 
             var books = await db.SourceBooks
                 .AsNoTracking()
-                .Where(book => string.IsNullOrWhiteSpace(trackId)
+                .AsSplitQuery()
+                .Where(book => activeTrackId == null
                     ? book.OwnershipStatus == "Owned"
-                    : sourceBookIds.Contains(book.Id))
+                    : book.References.Any(reference =>
+                        (reference.Lesson != null && reference.Lesson.TrackId == activeTrackId)
+                        || (reference.ProjectMilestone != null
+                        && reference.ProjectMilestone.Project != null
+                        && reference.ProjectMilestone.Project.TrackId == activeTrackId)))
                 .OrderBy(book => book.Title)
                 .Select(book => new SourceBookResponse(
                     book.Id,
@@ -86,11 +78,11 @@ public static class CurriculumEndpoints
                     book.Publisher,
                     book.OwnershipStatus ?? "Unspecified",
                     book.References
-                        .Where(reference => string.IsNullOrWhiteSpace(trackId)
-                            || reference.Lesson != null && reference.Lesson.TrackId == trackId
-                            || reference.ProjectMilestone != null
+                        .Where(reference => activeTrackId == null
+                            || (reference.Lesson != null && reference.Lesson.TrackId == activeTrackId)
+                            || (reference.ProjectMilestone != null
                             && reference.ProjectMilestone.Project != null
-                            && reference.ProjectMilestone.Project.TrackId == trackId)
+                            && reference.ProjectMilestone.Project.TrackId == activeTrackId))
                         .OrderBy(reference => reference.Topic)
                         .Select(reference => new SourceReferenceResponse(
                             reference.Id,

@@ -43,6 +43,42 @@ public sealed class CurriculumEndpointTests
     }
 
     [Fact]
+    public async Task PythonTagParsingMilestoneReturnsLessonsExercisesAndSources()
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+
+        var project = await client.GetFromJsonAsync<ProjectDetailTestResponse>(
+            "/api/curriculum/projects/py-notes-cli",
+            TestContext.Current.CancellationToken);
+        var milestone = await client.GetFromJsonAsync<MilestoneDetailTestResponse>(
+            "/api/curriculum/projects/py-notes-cli/milestones/py-notes-tag-parsing",
+            TestContext.Current.CancellationToken);
+        var cluster = await client.GetFromJsonAsync<TheoryClusterTestResponse>(
+            "/api/curriculum/projects/py-notes-cli/milestones/py-notes-tag-parsing/theory-cluster",
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(project);
+        Assert.Contains(project.Milestones, item => item.Id == "py-notes-title-normalization");
+        Assert.Contains(project.Milestones, item => item.Id == "py-notes-tag-parsing");
+
+        Assert.NotNull(milestone);
+        Assert.Equal("Tag parsing", milestone.Title);
+        var lesson = Assert.Single(milestone.Lessons);
+        Assert.Equal("parsing-tags-python", lesson.Id);
+        var exercise = Assert.Single(milestone.Exercises);
+        Assert.Equal("parse-note-tags-py", exercise.Id);
+        Assert.Equal("Python", exercise.Language);
+        Assert.NotEmpty(milestone.Sources);
+        Assert.Contains("predictable list", milestone.Markdown, StringComparison.OrdinalIgnoreCase);
+
+        Assert.NotNull(cluster);
+        var clusterItem = Assert.Single(cluster.Items);
+        Assert.Equal("parsing-tags-python", clusterItem.LessonId);
+        Assert.NotEmpty(clusterItem.Sources);
+    }
+
+    [Fact]
     public async Task MilestoneEndpointReturnsLessonsExercisesAndSources()
     {
         await using var factory = new WebApplicationFactory<Program>();
@@ -577,15 +613,24 @@ public sealed class CurriculumEndpointTests
         await using var factory = new WebApplicationFactory<Program>();
         using var client = factory.CreateClient();
 
-        var books = await client.GetFromJsonAsync<List<SourceBookTestResponse>>(
+        var pythonBooks = await client.GetFromJsonAsync<List<SourceBookTestResponse>>(
             "/api/curriculum/sources?trackId=python",
             TestContext.Current.CancellationToken);
+        var swiftBooks = await client.GetFromJsonAsync<List<SourceBookTestResponse>>(
+            "/api/curriculum/sources?trackId=swift",
+            TestContext.Current.CancellationToken);
 
-        Assert.NotNull(books);
-        Assert.Contains(books, book => book.Id == "python-official-tutorial");
-        Assert.Contains(books, book => book.Id == "pytest-docs");
-        Assert.DoesNotContain(books, book => book.Id == "csharp-12-in-a-nutshell");
-        Assert.All(books, book => Assert.NotEmpty(book.References));
+        Assert.NotNull(pythonBooks);
+        Assert.Contains(pythonBooks, book => book.Id == "python-official-tutorial");
+        Assert.Contains(pythonBooks, book => book.Id == "pytest-docs");
+        Assert.DoesNotContain(pythonBooks, book => book.Id == "csharp-12-in-a-nutshell");
+        Assert.All(pythonBooks, book => Assert.NotEmpty(book.References));
+
+        Assert.NotNull(swiftBooks);
+        Assert.Contains(swiftBooks, book => book.Id == "the-swift-programming-language");
+        Assert.Contains(swiftBooks, book => book.Id == "server-side-swift-vapor");
+        Assert.DoesNotContain(swiftBooks, book => book.Id == "csharp-12-in-a-nutshell");
+        Assert.All(swiftBooks, book => Assert.NotEmpty(book.References));
     }
 
     [Fact]

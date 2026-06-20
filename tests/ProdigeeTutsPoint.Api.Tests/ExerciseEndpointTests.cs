@@ -179,11 +179,14 @@ public sealed class ExerciseEndpointTests
         using var client = factory.CreateClient();
         var profileId = $"python-workspace-{Guid.NewGuid():n}";
 
-        var workspace = await client.GetFromJsonAsync<ExerciseWorkspaceTestResponse>(
+        var workspaceResponse = await client.GetAsync(
             $"/api/exercises/normalize-note-title-py/workspace?profileId={profileId}",
+            TestContext.Current.CancellationToken);
+        var workspace = await workspaceResponse.Content.ReadFromJsonAsync<ExerciseWorkspaceTestResponse>(
             TestContext.Current.CancellationToken);
 
         Assert.NotNull(workspace);
+        Assert.Contains("no-store", workspaceResponse.Headers.CacheControl?.ToString() ?? string.Empty);
         Assert.Equal("Python", workspace.Language);
         Assert.Equal("python-pytest", workspace.Runtime);
         Assert.Contains("Pyright", workspace.LanguageServiceMessage);
@@ -267,6 +270,37 @@ public sealed class ExerciseEndpointTests
     }
 
     [Fact]
+    public async Task WorkspaceEndpointGeneratesPythonTagParsingWorkspace()
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+        var profileId = $"python-tags-workspace-{Guid.NewGuid():n}";
+
+        var workspace = await client.GetFromJsonAsync<ExerciseWorkspaceTestResponse>(
+            $"/api/exercises/parse-note-tags-py/workspace?profileId={profileId}",
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(workspace);
+        Assert.Equal("Python", workspace.Language);
+        Assert.Equal("python-pytest", workspace.Runtime);
+        Assert.Contains(workspace.Files, file =>
+            file.Path == "src/note_tags.py"
+            && file.Editable
+            && file.Content is not null
+            && file.Content.Contains("def parse_tags", StringComparison.Ordinal));
+        Assert.Contains(workspace.Files, file =>
+            file.Path == "tests/test_note_tags_visible.py"
+            && file.Role == "visible-test"
+            && file.Content is not null
+            && file.Content.Contains("from note_tags import parse_tags", StringComparison.Ordinal));
+        Assert.Contains(workspace.Files, file =>
+            file.Path == "tests/test_note_tags_hidden.py"
+            && file.Role == "hidden-test"
+            && file.Content is null);
+        Assert.DoesNotContain(workspace.Files, file => file.Path.EndsWith(".cs", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task RunEndpointExecutesPythonVisibleAndHiddenTestsThroughUv()
     {
         await using var factory = new WebApplicationFactory<Program>();
@@ -287,6 +321,52 @@ public sealed class ExerciseEndpointTests
                                 raise ValueError("title must contain at least one non-space character")
 
                             return " ".join(words).lower()
+                        """)
+                ]),
+            TestContext.Current.CancellationToken);
+
+        var result = await response.Content.ReadFromJsonAsync<ExerciseRunTestResponse>(
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(result);
+        Assert.Equal("Passed", result.Status);
+        Assert.True(result.VisiblePassed);
+        Assert.True(result.HiddenPassed);
+        Assert.DoesNotContain("uv is required", result.Diagnostics, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task RunEndpointExecutesPythonTagParsingVisibleAndHiddenTestsThroughUv()
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+        var profileId = $"python-tags-runner-{Guid.NewGuid():n}";
+
+        var response = await client.PostAsJsonAsync(
+            "/api/exercises/parse-note-tags-py/run",
+            new ExerciseRunTestRequest(
+                profileId,
+                [
+                    new(
+                        "src/note_tags.py",
+                        """
+                        def parse_tags(raw_tags: str) -> list[str]:
+                            tags: list[str] = []
+
+                            for chunk in raw_tags.split(","):
+                                tag = chunk.strip().lower()
+                                if not tag:
+                                    continue
+
+                                if " " in tag:
+                                    raise ValueError("tags cannot contain spaces")
+
+                                if tag in tags:
+                                    continue
+
+                                tags.append(tag)
+
+                            return tags
                         """)
                 ]),
             TestContext.Current.CancellationToken);

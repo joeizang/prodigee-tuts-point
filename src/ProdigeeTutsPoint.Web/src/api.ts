@@ -435,7 +435,7 @@ export type ExerciseRange = {
 }
 
 export async function getJson<T>(url: string, signal?: AbortSignal): Promise<T> {
-  const response = await fetch(url, { signal })
+  const response = await fetch(url, { cache: 'no-store', signal })
 
   if (!response.ok) {
     throw new Error(`Request failed: ${response.status}`)

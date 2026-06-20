@@ -9,9 +9,12 @@ public static class ExerciseEndpoints
         group.MapGet("/{exerciseId}/workspace", async (
             string exerciseId,
             string profileId,
+            HttpContext httpContext,
             ExerciseWorkspaceService workspaces,
             CancellationToken ct) =>
         {
+            httpContext.Response.Headers["Cache-Control"] = "no-store";
+            httpContext.Response.Headers["Pragma"] = "no-cache";
             var workspace = await workspaces.EnsureWorkspaceAsync(profileId, exerciseId, ct);
             return workspace is null ? Results.NotFound() : Results.Ok(workspace);
         });

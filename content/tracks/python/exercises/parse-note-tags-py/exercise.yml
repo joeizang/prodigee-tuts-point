@@ -1,0 +1,79 @@
+id: parse-note-tags-py
+title: ParseNoteTags
+kind: focused
+workspace:
+  runtime: python-pytest
+  starter: tracks/python/exercises/parse-note-tags-py/note_tags.py
+  entryPoint: parse_tags
+  visibleTest: |
+    from note_tags import parse_tags
+
+
+    def test_parses_comma_separated_tags() -> None:
+        assert parse_tags("python, fastapi, testing") == ["python", "fastapi", "testing"]
+
+
+    def test_trims_and_lowercases_tags() -> None:
+        assert parse_tags("  Python  , FastAPI , TESTING ") == ["python", "fastapi", "testing"]
+  hiddenTest: |
+    import pytest
+
+    from note_tags import parse_tags
+
+
+    def test_ignores_empty_chunks_and_preserves_order() -> None:
+        assert parse_tags("python,, fastapi, ,testing,") == ["python", "fastapi", "testing"]
+
+
+    def test_removes_duplicates_after_normalization() -> None:
+        assert parse_tags("Python, fastapi, python, FASTAPI") == ["python", "fastapi"]
+
+
+    def test_rejects_tag_with_internal_space() -> None:
+        with pytest.raises(ValueError, match="spaces"):
+            parse_tags("python, machine learning")
+hints:
+  - id: conceptual
+    level: conceptual
+    title: Return structured data
+    body: The input is one string because that is convenient for users. The output should be a list because that is convenient for application code.
+  - id: api-approach
+    level: api-approach
+    title: Normalize before comparing
+    body: Trim and lowercase each chunk before checking for duplicates so Python and python become the same tag.
+  - id: structural
+    level: structural
+    title: Build the result step by step
+    body: Start with an empty list, loop over comma-separated chunks, skip empty chunks, reject invalid chunks, and append unseen tags.
+solution:
+  title: Model solution
+  body: The model solution treats the raw string as outside data. It normalizes each chunk, validates the candidate tag, and only then appends unseen tags to preserve first-seen order.
+  code: |
+    def parse_tags(raw_tags: str) -> list[str]:
+        tags: list[str] = []
+
+        for chunk in raw_tags.split(","):
+            tag = chunk.strip().lower()
+            if not tag:
+                continue
+
+            if " " in tag:
+                raise ValueError("tags cannot contain spaces")
+
+            if tag in tags:
+                continue
+
+            tags.append(tag)
+
+        return tags
+commonWrongApproaches:
+  - Returning raw_tags.split(",") without normalizing each chunk.
+  - Removing duplicates before trimming and lowercasing.
+  - Using split() instead of split(",") and accidentally treating spaces as separators.
+  - Rejecting empty chunks even though repeated commas should be ignored.
+  - Returning one comma-separated string instead of a list of tags.
+expectedSolutionCharacteristics:
+  - Returns list[str] in first-seen order.
+  - Normalizes tags before duplicate checks.
+  - Raises ValueError for non-empty tags that contain spaces.
+  - Keeps the function pure with no print, input, file, or global state.

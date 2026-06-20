@@ -19,6 +19,7 @@ import { SoftLockNotice } from '../components/SoftLockNotice'
 import {
   ExerciseWorkspacePanel,
 } from '../features/exercises/ExerciseWorkspacePanel'
+import { isWorkspaceCompatibleWithExercise } from '../features/exercises/workspaceCompatibility'
 import { selectActiveWorkspaceFile } from '../features/exercises/workspaceFiles'
 import { useApi } from '../hooks/useApi'
 import { useStudyTime } from '../hooks/useStudyTime'
@@ -55,7 +56,8 @@ export function ExerciseDetail({ profile, theme }: { profile: LocalProfile; them
   const [isSaving, setIsSaving] = useState(false)
   const [isUnlockingSolution, setIsUnlockingSolution] = useState(false)
 
-  const activeFile = selectActiveWorkspaceFile(workspace?.files ?? [], selectedPath)
+  const compatibleWorkspace = isWorkspaceCompatibleWithExercise(workspace, exercise) ? workspace : null
+  const activeFile = selectActiveWorkspaceFile(compatibleWorkspace?.files ?? [], selectedPath)
   const activeContent = activeFile ? fileEdits[activeFile.path] ?? activeFile.content ?? '' : ''
   const assistance = assistanceOverride ?? initialAssistance ?? null
   const attempts = attemptsOverride ?? initialAttempts ?? []
@@ -119,7 +121,7 @@ export function ExerciseDetail({ profile, theme }: { profile: LocalProfile; them
   }, [exerciseId, profile.id])
 
   const runExercise = useCallback(async () => {
-    if (!workspace) {
+    if (!compatibleWorkspace) {
       return
     }
 
@@ -127,7 +129,7 @@ export function ExerciseDetail({ profile, theme }: { profile: LocalProfile; them
     try {
       const result = await postJson<ExerciseRunResult>(`/api/exercises/${exerciseId}/run`, {
         profileId: profile.id,
-        files: workspace.files
+        files: compatibleWorkspace.files
           .filter((file) => file.editable)
           .map((file) => ({
             path: file.path,
@@ -140,7 +142,7 @@ export function ExerciseDetail({ profile, theme }: { profile: LocalProfile; them
     } finally {
       setIsRunning(false)
     }
-  }, [exerciseId, fileEdits, profile.id, refreshAssistance, refreshAttempts, workspace])
+  }, [compatibleWorkspace, exerciseId, fileEdits, profile.id, refreshAssistance, refreshAttempts])
 
   const useHint = useCallback(
     async (hint: ExerciseHint) => {
@@ -203,7 +205,15 @@ export function ExerciseDetail({ profile, theme }: { profile: LocalProfile; them
         <div className="content-stack exercise-stack">
           <SoftLockNotice locks={exercise.softLocks} title="Recommended before this exercise" />
           <p className="body-copy">{exercise.summary}</p>
-          {workspace && (
+          {workspace && !compatibleWorkspace && (
+            <Panel title="Exercise Workspace">
+              <p className="body-copy">
+                The workspace response does not match this exercise language. Restart the API and
+                Vite dev servers so the active track and workspace contract are refreshed.
+              </p>
+            </Panel>
+          )}
+          {compatibleWorkspace && (
             <ExerciseWorkspacePanel
               activeContent={activeContent}
               activeFile={activeFile}
@@ -213,7 +223,7 @@ export function ExerciseDetail({ profile, theme }: { profile: LocalProfile; them
               isSaving={isSaving}
               runResult={runResult}
               theme={theme}
-              workspace={workspace}
+              workspace={compatibleWorkspace}
               onFileChange={(path, content) =>
                 setFileEdits((current) => ({ ...current, [path]: content }))
               }
