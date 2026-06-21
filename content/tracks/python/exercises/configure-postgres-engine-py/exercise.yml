@@ -8,7 +8,13 @@ workspace:
   visibleTest: |
     import pytest
 
-    from postgres_engine import database_engine_settings, session_dependency_contract
+    from sqlalchemy.orm import Session, sessionmaker
+
+    from postgres_engine import (
+        create_session_factory,
+        database_engine_settings,
+        session_dependency_contract,
+    )
 
 
     def test_postgresql_url_selects_psycopg_and_pool_options() -> None:
@@ -24,13 +30,15 @@ workspace:
         assert settings["production_ready"] is True
 
 
-    def test_sqlite_is_allowed_for_development_only() -> None:
-        settings = database_engine_settings("sqlite:///tmp/notes.db", "development")
+    def test_sqlite_development_factory_uses_real_sessionmaker() -> None:
+        factory = create_session_factory("sqlite:///:memory:", "development")
 
-        assert settings["provider"] == "sqlite"
-        assert settings["engine_options"]["connect_args"] == {"check_same_thread": False}
-        assert settings["production_ready"] is False
+        assert isinstance(factory, sessionmaker)
+        with factory() as session:
+            assert session.is_active is True
 
+
+    def test_sqlite_is_rejected_in_production() -> None:
         with pytest.raises(ValueError, match="production requires PostgreSQL"):
             database_engine_settings("sqlite:///tmp/notes.db", "production")
   hiddenTest: |
@@ -70,9 +78,16 @@ hints:
     body: SQLite can remain useful for development, but production configuration should reject it explicitly.
 solution:
   title: Model solution
-  body: The model solution parses database URLs, selects provider-specific SQLAlchemy engine options, enforces production guards, and documents the session dependency boundary.
+  body: The model solution parses database URLs, creates real SQLAlchemy engines and session factories, enforces production guards, and documents the dependency boundary.
   code: |
+    from __future__ import annotations
+
+    from typing import Any, cast
     from urllib.parse import urlparse
+
+    from sqlalchemy import create_engine
+    from sqlalchemy.engine import Engine
+    from sqlalchemy.orm import Session, sessionmaker
 
 
     def database_engine_settings(database_url: str, app_env: str) -> dict[str, object]:
@@ -82,9 +97,7 @@ solution:
         if parsed.scheme == "sqlite":
             if environment == "production":
                 raise ValueError("production requires PostgreSQL")
-            database = parsed.path.lstrip("/")
-            if not database:
-                raise ValueError("database name is required")
+            database = parsed.path.lstrip("/") or ":memory:"
             return {
                 "provider": "sqlite",
                 "driver": "sqlite3",
@@ -114,6 +127,17 @@ solution:
         raise ValueError("unsupported database provider")
 
 
+    def create_engine_for_settings(database_url: str, app_env: str) -> Engine:
+        settings = database_engine_settings(database_url, app_env)
+        engine_options = cast(dict[str, Any], settings["engine_options"])
+        return create_engine(database_url, **engine_options)
+
+
+    def create_session_factory(database_url: str, app_env: str) -> sessionmaker[Session]:
+        engine = create_engine_for_settings(database_url, app_env)
+        return sessionmaker(bind=engine, expire_on_commit=False)
+
+
     def session_dependency_contract() -> dict[str, object]:
         return {
             "factory": "sessionmaker(bind=engine, expire_on_commit=False)",
@@ -128,7 +152,7 @@ commonWrongApproaches:
   - Sharing one global session object.
   - Ignoring provider-specific engine options.
 expectedSolutionCharacteristics:
-  - Parses PostgreSQL and SQLite URLs.
+  - Creates real SQLAlchemy engines.
   - Rejects unsupported database providers.
   - Blocks SQLite production configuration.
   - Defines provider-specific engine options.

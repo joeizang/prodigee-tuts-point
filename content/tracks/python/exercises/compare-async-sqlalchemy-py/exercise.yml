@@ -1,0 +1,101 @@
+id: compare-async-sqlalchemy-py
+title: CompareAsyncSqlAlchemy
+kind: focused
+workspace:
+  runtime: python-pytest
+  starter: tracks/python/exercises/compare-async-sqlalchemy-py/async_sqlalchemy_comparison.py
+  entryPoint: sqlalchemy_comparison_matrix
+  visibleTest: |
+    from async_sqlalchemy_comparison import sqlalchemy_comparison_matrix
+
+
+    def test_matrix_names_sync_and_async_components() -> None:
+        matrix = sqlalchemy_comparison_matrix()
+
+        assert matrix["sync"]["engine"] == "create_engine"
+        assert matrix["sync"]["session_factory"] == "sessionmaker"
+        assert matrix["async"]["engine"] == "create_async_engine"
+        assert matrix["async"]["session_factory"] == "async_sessionmaker"
+        assert matrix["async"]["driver_url"] == "postgresql+psycopg_async"
+
+
+    def test_matrix_names_route_and_repository_differences() -> None:
+        matrix = sqlalchemy_comparison_matrix()
+
+        assert matrix["sync"]["repository_methods"] == "regular def methods"
+        assert matrix["async"]["repository_methods"] == "async def methods awaited by routes"
+        assert "pytest.mark.asyncio" in matrix["async"]["test_requirements"]
+  hiddenTest: |
+    from async_sqlalchemy_comparison import sqlalchemy_comparison_matrix
+
+
+    def test_decision_guidance_rejects_accidental_mixing() -> None:
+        matrix = sqlalchemy_comparison_matrix()
+
+        assert matrix["do_not_mix"] == [
+            "sync Session inside async repository",
+            "async engine with sync sessionmaker",
+            "unawaited async session operations",
+        ]
+        assert matrix["sync_still_valid_when"] == [
+            "database work is short",
+            "repository boundary is isolated",
+            "operational evidence does not require async database concurrency",
+        ]
+hints:
+  - id: conceptual
+    level: conceptual
+    title: Async changes the whole boundary
+    body: Async SQLAlchemy requires async engine, session, repository methods, dependencies, and tests.
+  - id: api-approach
+    level: api-approach
+    title: Compare from stable baseline
+    body: Keep sync SQLAlchemy as the known working baseline before introducing async persistence.
+  - id: structural
+    level: structural
+    title: Avoid mixed session types
+    body: Do not combine async engines with sync sessions or hide blocking work in accidental async code.
+solution:
+  title: Model solution
+  body: The model solution returns a decision matrix comparing sync and async SQLAlchemy components, tests, anti-patterns, and sync-validity guidance.
+  code: |
+    def sqlalchemy_comparison_matrix() -> dict[str, object]:
+        return {
+            "sync": {
+                "engine": "create_engine",
+                "session_factory": "sessionmaker",
+                "driver_url": "postgresql+psycopg",
+                "route_style": "def or async def with isolated sync boundary",
+                "repository_methods": "regular def methods",
+                "test_requirements": ["standard pytest"],
+            },
+            "async": {
+                "engine": "create_async_engine",
+                "session_factory": "async_sessionmaker",
+                "driver_url": "postgresql+psycopg_async",
+                "route_style": "async def",
+                "repository_methods": "async def methods awaited by routes",
+                "test_requirements": ["pytest.mark.asyncio", "await repository calls"],
+            },
+            "do_not_mix": [
+                "sync Session inside async repository",
+                "async engine with sync sessionmaker",
+                "unawaited async session operations",
+            ],
+            "sync_still_valid_when": [
+                "database work is short",
+                "repository boundary is isolated",
+                "operational evidence does not require async database concurrency",
+            ],
+        }
+commonWrongApproaches:
+  - Adding async keywords without async drivers.
+  - Mixing async engines with sync sessions.
+  - Forgetting to await repository methods.
+  - Assuming async is always better.
+expectedSolutionCharacteristics:
+  - Compares sync and async engines.
+  - Names session factory differences.
+  - Defines async testing requirements.
+  - Rejects accidental mixed boundaries.
+  - Explains when sync remains valid.

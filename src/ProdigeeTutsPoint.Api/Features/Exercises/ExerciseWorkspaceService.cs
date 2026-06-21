@@ -19,6 +19,7 @@ public sealed class ExerciseWorkspaceService(
     IPythonExerciseRunner pythonRunner)
 {
     private const int OutputLimit = 24_000;
+    private const int MaxWorkspaceDeletesPerCleanup = 40;
     private static readonly Regex DotnetLocationDiagnosticPattern = new(
         @"^(?<file>.+?)\((?<line>\d+),(?<column>\d+)\): (?<severity>error|warning) (?<rule>[A-Z]+[A-Z0-9]*\d+): (?<message>.+)$",
         RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
@@ -33,6 +34,9 @@ public sealed class ExerciseWorkspaceService(
         RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
     private static readonly Regex PythonDiagnosticPattern = new(
         @"^(?<file>.+?):(?<line>\d+):(?<column>\d+): (?<rule>[A-Z]+[A-Z0-9]*\d*) (?<message>.+)$",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
+    private static readonly Regex PythonPyrightDiagnosticPattern = new(
+        @"^(?<file>.+?):(?<line>\d+):(?<column>\d+) - (?<severity>error|warning|information): (?<message>.+?)(?: \((?<rule>[A-Za-z][A-Za-z0-9_-]+)\))?$",
         RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
     private readonly IDeserializer deserializer = new DeserializerBuilder()
         .WithNamingConvention(CamelCaseNamingConvention.Instance)
@@ -55,9 +59,9 @@ public sealed class ExerciseWorkspaceService(
             return null;
         }
 
-        await CleanupOldWorkspacesAsync(cancellationToken);
-
         var workspacePath = GetWorkspacePath(profileId, exerciseId);
+        await CleanupOldWorkspacesAsync(workspacePath, cancellationToken);
+
         var definition = await ReadExerciseDefinitionAsync(exercise.DirectoryPath, cancellationToken);
         Directory.CreateDirectory(workspacePath);
         await EnsureGeneratedWorkspaceFilesAsync(workspacePath, definition, cancellationToken);
@@ -139,9 +143,9 @@ public sealed class ExerciseWorkspaceService(
             }
         }
 
-        var runWorkspacePath = CreateRunWorkspace(workspace.WorkspacePath, profileId, exerciseId);
         var definition = await ReadDefinitionForExerciseIdAsync(exerciseId, cancellationToken);
         var runtime = RuntimeForDefinition(definition);
+        var runWorkspacePath = CreateRunWorkspace(workspace.WorkspacePath, profileId, exerciseId, runtime);
         CommandResult visible;
         CommandResult hidden;
         CommandResult analysis;
@@ -157,7 +161,7 @@ public sealed class ExerciseWorkspaceService(
                     ? await typeScriptRunner.RunHiddenTestsAsync(runWorkspacePath, cancellationToken)
                     : CommandResult.Skipped("Hidden tests were not run because visible tests failed.");
             }
-            else if (runtime.Equals("swiftpm", StringComparison.OrdinalIgnoreCase))
+            else if (IsSwiftPackageRuntime(runtime))
             {
                 analysis = await swiftRunner.RunStaticAnalysisAsync(runWorkspacePath, cancellationToken);
                 analysisDiagnostics = ParseSwiftStaticAnalysisDiagnostics(runWorkspacePath, analysis);
@@ -191,7 +195,9 @@ public sealed class ExerciseWorkspaceService(
             DeleteDirectoryBestEffort(runWorkspacePath);
         }
 
-        var status = BuildStatus(visible, hidden);
+        var status = runtime.Equals("python-pytest", StringComparison.OrdinalIgnoreCase)
+            ? BuildPythonStatus(visible, hidden, analysis, analysisDiagnostics)
+            : BuildStatus(visible, hidden);
         var combinedOutput = Truncate($"""
         Visible tests:
         {visible.Output}
@@ -199,7 +205,11 @@ public sealed class ExerciseWorkspaceService(
         Hidden tests:
         {HiddenOutputForLearner(hidden)}
         """);
-        var diagnostics = Truncate($"{visible.Diagnostics}\n{HiddenDiagnosticsForLearner(hidden)}".Trim());
+        var diagnostics = Truncate($"""
+        {visible.Diagnostics}
+        {HiddenDiagnosticsForLearner(hidden)}
+        {StaticAnalysisDiagnosticsForLearner(status, analysis)}
+        """.Trim());
         var attempt = await db.ExerciseAttempts
             .FirstAsync(attempt => attempt.ProfileId == profileId && attempt.ExerciseId == exerciseId, cancellationToken);
         var runHistory = new ExerciseRunHistory
@@ -470,7 +480,7 @@ public sealed class ExerciseWorkspaceService(
                 await FileResponseAsync(workspacePath, "tsconfig.json", "readonly", false, cancellationToken),
                 await FileResponseAsync(workspacePath, "package.json", "readonly", false, cancellationToken),
             },
-            "swiftpm" => new List<ExerciseWorkspaceFileResponse>
+            "swiftpm" or "swiftpm-vapor" => new List<ExerciseWorkspaceFileResponse>
             {
                 await FileResponseAsync(workspacePath, "Sources/Exercise/Exercise.swift", "editable", true, cancellationToken),
                 await FileResponseAsync(workspacePath, "Tests/ExerciseVisibleTests/VisibleTests.swift", "visible-test", false, cancellationToken),
@@ -527,17 +537,17 @@ public sealed class ExerciseWorkspaceService(
             return;
         }
 
-        if (runtime.Equals("swiftpm", StringComparison.OrdinalIgnoreCase))
+        if (IsSwiftPackageRuntime(runtime))
         {
             Directory.CreateDirectory(Path.Combine(workspacePath, "Sources", "Exercise"));
             Directory.CreateDirectory(Path.Combine(workspacePath, "Tests", "ExerciseVisibleTests"));
             Directory.CreateDirectory(Path.Combine(workspacePath, "Tests", "ExerciseHiddenTests"));
-            WriteGeneratedFile(Path.Combine(workspacePath, "Package.swift"), SwiftPackageFile());
+            WriteGeneratedFile(Path.Combine(workspacePath, "Package.swift"), SwiftPackageFile(runtime));
             WriteFileIfMissing(
                 Path.Combine(workspacePath, "Sources", "Exercise", "Exercise.swift"),
                 await ReadContentTextAsync(definition.Workspace.Starter, cancellationToken));
-            WriteGeneratedFile(Path.Combine(workspacePath, "Tests", "ExerciseVisibleTests", "VisibleTests.swift"), SwiftVisibleTests(definition.Workspace.VisibleTest));
-            WriteGeneratedFile(Path.Combine(workspacePath, "Tests", "ExerciseHiddenTests", "HiddenTests.swift"), SwiftHiddenTests(definition.Workspace.HiddenTest));
+            WriteGeneratedFile(Path.Combine(workspacePath, "Tests", "ExerciseVisibleTests", "VisibleTests.swift"), SwiftVisibleTests(runtime, definition.Workspace.VisibleTest));
+            WriteGeneratedFile(Path.Combine(workspacePath, "Tests", "ExerciseHiddenTests", "HiddenTests.swift"), SwiftHiddenTests(runtime, definition.Workspace.HiddenTest));
             return;
         }
 
@@ -574,6 +584,11 @@ public sealed class ExerciseWorkspaceService(
         if (runtime.Equals("node-typescript", StringComparison.OrdinalIgnoreCase))
         {
             return "Monaco TypeScript language service is active for editable TypeScript files: semantic diagnostics, completions, hover, signature help, formatting, and supported code actions.";
+        }
+
+        if (runtime.Equals("swiftpm-vapor", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Vapor-backed SwiftPM workspace generation is active. The package uses Vapor and XCTVapor, SourceKit-LSP powers Swift IntelliSense, and swift test executes route-level visible and hidden tests.";
         }
 
         if (runtime.Equals("swiftpm", StringComparison.OrdinalIgnoreCase))
@@ -695,6 +710,12 @@ public sealed class ExerciseWorkspaceService(
         return "dotnet";
     }
 
+    private static bool IsSwiftPackageRuntime(string runtime)
+    {
+        return runtime.Equals("swiftpm", StringComparison.OrdinalIgnoreCase)
+            || runtime.Equals("swiftpm-vapor", StringComparison.OrdinalIgnoreCase);
+    }
+
     private static string PythonEditablePath(ExerciseContentDefinition definition)
     {
         return Path.Combine("src", $"{PythonModuleName(definition)}.py").Replace('\\', '/');
@@ -738,13 +759,75 @@ public sealed class ExerciseWorkspaceService(
         return new ExerciseWorkspaceFileResponse(relativePath, role, editable, content);
     }
 
-    private async Task CleanupOldWorkspacesAsync(CancellationToken cancellationToken)
+    private async Task CleanupOldWorkspacesAsync(string currentWorkspacePath, CancellationToken cancellationToken)
     {
-        await CleanupOldDirectoriesAsync(GetWorkspaceRoot(), DateTimeOffset.UtcNow.AddDays(-14), cancellationToken);
-        await CleanupOldDirectoriesAsync(GetRunWorkspaceRoot(), DateTimeOffset.UtcNow.AddHours(-1), cancellationToken);
+        var activeWorkspacePaths = await db.ExerciseAttempts
+            .AsNoTracking()
+            .Where(attempt => attempt.WorkspacePath != string.Empty)
+            .Select(attempt => attempt.WorkspacePath)
+            .ToListAsync(cancellationToken);
+        activeWorkspacePaths.Add(currentWorkspacePath);
+
+        await CleanupOldExerciseWorkspaceDirectoriesAsync(
+            GetWorkspaceRoot(),
+            DateTimeOffset.UtcNow.AddDays(-14),
+            activeWorkspacePaths,
+            cancellationToken);
+        await CleanupOldRunDirectoriesAsync(
+            GetRunWorkspaceRoot(),
+            DateTimeOffset.UtcNow.AddHours(-1),
+            cancellationToken);
     }
 
-    private static Task CleanupOldDirectoriesAsync(
+    private static Task CleanupOldExerciseWorkspaceDirectoriesAsync(
+        string root,
+        DateTimeOffset cutoff,
+        IReadOnlyCollection<string> activeWorkspacePaths,
+        CancellationToken cancellationToken)
+    {
+        if (!Directory.Exists(root))
+        {
+            return Task.CompletedTask;
+        }
+
+        var fullRoot = Path.GetFullPath(root);
+        var activeWorkspaceSet = activeWorkspacePaths
+            .Select(path => NormalizedDirectoryPath(path))
+            .Where(path => IsPathInsideDirectory(path, fullRoot))
+            .ToHashSet(StringComparer.Ordinal);
+        var deleted = 0;
+
+        foreach (var profileDirectory in Directory.GetDirectories(fullRoot))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            foreach (var exerciseDirectory in Directory.GetDirectories(profileDirectory))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (deleted >= MaxWorkspaceDeletesPerCleanup)
+                {
+                    return Task.CompletedTask;
+                }
+
+                var info = new DirectoryInfo(exerciseDirectory);
+                var normalized = NormalizedDirectoryPath(info.FullName);
+                if (!IsPathInsideDirectory(normalized, fullRoot)
+                    || activeWorkspaceSet.Contains(normalized)
+                    || info.LastWriteTimeUtc >= cutoff.UtcDateTime)
+                {
+                    continue;
+                }
+
+                DeleteDirectoryBestEffort(info.FullName);
+                deleted++;
+            }
+
+            DeleteDirectoryIfEmpty(profileDirectory);
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private static Task CleanupOldRunDirectoriesAsync(
         string root,
         DateTimeOffset cutoff,
         CancellationToken cancellationToken)
@@ -755,18 +838,41 @@ public sealed class ExerciseWorkspaceService(
         }
 
         var fullRoot = Path.GetFullPath(root);
+        var deleted = 0;
         foreach (var directory in Directory.GetDirectories(fullRoot))
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var info = new DirectoryInfo(directory);
-            if (info.FullName.StartsWith(fullRoot, StringComparison.Ordinal)
-                && info.LastWriteTimeUtc < cutoff.UtcDateTime)
+            if (deleted >= MaxWorkspaceDeletesPerCleanup)
             {
-                DeleteDirectoryBestEffort(info.FullName);
+                return Task.CompletedTask;
             }
+
+            var info = new DirectoryInfo(directory);
+            if (!IsPathInsideDirectory(info.FullName, fullRoot)
+                || info.LastWriteTimeUtc >= cutoff.UtcDateTime)
+            {
+                continue;
+            }
+
+            DeleteDirectoryBestEffort(info.FullName);
+            deleted++;
         }
 
         return Task.CompletedTask;
+    }
+
+    private static string NormalizedDirectoryPath(string path)
+    {
+        return Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+    }
+
+    private static bool IsPathInsideDirectory(string path, string directory)
+    {
+        var normalizedPath = NormalizedDirectoryPath(path);
+        var normalizedDirectory = NormalizedDirectoryPath(directory);
+        return normalizedPath.Equals(normalizedDirectory, StringComparison.Ordinal)
+            || normalizedPath.StartsWith(normalizedDirectory + Path.DirectorySeparatorChar, StringComparison.Ordinal)
+            || normalizedPath.StartsWith(normalizedDirectory + Path.AltDirectorySeparatorChar, StringComparison.Ordinal);
     }
 
     private string GetWorkspacePath(string profileId, string exerciseId)
@@ -893,7 +999,7 @@ public sealed class ExerciseWorkspaceService(
         return await File.ReadAllTextAsync(fullPath, cancellationToken);
     }
 
-    private string CreateRunWorkspace(string workspacePath, string profileId, string exerciseId)
+    private string CreateRunWorkspace(string workspacePath, string profileId, string exerciseId, string runtime)
     {
         var runRoot = GetRunWorkspaceRoot();
         Directory.CreateDirectory(runRoot);
@@ -901,16 +1007,62 @@ public sealed class ExerciseWorkspaceService(
             runRoot,
             $"{DateTimeOffset.UtcNow:yyyyMMddHHmmssfff}-{SafeSegment(profileId)}-{SafeSegment(exerciseId)}-{Guid.NewGuid():n}");
         CopyDirectory(workspacePath, runPath);
+        if (runtime.Equals("swiftpm-vapor", StringComparison.OrdinalIgnoreCase))
+        {
+            CopySwiftPackageDependencies(workspacePath, runPath);
+        }
+
         return runPath;
     }
 
-    private static void CopyDirectory(string sourceDirectory, string destinationDirectory)
+    private static void CopySwiftPackageDependencies(string sourceWorkspacePath, string runWorkspacePath)
+    {
+        CopyFileIfExists(
+            Path.Combine(sourceWorkspacePath, "Package.resolved"),
+            Path.Combine(runWorkspacePath, "Package.resolved"));
+        CopyFileIfExists(
+            Path.Combine(sourceWorkspacePath, ".build", "workspace-state.json"),
+            Path.Combine(runWorkspacePath, ".build", "workspace-state.json"));
+        CopyDirectoryIfExists(
+            Path.Combine(sourceWorkspacePath, ".build", "repositories"),
+            Path.Combine(runWorkspacePath, ".build", "repositories"));
+        CopyDirectoryIfExists(
+            Path.Combine(sourceWorkspacePath, ".build", "checkouts"),
+            Path.Combine(runWorkspacePath, ".build", "checkouts"));
+    }
+
+    private static void CopyFileIfExists(string sourcePath, string destinationPath)
+    {
+        if (!File.Exists(sourcePath))
+        {
+            return;
+        }
+
+        Directory.CreateDirectory(Path.GetDirectoryName(destinationPath)!);
+        File.Copy(sourcePath, destinationPath, overwrite: true);
+    }
+
+    private static void CopyDirectoryIfExists(string sourceDirectory, string destinationDirectory)
+    {
+        if (!Directory.Exists(sourceDirectory))
+        {
+            return;
+        }
+
+        CopyDirectory(sourceDirectory, destinationDirectory, skipGeneratedDirectories: false);
+    }
+
+    private static void CopyDirectory(
+        string sourceDirectory,
+        string destinationDirectory,
+        bool skipGeneratedDirectories = true)
     {
         Directory.CreateDirectory(destinationDirectory);
         foreach (var directory in Directory.GetDirectories(sourceDirectory, "*", SearchOption.AllDirectories))
         {
             var relative = Path.GetRelativePath(sourceDirectory, directory);
-            if (relative.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar).Any(IsGeneratedBuildDirectory))
+            if (skipGeneratedDirectories
+                && relative.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar).Any(IsGeneratedBuildDirectory))
             {
                 continue;
             }
@@ -921,7 +1073,8 @@ public sealed class ExerciseWorkspaceService(
         foreach (var file in Directory.GetFiles(sourceDirectory, "*", SearchOption.AllDirectories))
         {
             var relative = Path.GetRelativePath(sourceDirectory, file);
-            if (relative.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar).Any(IsGeneratedBuildDirectory))
+            if (skipGeneratedDirectories
+                && relative.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar).Any(IsGeneratedBuildDirectory))
             {
                 continue;
             }
@@ -1020,11 +1173,37 @@ public sealed class ExerciseWorkspaceService(
         return "Passed";
     }
 
+    private static string BuildPythonStatus(
+        CommandResult visible,
+        CommandResult hidden,
+        CommandResult analysis,
+        IReadOnlyCollection<StaticAnalysisDiagnosticResponse> analysisDiagnostics)
+    {
+        var testStatus = BuildStatus(visible, hidden);
+        if (testStatus != "Passed")
+        {
+            return testStatus;
+        }
+
+        if (analysis.HasRunnerError)
+        {
+            return "RunnerError";
+        }
+
+        if (analysis.TimedOut)
+        {
+            return "TimedOut";
+        }
+
+        return analysis.ExitCode == 0 || analysisDiagnostics.Count == 0 ? "Passed" : "FailedStaticAnalysis";
+    }
+
     private static int ExerciseAttemptScore(string status)
     {
         return status switch
         {
             "Passed" => 3,
+            "FailedStaticAnalysis" => 2,
             "FailedHidden" => 2,
             "FailedVisible" => 1,
             _ => 0,
@@ -1071,6 +1250,20 @@ public sealed class ExerciseWorkspaceService(
         }
 
         return hidden.ExitCode == 0 ? string.Empty : "Hidden tests failed.";
+    }
+
+    private static string StaticAnalysisDiagnosticsForLearner(string status, CommandResult analysis)
+    {
+        if (!status.Equals("FailedStaticAnalysis", StringComparison.Ordinal))
+        {
+            return string.Empty;
+        }
+
+        return $"""
+        Static analysis failed.
+        {analysis.Output}
+        {analysis.Diagnostics}
+        """;
     }
 
     private static string RunSummary(
@@ -1139,7 +1332,24 @@ public sealed class ExerciseWorkspaceService(
         var match = PythonDiagnosticPattern.Match(line);
         if (!match.Success)
         {
-            return null;
+            var pyrightMatch = PythonPyrightDiagnosticPattern.Match(line);
+            if (!pyrightMatch.Success)
+            {
+                return null;
+            }
+
+            var pyrightFilePath = pyrightMatch.Groups["file"].Value;
+            var pyrightRelativePath = Path.IsPathRooted(pyrightFilePath)
+                ? Path.GetRelativePath(workspacePath, pyrightFilePath)
+                : pyrightFilePath;
+
+            return new StaticAnalysisDiagnosticResponse(
+                pyrightMatch.Groups["rule"].Success ? pyrightMatch.Groups["rule"].Value : "basedpyright",
+                pyrightMatch.Groups["severity"].Value.ToLowerInvariant(),
+                pyrightMatch.Groups["message"].Value,
+                pyrightRelativePath,
+                int.Parse(pyrightMatch.Groups["line"].Value),
+                int.Parse(pyrightMatch.Groups["column"].Value));
         }
 
         var filePath = match.Groups["file"].Value;
@@ -1452,8 +1662,54 @@ public sealed class ExerciseWorkspaceService(
         """;
     }
 
-    private static string SwiftPackageFile()
+    private static string SwiftPackageFile(string runtime)
     {
+        if (runtime.Equals("swiftpm-vapor", StringComparison.OrdinalIgnoreCase))
+        {
+            return """
+            // swift-tools-version: 6.0
+            import PackageDescription
+
+            let package = Package(
+                name: "ProdigeeVaporExercise",
+                platforms: [
+                    .macOS(.v14)
+                ],
+                products: [
+                    .library(name: "Exercise", targets: ["Exercise"])
+                ],
+                dependencies: [
+                    .package(url: "https://github.com/vapor/vapor.git", from: "4.110.0")
+                ],
+                targets: [
+                    .target(
+                        name: "Exercise",
+                        dependencies: [
+                            .product(name: "Vapor", package: "vapor")
+                        ],
+                        swiftSettings: [
+                            .enableUpcomingFeature("StrictConcurrency")
+                        ]
+                    ),
+                    .testTarget(
+                        name: "ExerciseVisibleTests",
+                        dependencies: [
+                            "Exercise",
+                            .product(name: "XCTVapor", package: "vapor")
+                        ]
+                    ),
+                    .testTarget(
+                        name: "ExerciseHiddenTests",
+                        dependencies: [
+                            "Exercise",
+                            .product(name: "XCTVapor", package: "vapor")
+                        ]
+                    )
+                ]
+            )
+            """;
+        }
+
         return """
         // swift-tools-version: 6.0
         import PackageDescription
@@ -1486,12 +1742,14 @@ public sealed class ExerciseWorkspaceService(
         """;
     }
 
-    private static string SwiftVisibleTests(string assertions)
+    private static string SwiftVisibleTests(string runtime, string assertions)
     {
         var methodModifiers = SwiftTestMethodModifiers(assertions);
+        var frameworkImports = SwiftTestFrameworkImports(runtime);
 
         return $$"""
         import Exercise
+        {{frameworkImports}}
         import XCTest
 
         final class VisibleTests: XCTestCase {
@@ -1502,12 +1760,14 @@ public sealed class ExerciseWorkspaceService(
         """;
     }
 
-    private static string SwiftHiddenTests(string assertions)
+    private static string SwiftHiddenTests(string runtime, string assertions)
     {
         var methodModifiers = SwiftTestMethodModifiers(assertions);
+        var frameworkImports = SwiftTestFrameworkImports(runtime);
 
         return $$"""
         import Exercise
+        {{frameworkImports}}
         import XCTest
 
         final class HiddenTests: XCTestCase {
@@ -1516,6 +1776,13 @@ public sealed class ExerciseWorkspaceService(
             }
         }
         """;
+    }
+
+    private static string SwiftTestFrameworkImports(string runtime)
+    {
+        return runtime.Equals("swiftpm-vapor", StringComparison.OrdinalIgnoreCase)
+            ? "import Vapor\nimport XCTVapor"
+            : string.Empty;
     }
 
     private static string SwiftTestMethodModifiers(string assertions)

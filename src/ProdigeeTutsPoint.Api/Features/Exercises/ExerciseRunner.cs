@@ -333,7 +333,12 @@ public sealed class SwiftExerciseRunner : ISwiftExerciseRunner
         }
 
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeout.CancelAfter(CommandTimeout);
+        timeout.CancelAfter(SwiftCommandTimeout(workspacePath));
+
+        var swiftScratchPath = Path.Combine(workspacePath, ".build");
+        var clangModuleCachePath = Path.Combine(workspacePath, ".clang-module-cache");
+        Directory.CreateDirectory(swiftScratchPath);
+        Directory.CreateDirectory(clangModuleCachePath);
 
         var output = new StringBuilder();
         var errors = new StringBuilder();
@@ -345,12 +350,27 @@ public sealed class SwiftExerciseRunner : ISwiftExerciseRunner
             RedirectStandardError = true,
             UseShellExecute = false,
         };
-        foreach (var argument in arguments)
+        var swiftArguments = arguments.ToList();
+        if (swiftArguments.Count > 0
+            && (swiftArguments[0].Equals("build", StringComparison.Ordinal)
+                || swiftArguments[0].Equals("test", StringComparison.Ordinal)))
+        {
+            swiftArguments.InsertRange(
+                1,
+                [
+                    "--scratch-path",
+                    swiftScratchPath,
+                    "--disable-sandbox"
+                ]);
+        }
+
+        foreach (var argument in swiftArguments)
         {
             startInfo.ArgumentList.Add(argument);
         }
         startInfo.Environment["NO_COLOR"] = "1";
         startInfo.Environment["CI"] = "1";
+        startInfo.Environment["CLANG_MODULE_CACHE_PATH"] = clangModuleCachePath;
 
         try
         {
@@ -410,6 +430,18 @@ public sealed class SwiftExerciseRunner : ISwiftExerciseRunner
     {
         return value.Length <= OutputLimit ? value : value[..OutputLimit] + "\n[output truncated]";
     }
+
+    private static TimeSpan SwiftCommandTimeout(string workspacePath)
+    {
+        var packagePath = Path.Combine(workspacePath, "Package.swift");
+        if (File.Exists(packagePath)
+            && File.ReadAllText(packagePath).Contains("github.com/vapor/vapor.git", StringComparison.OrdinalIgnoreCase))
+        {
+            return TimeSpan.FromMinutes(3);
+        }
+
+        return CommandTimeout;
+    }
 }
 
 public sealed class PythonExerciseRunner(IWebHostEnvironment environment) : IPythonExerciseRunner
@@ -419,19 +451,42 @@ public sealed class PythonExerciseRunner(IWebHostEnvironment environment) : IPyt
 
     public async Task<CommandResult> RunStaticAnalysisAsync(string workspacePath, CancellationToken cancellationToken)
     {
-        var ruff = await RunPythonAsync(
-            workspacePath,
-            ["ruff", "check", "--output-format", "concise", "src", "tests"],
-            cancellationToken);
-        if (!ruff.HasRunnerError)
+        var commands = new (string Label, IReadOnlyCollection<string> Arguments)[]
         {
-            return ruff;
+            ("Ruff lint", ["ruff", "check", "--output-format", "concise", "src"]),
+            ("BasedPyright", ["basedpyright", "src"]),
+        };
+
+        var output = new StringBuilder();
+        var diagnostics = new StringBuilder();
+        var exitCode = 0;
+        var timedOut = false;
+        var hasRunnerError = false;
+
+        foreach (var command in commands)
+        {
+            var result = await RunPythonAsync(workspacePath, command.Arguments, cancellationToken);
+            output.AppendLine($"{command.Label}:");
+            output.AppendLine(result.Output);
+            diagnostics.AppendLine($"{command.Label}:");
+            diagnostics.AppendLine(result.Diagnostics);
+
+            if (result.ExitCode != 0 && exitCode == 0)
+            {
+                exitCode = result.ExitCode;
+            }
+
+            timedOut = timedOut || result.TimedOut;
+            hasRunnerError = hasRunnerError || result.HasRunnerError;
         }
 
-        return await RunPythonAsync(
-            workspacePath,
-            ["python", "-m", "compileall", "-q", "src", "tests"],
-            cancellationToken);
+        return new CommandResult(
+            exitCode,
+            timedOut,
+            false,
+            hasRunnerError,
+            Truncate(output.ToString()),
+            Truncate(diagnostics.ToString()));
     }
 
     public Task<CommandResult> RunVisibleTestsAsync(string workspacePath, CancellationToken cancellationToken)

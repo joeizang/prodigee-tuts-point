@@ -1,0 +1,106 @@
+id: verify-python-intellisense-deps-py
+title: VerifyPythonIntelliSenseDeps
+kind: focused
+workspace:
+  runtime: python-pytest
+  starter: tracks/python/exercises/verify-python-intellisense-deps-py/intellisense_deps.py
+  entryPoint: intellisense_dependency_contract
+  visibleTest: |
+    from intellisense_deps import intellisense_dependency_contract
+
+
+    def test_contract_includes_framework_database_and_test_imports() -> None:
+        contract = intellisense_dependency_contract()
+
+        assert contract["import_probes"] == [
+            "from fastapi import FastAPI",
+            "from pydantic import BaseModel",
+            "from sqlalchemy.orm import Session",
+            "from alembic.config import Config",
+            "import psycopg",
+            "import pytest",
+        ]
+        assert contract["missing_imports_allowed"] is False
+
+
+    def test_contract_uses_root_uv_environment() -> None:
+        contract = intellisense_dependency_contract()
+
+        assert contract["python_environment"] == "repository uv project"
+        assert "uv run pyright" in contract["commands"]
+        assert "uv run ruff check src tests" in contract["commands"]
+  hiddenTest: |
+    from intellisense_deps import intellisense_dependency_contract
+
+
+    def test_editor_features_and_pass_criteria_are_named() -> None:
+        contract = intellisense_dependency_contract()
+
+        assert set(contract["features"]) == {
+            "diagnostics",
+            "completions",
+            "hover",
+            "signature_help",
+            "formatting",
+            "organize_imports",
+        }
+        assert contract["pass_criteria"]["pyright_missing_import_count"] == 0
+        assert contract["pass_criteria"]["ruff_exit_code"] == 0
+hints:
+  - id: conceptual
+    level: conceptual
+    title: IntelliSense uses dependencies
+    body: Language-service quality depends on resolving the same installed packages as the exercise runner.
+  - id: api-approach
+    level: api-approach
+    title: Probe high-value imports
+    body: Verify framework, database, migration, driver, and test imports instead of checking syntax only.
+  - id: structural
+    level: structural
+    title: Use the root uv project
+    body: Generated workspaces should rely on the repository dependency environment for Pyright and Ruff.
+solution:
+  title: Model solution
+  body: The model solution defines the dependency probes, tooling commands, editor features, and pass criteria for Python IntelliSense verification.
+  code: |
+    def intellisense_dependency_contract() -> dict[str, object]:
+        return {
+            "python_environment": "repository uv project",
+            "import_probes": [
+                "from fastapi import FastAPI",
+                "from pydantic import BaseModel",
+                "from sqlalchemy.orm import Session",
+                "from alembic.config import Config",
+                "import psycopg",
+                "import pytest",
+            ],
+            "commands": [
+                "uv run pyright",
+                "uv run basedpyright",
+                "uv run ruff check src tests",
+            ],
+            "features": [
+                "diagnostics",
+                "completions",
+                "hover",
+                "signature_help",
+                "formatting",
+                "organize_imports",
+            ],
+            "missing_imports_allowed": False,
+            "pass_criteria": {
+                "pyright_missing_import_count": 0,
+                "ruff_exit_code": 0,
+            },
+        }
+commonWrongApproaches:
+  - Testing syntax highlighting only.
+  - Ignoring missing import diagnostics.
+  - Using a different environment than pytest.
+  - Forgetting database and migration packages.
+expectedSolutionCharacteristics:
+  - Probes framework and database imports.
+  - Uses repository uv environment.
+  - Requires zero missing imports.
+  - Verifies Ruff command behavior.
+  - Names editor feature expectations.

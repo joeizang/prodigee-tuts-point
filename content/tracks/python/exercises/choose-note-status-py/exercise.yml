@@ -1,0 +1,75 @@
+id: choose-note-status-py
+title: ChooseNoteStatus
+kind: focused
+workspace:
+  runtime: python-pytest
+  starter: tracks/python/exercises/choose-note-status-py/note_status.py
+  entryPoint: choose_note_status
+  visibleTest: |
+    from note_status import choose_note_status
+
+
+    def test_archived_overrides_every_other_status() -> None:
+        assert choose_note_status(True, True, 90) == "archived"
+
+
+    def test_pinned_active_note_is_pinned() -> None:
+        assert choose_note_status(False, True, 2) == "pinned"
+  hiddenTest: |
+    import pytest
+
+    from note_status import choose_note_status
+
+
+    @pytest.mark.parametrize(
+        ("is_archived", "is_pinned", "age_days", "expected"),
+        [
+            (False, False, 31, "stale"),
+            (False, False, 30, "active"),
+            (False, False, 1, "active"),
+            (True, False, 1, "archived"),
+        ],
+    )
+    def test_status_decision_table(
+        is_archived: bool,
+        is_pinned: bool,
+        age_days: int,
+        expected: str,
+    ) -> None:
+        assert choose_note_status(is_archived, is_pinned, age_days) == expected
+hints:
+  - id: conceptual
+    level: conceptual
+    title: Decide precedence first
+    body: Archived beats pinned, pinned beats stale, and stale only applies to unarchived unpinned notes.
+  - id: api-approach
+    level: api-approach
+    title: Use early returns
+    body: Early returns make each branch a complete answer instead of building a mutable status variable.
+  - id: structural
+    level: structural
+    title: Watch the boundary
+    body: The stale boundary starts after 30 days, so 30 remains active and 31 becomes stale.
+solution:
+  title: Model solution
+  body: The solution orders branches by business precedence and leaves active as the default case.
+  code: |
+    def choose_note_status(is_archived: bool, is_pinned: bool, age_days: int) -> str:
+        if is_archived:
+            return "archived"
+
+        if is_pinned:
+            return "pinned"
+
+        if age_days > 30:
+            return "stale"
+
+        return "active"
+commonWrongApproaches:
+  - Letting stale override archived notes.
+  - Treating 30 days as stale.
+  - Returning booleans instead of labels.
+expectedSolutionCharacteristics:
+  - Orders branches by precedence.
+  - Tests the stale boundary deliberately.
+  - Returns active as default.

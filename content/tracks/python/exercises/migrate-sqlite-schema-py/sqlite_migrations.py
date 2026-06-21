@@ -1,6 +1,5 @@
 from pathlib import Path
 
-
 TARGET_SCHEMA_VERSION = 2
 
 

@@ -1,0 +1,229 @@
+id: standardize-error-contract-py
+title: StandardizeErrorContract
+kind: focused
+workspace:
+  runtime: python-pytest
+  starter: tracks/python/exercises/standardize-error-contract-py/error_contract.py
+  entryPoint: create_app
+  visibleTest: |
+    from fastapi.testclient import TestClient
+
+    from error_contract import create_app
+
+
+    def test_conflict_uses_standard_error_envelope() -> None:
+        client = TestClient(create_app())
+        client.post("/notes", json={"title": "Python", "body": "one"})
+
+        response = client.post("/notes", json={"title": "Python", "body": "two"}, headers={"X-Request-ID": "req-1"})
+
+        assert response.status_code == 409
+        assert response.json() == {
+            "error": {
+                "code": "note_conflict",
+                "message": "note already exists: Python",
+                "request_id": "req-1",
+                "fields": [],
+            }
+        }
+
+
+    def test_validation_error_preserves_field_path() -> None:
+        response = TestClient(create_app()).post("/notes", json={"title": "Missing body"})
+
+        assert response.status_code == 422
+        payload = response.json()
+        assert payload["error"]["code"] == "request_validation_failed"
+        assert {"field": "body", "message": "Field required"} in payload["error"]["fields"]
+  hiddenTest: |
+    from fastapi.testclient import TestClient
+
+    from error_contract import create_app
+
+
+    def test_not_found_auth_and_internal_errors_share_envelope() -> None:
+        client = TestClient(create_app(), raise_server_exceptions=False)
+
+        missing = client.get("/notes/missing", headers={"X-Request-ID": "req-404"})
+        unauthorized = client.delete("/notes/missing")
+        internal = client.get("/boom", headers={"X-Request-ID": "req-500"})
+
+        assert missing.status_code == 404
+        assert missing.json()["error"]["code"] == "note_not_found"
+        assert missing.json()["error"]["request_id"] == "req-404"
+
+        assert unauthorized.status_code == 401
+        assert unauthorized.json()["error"]["code"] == "api_key_required"
+
+        assert internal.status_code == 500
+        assert internal.json() == {
+            "error": {
+                "code": "internal_error",
+                "message": "internal server error",
+                "request_id": "req-500",
+                "fields": [],
+            }
+        }
+
+
+    def test_error_responses_do_not_use_raw_detail_shape() -> None:
+        response = TestClient(create_app()).get("/notes/missing")
+
+        assert "detail" not in response.json()
+        assert set(response.json()) == {"error"}
+hints:
+  - id: conceptual
+    level: conceptual
+    title: Errors are API responses
+    body: Clients should parse one stable envelope regardless of which failure path produced the response.
+  - id: api-approach
+    level: api-approach
+    title: Centralize exception handling
+    body: Register FastAPI exception handlers for domain, validation, authentication, and unexpected exceptions.
+  - id: structural
+    level: structural
+    title: Preserve validation field details
+    body: A consistent envelope should still include the field path and validation message clients need.
+solution:
+  title: Model solution
+  body: The model solution defines one error envelope, request-id propagation, domain exception handlers, validation handling, auth handling, and safe internal error handling.
+  code: |
+    from dataclasses import dataclass
+
+    from fastapi import FastAPI, Header, Request, status
+    from fastapi.exceptions import RequestValidationError
+    from fastapi.responses import JSONResponse
+    from pydantic import BaseModel, Field
+
+
+    class ErrorBody(BaseModel):
+        code: str
+        message: str
+        request_id: str | None = None
+        fields: list[dict[str, str]] = Field(default_factory=list)
+
+
+    class ErrorEnvelope(BaseModel):
+        error: ErrorBody
+
+
+    class NoteCreate(BaseModel):
+        title: str = Field(min_length=1)
+        body: str = Field(min_length=1)
+
+
+    class NoteRead(BaseModel):
+        title: str
+        body: str
+
+
+    @dataclass
+    class ApiError(Exception):
+        status_code: int
+        code: str
+        message: str
+
+
+    class NoteConflictError(ApiError):
+        def __init__(self, title: str) -> None:
+            super().__init__(status.HTTP_409_CONFLICT, "note_conflict", f"note already exists: {title}")
+
+
+    class NoteNotFoundError(ApiError):
+        def __init__(self, title: str) -> None:
+            super().__init__(status.HTTP_404_NOT_FOUND, "note_not_found", f"note not found: {title}")
+
+
+    def request_id(request: Request) -> str | None:
+        return request.headers.get("X-Request-ID")
+
+
+    def error_response(
+        status_code: int,
+        code: str,
+        message: str,
+        request: Request,
+        fields: list[dict[str, str]] | None = None,
+    ) -> JSONResponse:
+        envelope = ErrorEnvelope(
+            error=ErrorBody(
+                code=code,
+                message=message,
+                request_id=request_id(request),
+                fields=fields or [],
+            )
+        )
+        return JSONResponse(status_code=status_code, content=envelope.model_dump())
+
+
+    def create_app() -> FastAPI:
+        app = FastAPI()
+        notes: dict[str, NoteRead] = {}
+
+        @app.exception_handler(ApiError)
+        async def api_error_handler(request: Request, error: ApiError) -> JSONResponse:
+            return error_response(error.status_code, error.code, error.message, request)
+
+        @app.exception_handler(RequestValidationError)
+        async def validation_handler(request: Request, error: RequestValidationError) -> JSONResponse:
+            fields = [
+                {"field": ".".join(str(part) for part in item["loc"][1:]), "message": item["msg"]}
+                for item in error.errors()
+            ]
+            return error_response(
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                "request_validation_failed",
+                "request validation failed",
+                request,
+                fields,
+            )
+
+        @app.exception_handler(Exception)
+        async def internal_error_handler(request: Request, error: Exception) -> JSONResponse:
+            return error_response(
+                status.HTTP_500_INTERNAL_SERVER_ERROR,
+                "internal_error",
+                "internal server error",
+                request,
+            )
+
+        @app.post("/notes", response_model=NoteRead, status_code=status.HTTP_201_CREATED)
+        def create_note(request: NoteCreate) -> NoteRead:
+            if request.title in notes:
+                raise NoteConflictError(request.title)
+            note = NoteRead(title=request.title, body=request.body)
+            notes[request.title] = note
+            return note
+
+        @app.get("/notes/{title}", response_model=NoteRead)
+        def get_note(title: str) -> NoteRead:
+            note = notes.get(title)
+            if note is None:
+                raise NoteNotFoundError(title)
+            return note
+
+        @app.delete("/notes/{title}")
+        def delete_note(title: str, x_api_key: str | None = Header(default=None)) -> dict[str, str]:
+            if x_api_key is None:
+                raise ApiError(status.HTTP_401_UNAUTHORIZED, "api_key_required", "API key is required")
+            if title not in notes:
+                raise NoteNotFoundError(title)
+            del notes[title]
+            return {"status": "deleted"}
+
+        @app.get("/boom")
+        def boom() -> None:
+            raise RuntimeError("secret stack details")
+
+        return app
+commonWrongApproaches:
+  - Mixing raw detail responses with custom envelopes.
+  - Hiding validation field paths from clients.
+  - Returning stack traces for internal errors.
+  - Mapping all failures to status code 400.
+expectedSolutionCharacteristics:
+  - Defines one error envelope.
+  - Preserves validation field information.
+  - Maps domain errors precisely.
+  - Hides internal exception details.
+  - Includes request ID correlation.

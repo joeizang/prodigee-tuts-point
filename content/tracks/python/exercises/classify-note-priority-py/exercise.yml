@@ -1,0 +1,61 @@
+id: classify-note-priority-py
+title: ClassifyNotePriority
+kind: focused
+workspace:
+  runtime: python-pytest
+  starter: tracks/python/exercises/classify-note-priority-py/note_priority.py
+  entryPoint: classify_note_priority
+  visibleTest: |
+    from note_priority import classify_note_priority
+
+
+    def test_pinned_notes_are_high_priority() -> None:
+        assert classify_note_priority(True, 400) == "high"
+
+
+    def test_recent_notes_are_medium_priority() -> None:
+        assert classify_note_priority(False, 7) == "medium"
+  hiddenTest: |
+    from note_priority import classify_note_priority
+
+
+    def test_old_unpinned_notes_are_low_priority() -> None:
+        assert classify_note_priority(False, 31) == "low"
+
+
+    def test_boundary_between_medium_and_low_is_explicit() -> None:
+        assert classify_note_priority(False, 30) == "medium"
+        assert classify_note_priority(False, 31) == "low"
+hints:
+  - id: conceptual
+    level: conceptual
+    title: Priority order matters
+    body: A pinned note should be high priority even when it is old.
+  - id: api-approach
+    level: api-approach
+    title: Compare age days
+    body: Use numeric comparisons such as <= and > instead of converting the age to text.
+  - id: structural
+    level: structural
+    title: Return stable labels
+    body: Return exactly high, medium, or low so callers can rely on the category.
+solution:
+  title: Model solution
+  body: The solution checks the pinned override first, then classifies unpinned notes with a numeric boundary.
+  code: |
+    def classify_note_priority(is_pinned: bool, age_days: int) -> str:
+        if is_pinned:
+            return "high"
+
+        if age_days <= 30:
+            return "medium"
+
+        return "low"
+commonWrongApproaches:
+  - Checking age before the pinned override.
+  - Returning capitalized labels unexpectedly.
+  - Treating the numeric age as text.
+expectedSolutionCharacteristics:
+  - Checks pinned notes first.
+  - Uses numeric age comparisons.
+  - Returns one stable priority label.

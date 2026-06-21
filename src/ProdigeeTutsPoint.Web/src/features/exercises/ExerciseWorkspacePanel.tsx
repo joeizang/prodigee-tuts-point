@@ -169,6 +169,9 @@ export function ExerciseWorkspacePanel({
   }, [fileEdits, workspace])
 
   const hiddenCount = workspace.files.filter((file) => file.role === 'hidden-test').length
+  const runnerText = runResult
+    ? [runResult.output, runResult.diagnostics].filter(Boolean).join('\n\n')
+    : workspace.lastOutput || workspace.lastDiagnostics
 
   return (
     <section className="workspace-panel">
@@ -262,16 +265,30 @@ export function ExerciseWorkspacePanel({
           <h3>Runner Output</h3>
           {runResult && (
             <div className={`run-status ${runResult.status.toLowerCase()}`}>
-              <strong>{runResult.status}</strong>
+              <strong>{runStatusLabel(runResult.status)}</strong>
               <span>Visible: {runResult.visiblePassed ? 'passed' : 'not passed'}</span>
               <span>Hidden: {runResult.hiddenPassed ? 'passed' : 'not passed'}</span>
+              {runResult.status === 'FailedStaticAnalysis' && (
+                <p>
+                  Tests passed, but Ruff or BasedPyright found quality issues. Fix the diagnostics
+                  before this exercise can count as complete.
+                </p>
+              )}
             </div>
           )}
-          <pre>{runResult?.output || workspace.lastOutput || workspace.lastDiagnostics}</pre>
+          <pre>{runnerText}</pre>
         </section>
       )}
     </section>
   )
+}
+
+function runStatusLabel(status: string) {
+  if (status === 'FailedStaticAnalysis') {
+    return 'Quality gate blocked'
+  }
+
+  return status
 }
 
 function monacoThemeName(theme: Theme) {

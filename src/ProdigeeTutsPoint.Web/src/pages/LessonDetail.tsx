@@ -34,8 +34,8 @@ export function LessonDetail({ profile }: { profile: LocalProfile }) {
         <div className="content-stack">
           <SoftLockNotice locks={lesson.softLocks} title="Recommended primer" />
           <MarkdownText markdown={lesson.markdown} omitFirstHeading />
-          <SourceList sources={lesson.sources} />
           <NotesPanel profile={profile} targetId={lesson.id} targetType="lesson" />
+          <SourceList sources={lesson.sources} title="Further reading" />
         </div>
       )}
     </Page>

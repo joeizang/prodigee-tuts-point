@@ -1,0 +1,94 @@
+id: build-token-filter-pipeline-swift
+title: BuildTokenFilterPipeline
+kind: focused
+workspace:
+  runtime: swiftpm
+  entryPoint: TokenFilterPipeline
+  starter: tracks/swift/exercises/build-token-filter-pipeline-swift/TokenFilterPipeline.swift
+  visibleTest: |
+    let lengthFilter = MinimumLengthFilter(minimumLength: 5)
+    XCTAssertFalse(lengthFilter.include("api"))
+    XCTAssertTrue(lengthFilter.include("swift"))
+
+    let pipeline = TokenFilterPipeline(filters: [MinimumLengthFilter(minimumLength: 4)])
+    XCTAssertEqual(pipeline.run(["api", "swift", "vapor"]), ["swift", "vapor"])
+  hiddenTest: |
+    let prefix = PrefixFilter(prefix: "s")
+    XCTAssertTrue(prefix.include("swift"))
+    XCTAssertFalse(prefix.include("vapor"))
+
+    let combined = TokenFilterPipeline(filters: [
+        MinimumLengthFilter(minimumLength: 5),
+        PrefixFilter(prefix: "s")
+    ])
+    XCTAssertEqual(combined.run(["go", "swift", "server", "vapor", "syntax"]), ["swift", "server", "syntax"])
+
+    let passthrough = TokenFilterPipeline(filters: [])
+    XCTAssertEqual(passthrough.run(["vapor", "swift"]), ["vapor", "swift"])
+    XCTAssertEqual(combined.run([]), [])
+hints:
+  - id: conceptual
+    level: conceptual
+    title: Small seam
+    body: TokenFilter should answer one question for one token. The pipeline owns composition, so individual filters should not know about arrays or other filters.
+  - id: api-approach
+    level: api-approach
+    title: All filters must pass
+    body: A token belongs in the result only when every configured filter includes it. With no filters, no rule rejects the token.
+  - id: structural
+    level: structural
+    title: Preserve order
+    body: Iterate over the input tokens in order and append accepted tokens to a result array. Do not sort or convert through a Set.
+solution:
+  title: Model solution
+  body: The model solution keeps the protocol small, makes filter structs public, and composes filters in a deterministic order-preserving pipeline.
+  code: |
+    public protocol TokenFilter {
+        func include(_ token: String) -> Bool
+    }
+
+    public struct MinimumLengthFilter: TokenFilter {
+        public let minimumLength: Int
+
+        public init(minimumLength: Int) {
+            self.minimumLength = minimumLength
+        }
+
+        public func include(_ token: String) -> Bool {
+            token.count >= minimumLength
+        }
+    }
+
+    public struct PrefixFilter: TokenFilter {
+        public let prefix: String
+
+        public init(prefix: String) {
+            self.prefix = prefix
+        }
+
+        public func include(_ token: String) -> Bool {
+            token.hasPrefix(prefix)
+        }
+    }
+
+    public struct TokenFilterPipeline {
+        public let filters: [any TokenFilter]
+
+        public init(filters: [any TokenFilter]) {
+            self.filters = filters
+        }
+
+        public func run(_ tokens: [String]) -> [String] {
+            tokens.filter { token in
+                filters.allSatisfy { filter in
+                    filter.include(token)
+                }
+            }
+        }
+    }
+commonWrongApproaches:
+  - Sorting or converting tokens through a Set, which destroys the caller's input order and makes search results harder to reason about.
+  - Giving TokenFilter methods that know about whole arrays, output formatting, or Vapor requests, which makes the boundary too broad.
+expectedSolutionCharacteristics:
+  - Public protocol and structs expose a small reusable package API.
+  - The pipeline applies every filter while preserving input order and passing through tokens when no filters exist.

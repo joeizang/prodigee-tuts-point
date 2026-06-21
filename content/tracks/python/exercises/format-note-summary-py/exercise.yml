@@ -1,0 +1,75 @@
+id: format-note-summary-py
+title: FormatNoteSummary
+kind: focused
+workspace:
+  runtime: python-pytest
+  starter: tracks/python/exercises/format-note-summary-py/note_summary.py
+  entryPoint: format_note_summary
+  visibleTest: |
+    from note_summary import format_note_summary
+
+
+    def test_formats_title_body_and_tags() -> None:
+        note = {"title": "Python", "body": "Learn loops", "tags": ["basics", "loops"]}
+
+        assert format_note_summary(note) == "Python - Learn loops [basics, loops]"
+
+
+    def test_formats_note_without_tags() -> None:
+        note = {"title": "Python", "body": "Learn loops", "tags": []}
+
+        assert format_note_summary(note) == "Python - Learn loops"
+  hiddenTest: |
+    from note_summary import format_note_summary
+
+
+    def test_uses_string_values_from_note_dictionary() -> None:
+        note = {"title": "FastAPI", "body": "Later", "tags": ["api"]}
+
+        assert format_note_summary(note) == "FastAPI - Later [api]"
+
+
+    def test_does_not_mutate_tags() -> None:
+        tags = ["python", "tests"]
+        note = {"title": "Quality", "body": "Evidence", "tags": tags}
+
+        assert format_note_summary(note) == "Quality - Evidence [python, tests]"
+        assert tags == ["python", "tests"]
+hints:
+  - id: conceptual
+    level: conceptual
+    title: Render one record
+    body: The function receives one note-shaped dictionary and returns one display string.
+  - id: api-approach
+    level: api-approach
+    title: Join tags only when present
+    body: Use ", ".join(tags) for non-empty tag lists, and omit the bracket section when there are no tags.
+  - id: structural
+    level: structural
+    title: Keep formatting deterministic
+    body: Do not sort or mutate tags here; render the order supplied by the note record.
+solution:
+  title: Model solution
+  body: The solution formats the required title and body, then appends a bracketed tag list only when tags exist.
+  code: |
+    def format_note_summary(note: dict[str, object]) -> str:
+        title = str(note["title"])
+        body = str(note["body"])
+        tags = note["tags"]
+
+        if not isinstance(tags, list):
+            raise ValueError("tags must be a list")
+
+        summary = f"{title} - {body}"
+        if tags:
+            summary += f" [{', '.join(str(tag) for tag in tags)}]"
+
+        return summary
+commonWrongApproaches:
+  - Always rendering empty brackets.
+  - Sorting tags without being asked.
+  - Mutating tags during rendering.
+expectedSolutionCharacteristics:
+  - Formats title and body.
+  - Omits brackets without tags.
+  - Preserves supplied tag order.

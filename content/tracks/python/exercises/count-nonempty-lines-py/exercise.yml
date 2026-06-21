@@ -1,0 +1,59 @@
+id: count-nonempty-lines-py
+title: CountNonemptyLines
+kind: focused
+workspace:
+  runtime: python-pytest
+  starter: tracks/python/exercises/count-nonempty-lines-py/note_lines.py
+  entryPoint: count_nonempty_lines
+  visibleTest: |
+    from note_lines import count_nonempty_lines
+
+
+    def test_counts_lines_with_text() -> None:
+        assert count_nonempty_lines("one\ntwo\nthree") == 3
+
+
+    def test_ignores_blank_lines() -> None:
+        assert count_nonempty_lines("one\n\n  \ntwo") == 2
+  hiddenTest: |
+    from note_lines import count_nonempty_lines
+
+
+    def test_empty_text_has_zero_nonempty_lines() -> None:
+        assert count_nonempty_lines("") == 0
+
+
+    def test_tabs_and_outer_spaces_do_not_count_as_content() -> None:
+        assert count_nonempty_lines(" \n\t\n  useful  \n") == 1
+hints:
+  - id: conceptual
+    level: conceptual
+    title: Lines are data
+    body: Split the text into lines, then decide whether each line contains content after trimming.
+  - id: api-approach
+    level: api-approach
+    title: Use splitlines
+    body: splitlines handles normal newline boundaries without leaving a trailing empty item for a final newline.
+  - id: structural
+    level: structural
+    title: Count with an accumulator
+    body: Start from zero, add one for every non-empty stripped line, and return the final count.
+solution:
+  title: Model solution
+  body: The solution loops over split lines and counts only lines whose stripped content is non-empty.
+  code: |
+    def count_nonempty_lines(text: str) -> int:
+        count = 0
+        for line in text.splitlines():
+            if line.strip():
+                count += 1
+
+        return count
+commonWrongApproaches:
+  - Counting every newline-separated item.
+  - Treating whitespace-only lines as content.
+  - Printing the count instead of returning it.
+expectedSolutionCharacteristics:
+  - Uses splitlines for line boundaries.
+  - Ignores lines containing only whitespace.
+  - Returns an integer content-line count.

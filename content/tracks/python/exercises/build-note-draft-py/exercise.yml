@@ -1,0 +1,83 @@
+id: build-note-draft-py
+title: BuildNoteDraft
+kind: focused
+workspace:
+  runtime: python-pytest
+  starter: tracks/python/exercises/build-note-draft-py/note_draft.py
+  entryPoint: build_note_draft
+  visibleTest: |
+    from note_draft import build_note_draft
+
+
+    def test_builds_note_dictionary() -> None:
+        assert build_note_draft("Python", "first record", ["foundation"]) == {
+            "title": "Python",
+            "body": "first record",
+            "tags": ["foundation"],
+        }
+
+
+    def test_trims_title_and_body() -> None:
+        assert build_note_draft("  Python  ", "  first record  ", []) == {
+            "title": "Python",
+            "body": "first record",
+            "tags": [],
+        }
+  hiddenTest: |
+    import pytest
+
+    from note_draft import build_note_draft
+
+
+    def test_copies_tags() -> None:
+        tags = ["python"]
+        record = build_note_draft("Python", "body", tags)
+        tags.append("mutated")
+        assert record["tags"] == ["python"]
+
+
+    def test_rejects_blank_title() -> None:
+        with pytest.raises(ValueError, match="title"):
+            build_note_draft("   ", "body", [])
+
+
+    def test_rejects_blank_body() -> None:
+        with pytest.raises(ValueError, match="body"):
+            build_note_draft("title", "   ", [])
+hints:
+  - id: conceptual
+    level: conceptual
+    title: Build data, not text
+    body: Return a dictionary. JSON encoding and file writing arrive later.
+  - id: api-approach
+    level: api-approach
+    title: Copy the tag list
+    body: Use list(tags) so later changes to the caller's list do not mutate the note record.
+  - id: structural
+    level: structural
+    title: Keep stable keys
+    body: Every successful record should have title, body, and tags keys.
+solution:
+  title: Model solution
+  body: The solution validates title and body, copies tags, and returns a stable dictionary shape that later slices can serialize or render.
+  code: |
+    def build_note_draft(title: str, body: str, tags: list[str]) -> dict[str, object]:
+        clean_title = title.strip()
+        if not clean_title:
+            raise ValueError("title is required")
+
+        clean_body = body.strip()
+        if not clean_body:
+            raise ValueError("body is required")
+
+        return {"title": clean_title, "body": clean_body, "tags": list(tags)}
+commonWrongApproaches:
+  - Returning a tuple or formatted string instead of a dictionary.
+  - Reusing the caller's tags list directly.
+  - Letting blank title or body values become trusted records.
+expectedSolutionCharacteristics:
+  - Returns a dictionary with title, body, and tags.
+  - Trims title and body.
+  - Raises ValueError for blank title or body.
+  - Copies the tags list.
+

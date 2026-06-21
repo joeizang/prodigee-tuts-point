@@ -4,132 +4,251 @@ kind: focused
 workspace:
   runtime: python-pytest
   starter: tracks/python/exercises/implement-sqlalchemy-repository-py/sqlalchemy_repository.py
-  entryPoint: build_repository_blueprint
+  entryPoint: SqlAlchemyNoteRepository
   visibleTest: |
-    from sqlalchemy_repository import build_repository_blueprint, dependency_manifest
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    from sqlalchemy_repository import Base, NoteRecord, SqlAlchemyNoteRepository
 
 
-    def test_dependency_manifest_names_real_orm_packages() -> None:
-        dependencies = dependency_manifest()
-
-        assert "sqlalchemy>=2.0.36" in dependencies
-        assert "sqlmodel>=0.0.22" in dependencies
-        assert "alembic>=1.14.0" in dependencies
-        assert "psycopg[binary]>=3.2.0" in dependencies
+    def make_repository() -> SqlAlchemyNoteRepository:
+        engine = create_engine("sqlite:///:memory:")
+        Base.metadata.create_all(engine)
+        return SqlAlchemyNoteRepository(sessionmaker(bind=engine, expire_on_commit=False))
 
 
-    def test_blueprint_defines_note_row_and_repository_boundary() -> None:
-        blueprint = build_repository_blueprint()
+    def test_repository_creates_lists_and_searches_notes() -> None:
+        repository = make_repository()
 
-        assert blueprint["orm_model"]["name"] == "NoteRow"
-        assert blueprint["orm_model"]["table"] == "notes"
-        assert blueprint["orm_model"]["columns"]["title"]["primary_key"] is True
-        assert blueprint["session_owner"] == "SqlAlchemyNoteRepository"
-        assert blueprint["service_imports_sqlalchemy"] is False
+        created = repository.add(NoteRecord(title="Python", body="Learn SQLAlchemy", tags=["orm"]))
+
+        assert created.title == "Python"
+        assert repository.list_notes()[0].body == "Learn SQLAlchemy"
+        assert repository.search("sqlalchemy")[0].title == "Python"
+
+
+    def test_repository_updates_and_deletes_notes() -> None:
+        repository = make_repository()
+        repository.add(NoteRecord(title="Python", body="old", tags=[]))
+
+        updated = repository.update("Python", body="new", tags=["api"], archived=True)
+
+        assert updated.body == "new"
+        assert repository.list_notes() == []
+        assert repository.list_notes(include_archived=True)[0].archived is True
+        repository.delete("Python")
+        assert repository.get_by_title("Python") is None
   hiddenTest: |
-    from sqlalchemy_repository import build_repository_blueprint
+    import pytest
+
+    from sqlalchemy import create_engine, inspect
+    from sqlalchemy.orm import sessionmaker
+
+    from sqlalchemy_repository import Base, NoteRecord, NoteRow, SqlAlchemyNoteRepository
 
 
-    def test_repository_methods_and_mapping_are_explicit() -> None:
-        blueprint = build_repository_blueprint()
-
-        assert set(blueprint["repository_methods"]) == {
-            "list_notes",
-            "get_by_title",
-            "add",
-            "update",
-            "delete",
-            "search",
-        }
-        assert blueprint["mapping"]["row_to_record"] == "NoteRow -> NoteRecord"
-        assert blueprint["mapping"]["record_to_response"] == "NoteRecord -> NoteRead"
+    def make_repository() -> SqlAlchemyNoteRepository:
+        engine = create_engine("sqlite:///:memory:")
+        Base.metadata.create_all(engine)
+        return SqlAlchemyNoteRepository(sessionmaker(bind=engine, expire_on_commit=False))
 
 
-    def test_code_samples_use_sqlalchemy_two_style_and_transaction_rules() -> None:
-        blueprint = build_repository_blueprint()
-        code_samples = "\n".join(blueprint["code_samples"])
+    def test_model_uses_real_sqlalchemy_table_metadata() -> None:
+        assert NoteRow.__tablename__ == "notes"
+        columns = NoteRow.__table__.columns
 
-        assert "from sqlalchemy.orm import Mapped, mapped_column" in code_samples
-        assert "class NoteRow(Base):" in code_samples
-        assert "session.commit()" in code_samples
-        assert "session.rollback()" in code_samples
-        assert "return NoteRecord(" in code_samples
+        assert columns["title"].primary_key is True
+        assert columns["body"].nullable is False
+        assert columns["tags"].nullable is False
+        assert columns["archived"].nullable is False
+        assert "ix_notes_archived" in {index.name for index in NoteRow.__table__.indexes}
+
+
+    def test_duplicate_title_rolls_back_and_session_remains_usable() -> None:
+        repository = make_repository()
+        repository.add(NoteRecord(title="Python", body="one", tags=[]))
+
+        with pytest.raises(ValueError, match="note already exists"):
+            repository.add(NoteRecord(title="Python", body="two", tags=[]))
+
+        assert repository.list_notes()[0].body == "one"
+        repository.add(NoteRecord(title="FastAPI", body="three", tags=["api"]))
+        assert {note.title for note in repository.list_notes()} == {"FastAPI", "Python"}
 hints:
   - id: conceptual
     level: conceptual
     title: SQLAlchemy stays below services
-    body: The blueprint should make the repository responsible for sessions, SQL, commits, rollbacks, and row mapping.
+    body: The repository should be the first layer that knows about sessions, SQL statements, commits, and rollbacks.
   - id: api-approach
     level: api-approach
     title: Use SQLAlchemy two style
-    body: The intended implementation should use typed mapped columns rather than older untyped mapping examples.
+    body: The model should use typed mapped columns and a declarative base rather than older untyped examples.
   - id: structural
     level: structural
     title: Keep mapping explicit
-    body: Rows, service records, and Pydantic response models should remain separate named concepts.
+    body: Convert ORM rows to plain service records before returning data to service or route code.
 solution:
   title: Model solution
-  body: The model solution declares the real ORM dependency set and a concrete SQLAlchemy repository blueprint while keeping imports dependency-gated for this environment.
+  body: The model solution implements a real SQLAlchemy repository with a typed row model, session factory, transaction handling, and explicit row-to-record mapping.
   code: |
-    def build_repository_blueprint() -> dict[str, object]:
-        return {
-            "orm_model": {
-                "name": "NoteRow",
-                "table": "notes",
-                "columns": {
-                    "title": {"type": "String(200)", "primary_key": True, "nullable": False},
-                    "body": {"type": "Text", "nullable": False},
-                    "tags": {"type": "JSON", "nullable": False, "default": []},
-                    "archived": {"type": "Boolean", "nullable": False, "default": False},
-                    "created_at": {"type": "DateTime", "nullable": False},
-                    "updated_at": {"type": "DateTime", "nullable": False},
-                },
-                "indexes": ["ix_notes_archived", "ix_notes_updated_at"],
-            },
-            "session_owner": "SqlAlchemyNoteRepository",
-            "service_imports_sqlalchemy": False,
-            "repository_methods": [
-                "list_notes",
-                "get_by_title",
-                "add",
-                "update",
-                "delete",
-                "search",
-            ],
-            "mapping": {
-                "row_to_record": "NoteRow -> NoteRecord",
-                "record_to_response": "NoteRecord -> NoteRead",
-            },
-            "transaction_rules": [
-                "open one session per repository operation",
-                "commit successful mutations",
-                "rollback failed mutations",
-                "close sessions through context managers",
-            ],
-            "code_samples": [
-                "from sqlalchemy.orm import Mapped, mapped_column",
-                "class NoteRow(Base):",
-                "session.commit()",
-                "session.rollback()",
-                "return NoteRecord(",
-            ],
-        }
+    from __future__ import annotations
+
+    from collections.abc import Callable
+    from dataclasses import dataclass, field
+    from datetime import UTC, datetime
+
+    from sqlalchemy import Boolean, DateTime, JSON, String, Text, select
+    from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column
 
 
-    def dependency_manifest() -> list[str]:
-        return [
-            "sqlalchemy>=2.0.36",
-            "sqlmodel>=0.0.22",
-            "alembic>=1.14.0",
-            "psycopg[binary]>=3.2.0",
-        ]
+    class Base(DeclarativeBase):
+        pass
+
+
+    @dataclass(frozen=True)
+    class NoteRecord:
+        title: str
+        body: str
+        tags: list[str] = field(default_factory=list)
+        archived: bool = False
+        created_at: datetime | None = None
+        updated_at: datetime | None = None
+
+
+    class NoteRow(Base):
+        __tablename__ = "notes"
+
+        title: Mapped[str] = mapped_column(String(200), primary_key=True)
+        body: Mapped[str] = mapped_column(Text, nullable=False)
+        tags: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+        archived: Mapped[bool] = mapped_column(
+            Boolean,
+            nullable=False,
+            default=False,
+            index=True,
+        )
+        created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+        updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+    def _now() -> datetime:
+        return datetime.now(UTC)
+
+
+    def _normalize_title(title: str) -> str:
+        normalized = " ".join(title.split())
+        if not normalized:
+            raise ValueError("title is required")
+        return normalized
+
+
+    def _row_to_record(row: NoteRow) -> NoteRecord:
+        return NoteRecord(
+            title=row.title,
+            body=row.body,
+            tags=list(row.tags),
+            archived=row.archived,
+            created_at=row.created_at,
+            updated_at=row.updated_at,
+        )
+
+
+    class SqlAlchemyNoteRepository:
+        def __init__(self, session_factory: Callable[[], Session]) -> None:
+            self._session_factory = session_factory
+
+        def list_notes(self, *, include_archived: bool = False) -> list[NoteRecord]:
+            with self._session_factory() as session:
+                statement = select(NoteRow).order_by(NoteRow.title)
+                if not include_archived:
+                    statement = statement.where(NoteRow.archived.is_(False))
+                return [_row_to_record(row) for row in session.scalars(statement)]
+
+        def search(self, query: str, *, include_archived: bool = False) -> list[NoteRecord]:
+            needle = query.casefold()
+            return [
+                note
+                for note in self.list_notes(include_archived=include_archived)
+                if needle in note.title.casefold()
+                or needle in note.body.casefold()
+                or any(needle in tag.casefold() for tag in note.tags)
+            ]
+
+        def get_by_title(self, title: str) -> NoteRecord | None:
+            normalized = _normalize_title(title)
+            with self._session_factory() as session:
+                row = session.get(NoteRow, normalized)
+                return None if row is None else _row_to_record(row)
+
+        def add(self, note: NoteRecord) -> NoteRecord:
+            normalized = _normalize_title(note.title)
+            timestamp = _now()
+            with self._session_factory() as session:
+                if session.get(NoteRow, normalized) is not None:
+                    raise ValueError("note already exists")
+                row = NoteRow(
+                    title=normalized,
+                    body=note.body,
+                    tags=list(note.tags),
+                    archived=note.archived,
+                    created_at=note.created_at or timestamp,
+                    updated_at=note.updated_at or timestamp,
+                )
+                try:
+                    session.add(row)
+                    session.commit()
+                except Exception:
+                    session.rollback()
+                    raise
+                return _row_to_record(row)
+
+        def update(
+            self,
+            title: str,
+            *,
+            body: str | None = None,
+            tags: list[str] | None = None,
+            archived: bool | None = None,
+        ) -> NoteRecord:
+            normalized = _normalize_title(title)
+            with self._session_factory() as session:
+                row = session.get(NoteRow, normalized)
+                if row is None:
+                    raise KeyError(normalized)
+                if body is not None:
+                    row.body = body
+                if tags is not None:
+                    row.tags = list(tags)
+                if archived is not None:
+                    row.archived = archived
+                row.updated_at = _now()
+                try:
+                    session.commit()
+                except Exception:
+                    session.rollback()
+                    raise
+                return _row_to_record(row)
+
+        def delete(self, title: str) -> None:
+            normalized = _normalize_title(title)
+            with self._session_factory() as session:
+                row = session.get(NoteRow, normalized)
+                if row is None:
+                    return
+                try:
+                    session.delete(row)
+                    session.commit()
+                except Exception:
+                    session.rollback()
+                    raise
 commonWrongApproaches:
   - Returning ORM row objects from route handlers.
   - Importing SQLAlchemy sessions inside service functions.
   - Treating response models as table models.
   - Skipping rollback behavior on mutation failures.
 expectedSolutionCharacteristics:
-  - Names real ORM dependencies.
+  - Uses real SQLAlchemy mappings.
   - Defines the NoteRow table shape.
   - Keeps services independent from SQLAlchemy.
   - Includes explicit row mapping.

@@ -1,0 +1,189 @@
+id: document-openapi-contract-py
+title: DocumentOpenApiContract
+kind: focused
+workspace:
+  runtime: python-pytest
+  starter: tracks/python/exercises/document-openapi-contract-py/openapi_contract.py
+  entryPoint: create_app
+  visibleTest: |
+    from fastapi.testclient import TestClient
+
+    from openapi_contract import create_app
+
+
+    def test_openapi_document_has_app_metadata_and_note_route_contract() -> None:
+        client = TestClient(create_app())
+
+        schema = client.get("/openapi.json").json()
+        create_note = schema["paths"]["/notes"]["post"]
+
+        assert schema["info"]["title"] == "Py Notes API"
+        assert schema["info"]["version"] == "1.0.0"
+        assert create_note["tags"] == ["notes"]
+        assert create_note["summary"] == "Create a note"
+        assert "201" in create_note["responses"]
+        assert "409" in create_note["responses"]
+
+
+    def test_runtime_response_matches_documented_note_shape() -> None:
+        client = TestClient(create_app())
+
+        response = client.post("/notes", json={"title": "Python", "body": "Body", "tags": ["api"]})
+
+        assert response.status_code == 201
+        assert response.json() == {"title": "Python", "body": "Body", "tags": ["api"], "archived": False}
+  hiddenTest: |
+    from fastapi.testclient import TestClient
+
+    from openapi_contract import create_app
+
+
+    def test_openapi_documents_error_envelope_and_examples() -> None:
+        schema = TestClient(create_app()).get("/openapi.json").json()
+        post_note = schema["paths"]["/notes"]["post"]
+        ready = schema["paths"]["/health/ready"]["get"]
+
+        assert post_note["responses"]["409"]["content"]["application/json"]["schema"]["$ref"].endswith("/ErrorEnvelope")
+        assert ready["responses"]["503"]["content"]["application/json"]["schema"]["$ref"].endswith("/ErrorEnvelope")
+        assert post_note["requestBody"]["content"]["application/json"]["example"] == {
+            "title": "Python",
+            "body": "Practice FastAPI",
+            "tags": ["api"],
+        }
+
+
+    def test_list_route_has_stable_operation_metadata() -> None:
+        schema = TestClient(create_app()).get("/openapi.json").json()
+        list_notes = schema["paths"]["/notes"]["get"]
+
+        assert list_notes["operationId"] == "list_notes"
+        assert list_notes["summary"] == "List notes"
+        assert list_notes["responses"]["200"]["content"]["application/json"]["schema"]["items"]["$ref"].endswith("/NoteRead")
+hints:
+  - id: conceptual
+    level: conceptual
+    title: OpenAPI is a contract
+    body: The generated schema should document the same request, response, and error shapes the app returns.
+  - id: api-approach
+    level: api-approach
+    title: Document errors deliberately
+    body: Use the responses argument on routes so expected failure status codes reference the error envelope.
+  - id: structural
+    level: structural
+    title: Test selected schema points
+    body: Assert the important route metadata instead of snapshotting the entire generated OpenAPI document.
+solution:
+  title: Model solution
+  body: The model solution configures app metadata, Pydantic success/error models, route examples, stable operation ids, and documented error responses.
+  code: |
+    from typing import Any
+
+    from fastapi import FastAPI, status
+    from pydantic import BaseModel, Field
+
+
+    class ErrorBody(BaseModel):
+        code: str
+        message: str
+        request_id: str | None = None
+        fields: list[dict[str, str]] = Field(default_factory=list)
+
+
+    class ErrorEnvelope(BaseModel):
+        error: ErrorBody
+
+
+    class NoteCreate(BaseModel):
+        title: str = Field(min_length=1, examples=["Python"])
+        body: str = Field(min_length=1, examples=["Practice FastAPI"])
+        tags: list[str] = Field(default_factory=list, examples=[["api"]])
+
+
+    class NoteRead(BaseModel):
+        title: str
+        body: str
+        tags: list[str]
+        archived: bool = False
+
+
+    class ReadinessResponse(BaseModel):
+        status: str
+        checks: dict[str, str]
+
+
+    ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
+        400: {"model": ErrorEnvelope, "description": "Semantic request error"},
+        404: {"model": ErrorEnvelope, "description": "Requested note was not found"},
+        409: {"model": ErrorEnvelope, "description": "Note conflict"},
+        503: {"model": ErrorEnvelope, "description": "Service is not ready"},
+    }
+
+
+    def create_app() -> FastAPI:
+        app = FastAPI(
+            title="Py Notes API",
+            version="1.0.0",
+            summary="Production-shaped notes API for the Python and FastAPI track.",
+        )
+        notes: list[NoteRead] = []
+
+        @app.get(
+            "/notes",
+            response_model=list[NoteRead],
+            tags=["notes"],
+            summary="List notes",
+            operation_id="list_notes",
+        )
+        def list_notes() -> list[NoteRead]:
+            return notes
+
+        @app.post(
+            "/notes",
+            response_model=NoteRead,
+            status_code=status.HTTP_201_CREATED,
+            tags=["notes"],
+            summary="Create a note",
+            operation_id="create_note",
+            responses=ERROR_RESPONSES,
+            openapi_extra={
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "example": {
+                                "title": "Python",
+                                "body": "Practice FastAPI",
+                                "tags": ["api"],
+                            }
+                        }
+                    }
+                }
+            },
+        )
+        def create_note(request: NoteCreate) -> NoteRead:
+            note = NoteRead(title=request.title, body=request.body, tags=request.tags, archived=False)
+            notes.append(note)
+            return note
+
+        @app.get(
+            "/health/ready",
+            response_model=ReadinessResponse,
+            tags=["health"],
+            summary="Check readiness",
+            operation_id="check_readiness",
+            responses={503: {"model": ErrorEnvelope, "description": "Service is not ready"}},
+        )
+        def readiness() -> ReadinessResponse:
+            return ReadinessResponse(status="ready", checks={"database": "ok", "schema": "ok"})
+
+        return app
+commonWrongApproaches:
+  - Leaving expected error responses undocumented.
+  - Adding examples that do not match runtime payloads.
+  - Returning dictionaries without response models.
+  - Snapshotting the whole OpenAPI document.
+expectedSolutionCharacteristics:
+  - Configures app metadata explicitly.
+  - Documents route operation metadata.
+  - Uses Pydantic response models.
+  - Documents error response schemas.
+  - Tests generated OpenAPI details.

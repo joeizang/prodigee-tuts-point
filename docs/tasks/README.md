@@ -58,12 +58,16 @@ They are ordered roughly by dependency. Each task should leave the app in a more
 
 ## Planned Roadmap
 
-48. 0048 Create full curriculum coverage map - Planned
-49. 0049 Define seven-project mastery ladders for C#, TypeScript, Swift, ASP.NET Core, Node.js Servers with Fastify, and Server-Side Swift with Vapor - Planned
-50. 0050 Define the engineering core cross-track curriculum for algorithms, data structures, architecture, refactoring, debugging, performance, testing strategy, security, and production readiness - Planned
-51. 0051 Seed the ASP.NET Core foundation track slice - Planned
-52. 0052 Seed the Node.js Servers with Fastify foundation track slice - Planned
-53. 0053 Seed the Server-Side Swift with Vapor foundation track slice - Planned
+48. [0048 Create full curriculum coverage map](./0048-create-full-curriculum-coverage-map.md) - Completed
+49. [0049 Define seven-project mastery ladders](./0049-define-seven-project-mastery-ladders.md) - Completed
+50. [0050 Define Engineering Core cross-track curriculum](./0050-define-engineering-core-cross-track-curriculum.md) - Completed
+51. [0051 Define full-content authoring waves](./0051-define-full-content-authoring-waves.md) - Completed
+52. [0052 Expand Swift Language and Server-Side Swift with Vapor full-content wave](./0052-expand-swift-vapor-full-content-wave.md) - Completed
+53. [0053 Continue Swift/Vapor full-content wave](./0053-continue-swift-vapor-full-content-wave.md) - Completed
 54. [0054 Plan Python/FastAPI language-service and runner architecture](./0054-plan-python-fastapi-language-service-and-runner-architecture.md) - In Progress
 55. [0055 Seed Python foundations track slice](./0055-seed-python-foundations-track-slice.md) - In Progress
 56. [0056 Seed FastAPI foundation track slice](./0056-seed-fastapi-foundation-track-slice.md) - Planned
+57. 0057 Expand TypeScript and Node.js Servers with Fastify full-content wave - Planned
+58. 0058 Expand C# and ASP.NET Core full-content wave - Planned
+59. 0059 Build dedicated Engineering Core full-content wave - Planned
+60. [0060 Add real Vapor route-test workspace](./0060-add-real-vapor-route-test-workspace.md) - Completed

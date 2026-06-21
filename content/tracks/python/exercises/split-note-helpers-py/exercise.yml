@@ -1,0 +1,74 @@
+id: split-note-helpers-py
+title: SplitNoteHelpers
+kind: focused
+workspace:
+  runtime: python-pytest
+  starter: tracks/python/exercises/split-note-helpers-py/note_helpers.py
+  entryPoint: normalize_words
+  visibleTest: |
+    from note_helpers import normalize_word, normalize_words
+
+
+    def test_normalizes_one_word() -> None:
+        assert normalize_word("  Python  ") == "python"
+
+
+    def test_normalizes_many_words() -> None:
+        assert normalize_words([" Python ", "FASTAPI"]) == ["python", "fastapi"]
+  hiddenTest: |
+    import pytest
+
+    from note_helpers import normalize_word, normalize_words
+
+
+    @pytest.mark.parametrize(
+        ("raw_word", "expected"),
+        [
+            (" Tests ", "tests"),
+            ("", ""),
+            ("  ", ""),
+        ],
+    )
+    def test_normalize_word_examples(raw_word: str, expected: str) -> None:
+        assert normalize_word(raw_word) == expected
+
+
+    def test_normalize_words_drops_empty_results() -> None:
+        assert normalize_words(["Python", " ", "", "Tests"]) == ["python", "tests"]
+hints:
+  - id: conceptual
+    level: conceptual
+    title: Split one real rule
+    body: normalize_word deserves a helper because normalize_words applies the same rule repeatedly.
+  - id: api-approach
+    level: api-approach
+    title: Reuse the helper
+    body: Call normalize_word inside normalize_words instead of duplicating strip and lower logic.
+  - id: structural
+    level: structural
+    title: Drop empty words
+    body: After normalization, only append words that still contain real text.
+solution:
+  title: Model solution
+  body: The solution keeps one-word normalization in a helper and reuses it while building a filtered list.
+  code: |
+    def normalize_word(word: str) -> str:
+        return word.strip().lower()
+
+
+    def normalize_words(words: list[str]) -> list[str]:
+        result: list[str] = []
+        for word in words:
+            normalized = normalize_word(word)
+            if normalized:
+                result.append(normalized)
+
+        return result
+commonWrongApproaches:
+  - Duplicating normalization in every loop.
+  - Returning empty normalized words.
+  - Running code at import time.
+expectedSolutionCharacteristics:
+  - Defines a focused helper.
+  - Reuses helper inside loop.
+  - Drops empty normalized results.

@@ -2,7 +2,6 @@ from pathlib import Path
 
 from fastapi import FastAPI
 
-
 ASYNC_BOUNDARY_POLICY: dict[str, str] = {}
 
 

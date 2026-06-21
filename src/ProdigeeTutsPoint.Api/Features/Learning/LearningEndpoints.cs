@@ -321,8 +321,30 @@ public static class LearningEndpoints
                 .Select(history => history.ExerciseId)
                 .Distinct()
                 .CountAsync(ct);
-            var milestoneTotal = await milestoneQuery.CountAsync(ct);
-            var milestoneCompleted = exerciseTotal > 0 && exercisePassed >= exerciseTotal ? 1 : 0;
+            var milestoneExerciseRows = await milestoneQuery
+                .Select(milestone => new
+                {
+                    milestone.Id,
+                    ExerciseIds = milestone.Exercises
+                        .OrderBy(link => link.Order)
+                        .Select(link => link.ExerciseId)
+                        .ToArray(),
+                })
+                .ToListAsync(ct);
+            var milestoneTotal = milestoneExerciseRows.Count;
+            var passedExerciseIds = await db.ExerciseRunHistory
+                .AsNoTracking()
+                .Where(history =>
+                    history.ProfileId == profileId
+                    && history.Status == "Passed"
+                    && exerciseIds.Contains(history.ExerciseId))
+                .Select(history => history.ExerciseId)
+                .Distinct()
+                .ToListAsync(ct);
+            var passedExerciseIdSet = passedExerciseIds.ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var milestoneCompleted = milestoneExerciseRows.Count(milestone =>
+                milestone.ExerciseIds.Length > 0
+                && milestone.ExerciseIds.All(passedExerciseIdSet.Contains));
             var studyRows = await db.StudyTimeEntries
                 .AsNoTracking()
                 .Where(entry => entry.ProfileId == profileId)

@@ -3,6 +3,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AiReviewPanel, MilestoneDetail } from './MilestoneDetail'
 import { ExerciseFirstLoopPanel, TheoryClusterPanel } from '../components/TheoryClusterPanel'
+import { ActiveLearningProvider } from '../state/ActiveLearningContext'
 
 describe('Milestone AI review panel', () => {
   it('keeps review disabled until the selected provider is enabled and shows stored reviews', () => {
@@ -190,12 +191,14 @@ describe('Milestone study panels', () => {
 
     render(
       <MemoryRouter initialEntries={['/projects/wordfreq-csharp/milestones/streaming-and-scale']}>
-        <Routes>
-          <Route
-            path="/projects/:projectId/milestones/:milestoneId"
-            element={<MilestoneDetail profile={{ id: 'default-profile', displayName: 'Default Profile' }} />}
-          />
-        </Routes>
+        <ActiveLearningProvider profile={{ id: 'default-profile', displayName: 'Default Profile' }}>
+          <Routes>
+            <Route
+              path="/projects/:projectId/milestones/:milestoneId"
+              element={<MilestoneDetail profile={{ id: 'default-profile', displayName: 'Default Profile' }} />}
+            />
+          </Routes>
+        </ActiveLearningProvider>
       </MemoryRouter>,
     )
 

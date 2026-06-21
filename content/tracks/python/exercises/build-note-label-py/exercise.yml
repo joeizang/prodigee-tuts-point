@@ -1,0 +1,58 @@
+id: build-note-label-py
+title: BuildNoteLabel
+kind: focused
+workspace:
+  runtime: python-pytest
+  starter: tracks/python/exercises/build-note-label-py/note_label.py
+  entryPoint: build_note_label
+  visibleTest: |
+    from note_label import build_note_label
+
+
+    def test_builds_label_from_title_and_body() -> None:
+        assert build_note_label("Python", "first function") == "Python: first function"
+
+
+    def test_trims_outer_whitespace() -> None:
+        assert build_note_label("  Python  ", "  first function  ") == "Python: first function"
+  hiddenTest: |
+    from note_label import build_note_label
+
+
+    def test_keeps_internal_spacing_unchanged_for_now() -> None:
+        assert build_note_label("Learn   Python", "return values") == "Learn   Python: return values"
+
+
+    def test_returns_a_string_without_printing() -> None:
+        result = build_note_label("Title", "Body")
+        assert isinstance(result, str)
+        assert result == "Title: Body"
+hints:
+  - id: conceptual
+    level: conceptual
+    title: Return the value
+    body: The tests call the function and inspect its return value. Printing the label will not satisfy the contract.
+  - id: api-approach
+    level: api-approach
+    title: Trim both inputs
+    body: Use the value returned by strip for both title and body before building the label.
+  - id: structural
+    level: structural
+    title: Use an f-string
+    body: 'An f-string keeps the output shape readable, for example f"{clean_title}: {clean_body}".'
+solution:
+  title: Model solution
+  body: The solution binds clean names for the stripped inputs and returns one deterministic string.
+  code: |
+    def build_note_label(title: str, body: str) -> str:
+        clean_title = title.strip()
+        clean_body = body.strip()
+        return f"{clean_title}: {clean_body}"
+commonWrongApproaches:
+  - Calling print instead of returning the label.
+  - Calling strip without assigning the returned value.
+  - Reversing title and body in the label.
+expectedSolutionCharacteristics:
+  - Returns a string value to the caller.
+  - Trims title and body.
+  - 'Uses the exact "<title>: <body>" format.'

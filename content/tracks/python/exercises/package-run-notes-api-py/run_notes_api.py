@@ -2,7 +2,6 @@ from pathlib import Path
 
 from fastapi import FastAPI
 
-
 APP_IMPORT_TARGET = "notes_api.main:create_app"
 
 

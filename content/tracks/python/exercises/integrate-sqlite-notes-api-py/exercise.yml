@@ -122,11 +122,14 @@ solution:
             return [{"title": row[0], "body": row[1], "tags": row[2].split(",") if row[2] else []} for row in rows]
 
         def add_note(self, note: dict[str, object]) -> None:
+            tags = note["tags"]
+            if not isinstance(tags, list) or not all(isinstance(tag, str) for tag in tags):
+                raise ValueError("note tags must be a list of strings")
             try:
                 with sqlite3.connect(self.path) as connection:
                     connection.execute(
                         "INSERT INTO notes (title, body, tags) VALUES (?, ?, ?)",
-                        (note["title"], note["body"], ",".join(note["tags"])),
+                        (note["title"], note["body"], ",".join(tags)),
                     )
             except sqlite3.IntegrityError as error:
                 raise ValueError(f"note already exists: {note['title']}") from error

@@ -32,6 +32,33 @@ concepts:
   - id: swift-server-hardening
     title: Swift Server Hardening
     description: Applying validation, timeout mapping, body-size limits, and telemetry contracts around server request adapters.
+  - id: swift-string-contracts
+    title: Swift String Contracts
+    description: Defining exact promises for nil, whitespace, separators, casing, and deterministic token output.
+  - id: swift-text-normalization
+    title: Swift Text Normalization
+    description: Turning raw user text into stable tokens while naming Unicode and locale boundaries deliberately.
+  - id: engineering-core-invariants
+    title: Engineering Core Invariants
+    description: Explaining the invariant that makes a parser, tokenizer, or transformation correct across edge cases.
+  - id: swift-access-control
+    title: Swift Access Control
+    description: Designing public package APIs deliberately while keeping implementation details internal.
+  - id: swift-protocol-boundaries
+    title: Swift Protocol Boundaries
+    description: Using protocols to express small replaceable behavior without hiding simple code behind abstractions.
+  - id: swift-package-api-design
+    title: Swift Package API Design
+    description: Shaping reusable Swift package surfaces that future CLI, Vapor, and test adapters can depend on.
+  - id: swift-vapor-routing
+    title: Swift Vapor Routing
+    description: Registering real Vapor routes that keep transport concerns at the server edge.
+  - id: swift-vapor-route-testing
+    title: Swift Vapor Route Testing
+    description: Verifying Vapor endpoints with XCTVapor so HTTP status, query validation, body decoding, and JSON responses are tested through the framework.
+  - id: swift-framework-dependency-workspaces
+    title: Swift Framework Dependency Workspaces
+    description: Using SwiftPM package dependencies deliberately for server-side exercises without slowing every language-core exercise.
 modules:
   - id: swift-foundation-core
     title: Swift Foundation Core
@@ -61,6 +88,18 @@ modules:
     title: Swift Server Hardening
     description: Harden server request boundaries with validation, limits, timeout mapping, and telemetry.
     order: 7
+  - id: swift-textkit-core
+    title: Swift TextKit Core
+    description: Build the first `textkit-swift` milestone around optionals, strings, deterministic tokenization, tests, and debugging-friendly contracts.
+    order: 8
+  - id: swift-packagecraft-core
+    title: Swift PackageCraft Core
+    description: Build package API boundaries with access control, protocols, deterministic behavior, tests, and future Vapor service reuse.
+    order: 9
+  - id: swift-vapor-runtime
+    title: Swift Vapor Runtime
+    description: Move from framework-shaped adapters into real Vapor routes, package dependencies, XCTVapor tests, and production server boundaries.
+    order: 10
 lessons:
   - id: swiftpm-command-boundaries
     moduleId: swift-foundation-core
@@ -195,6 +234,66 @@ lessons:
         chapter: Concurrency and Error Handling
         topic: explicit async boundaries, value envelopes, and controlled failure contracts
         usage: QualityAnchor
+  - id: swift-string-contracts-and-tokenization
+    moduleId: swift-textkit-core
+    title: Swift String Contracts and Tokenization
+    summary: Define a precise text-normalization contract before implementing a reusable tokenizer for search, command parsing, and future Vapor query handling.
+    markdown: tracks/swift/lessons/swift-string-contracts-and-tokenization.md
+    order: 8
+    concepts:
+      - swift-value-modeling
+      - swift-string-contracts
+      - swift-text-normalization
+      - engineering-core-invariants
+    sourceReferences:
+      - book: the-swift-programming-language
+        chapter: Strings and Characters
+        topic: String values, Character iteration, casing, and Unicode-aware text boundaries
+        usage: QualityAnchor
+      - book: swift-apprentice-beyond-basics
+        chapter: Collections and Algorithms
+        topic: text processing, arrays, deterministic ordering, and testable transformations
+        usage: QualityAnchor
+  - id: swift-package-api-protocol-boundaries
+    moduleId: swift-packagecraft-core
+    title: Swift Package API and Protocol Boundaries
+    summary: Design a small public Swift package API with access control and protocol boundaries that can later support CLI and Vapor adapters.
+    markdown: tracks/swift/lessons/swift-package-api-protocol-boundaries.md
+    order: 9
+    concepts:
+      - swiftpm-package-structure
+      - swift-access-control
+      - swift-protocol-boundaries
+      - swift-package-api-design
+    sourceReferences:
+      - book: the-swift-programming-language
+        chapter: Access Control and Protocols
+        topic: public APIs, protocol requirements, structs, and package boundaries
+        usage: QualityAnchor
+      - book: swift-apprentice-beyond-basics
+        chapter: Protocol-Oriented Programming
+        topic: small protocols, composition, test doubles, and package API design
+        usage: QualityAnchor
+  - id: swift-vapor-routing-route-tests
+    moduleId: swift-vapor-runtime
+    title: Swift Vapor Routing and Route Tests
+    summary: Build a real Vapor route with query validation, content decoding, deterministic JSON output, and XCTVapor route tests.
+    markdown: tracks/swift/lessons/swift-vapor-routing-route-tests.md
+    order: 10
+    concepts:
+      - swift-vapor-routing
+      - swift-vapor-route-testing
+      - swift-framework-dependency-workspaces
+      - swift-server-hardening
+    sourceReferences:
+      - book: server-side-swift-vapor
+        chapter: Routing, Content, and Testing
+        topic: route registration, request content decoding, Abort errors, and XCTVapor integration tests
+        usage: QualityAnchor
+      - book: the-swift-programming-language
+        chapter: Error Handling, Closures, and Collections
+        topic: throwing validation, closure handlers, dictionaries, sorting, and value responses
+        usage: QualityAnchor
 exercises:
   - id: parse-command-request-swift
     title: ParseCommandRequest
@@ -259,6 +358,33 @@ exercises:
       - swift-server-hardening
       - swift-http-adapters
       - swift-cli-composition
+  - id: normalize-search-tokens-swift
+    title: NormalizeSearchTokens
+    summary: Normalize optional search text into lowercase ASCII tokens with a precise nil, whitespace, separator, and ordering contract.
+    directory: tracks/swift/exercises/normalize-search-tokens-swift
+    order: 8
+    concepts:
+      - swift-string-contracts
+      - swift-text-normalization
+      - engineering-core-invariants
+  - id: build-token-filter-pipeline-swift
+    title: BuildTokenFilterPipeline
+    summary: Build a small public token-filtering API with protocol-backed filters, access control, deterministic order, and testable composition.
+    directory: tracks/swift/exercises/build-token-filter-pipeline-swift
+    order: 9
+    concepts:
+      - swift-access-control
+      - swift-protocol-boundaries
+      - swift-package-api-design
+  - id: build-vapor-log-level-route-swift
+    title: BuildVaporLogLevelRoute
+    summary: Register a real Vapor POST route that decodes log text, validates limit query input, counts supported log levels, and returns deterministic JSON.
+    directory: tracks/swift/exercises/build-vapor-log-level-route-swift
+    order: 10
+    concepts:
+      - swift-vapor-routing
+      - swift-vapor-route-testing
+      - swift-framework-dependency-workspaces
 projects:
   - id: logprobe-swift
     title: logprobe-swift
@@ -390,4 +516,68 @@ projects:
           - book: the-swift-programming-language
             chapter: Concurrency and Error Handling
             topic: async boundaries and value-based failure envelopes
+            usage: QualityAnchor
+      - id: swift-vapor-route-tests
+        title: Swift Vapor route tests
+        summary: Replace the framework-free adapter with a real Vapor route and XCTVapor integration tests.
+        markdown: tracks/swift/projects/logprobe-swift/swift-vapor-route-tests.md
+        order: 8
+        lessons:
+          - swift-vapor-routing-route-tests
+        exercises:
+          - build-vapor-log-level-route-swift
+        sourceReferences:
+          - book: server-side-swift-vapor
+            chapter: Routing, Content, and Testing
+            topic: Vapor route registration, request content decoding, Abort errors, and XCTVapor route tests
+            usage: QualityAnchor
+          - book: the-swift-programming-language
+            chapter: Error Handling and Collections
+            topic: validating inputs and producing deterministic sorted response values
+            usage: QualityAnchor
+  - id: textkit-swift
+    title: textkit-swift
+    slug: textkit-swift
+    description: Build a reusable Swift text-processing toolkit that teaches exact string contracts, optionals, deterministic tokenization, testable transformations, Unicode caveats, and later parser composition for server-side Swift inputs.
+    milestones:
+      - id: string-contracts-tokenization
+        title: String contracts and tokenization
+        summary: Normalize optional user text into deterministic lowercase tokens while making separators, empty input, and engineering invariants explicit.
+        markdown: tracks/swift/projects/textkit-swift/string-contracts-tokenization.md
+        order: 1
+        lessons:
+          - swift-string-contracts-and-tokenization
+        exercises:
+          - normalize-search-tokens-swift
+        sourceReferences:
+          - book: the-swift-programming-language
+            chapter: Strings and Characters
+            topic: String iteration, casing, and explicit text contracts
+            usage: QualityAnchor
+          - book: swift-apprentice-beyond-basics
+            chapter: Collections and Algorithms
+            topic: deterministic transformations and edge-case testing
+            usage: QualityAnchor
+  - id: packagecraft-swift
+    title: packagecraft-swift
+    slug: packagecraft-swift
+    description: Build a reusable Swift package that teaches public API design, access control, protocol boundaries, deterministic behavior, documentation examples, and testable components that future CLI and Vapor adapters can reuse safely.
+    milestones:
+      - id: public-api-protocol-boundaries
+        title: Public API and protocol boundaries
+        summary: Build a small token-filtering package API with public protocols and structs while keeping behavior deterministic and implementation choices reviewable.
+        markdown: tracks/swift/projects/packagecraft-swift/public-api-protocol-boundaries.md
+        order: 1
+        lessons:
+          - swift-package-api-protocol-boundaries
+        exercises:
+          - build-token-filter-pipeline-swift
+        sourceReferences:
+          - book: the-swift-programming-language
+            chapter: Access Control and Protocols
+            topic: public types, protocol requirements, and package API boundaries
+            usage: QualityAnchor
+          - book: swift-apprentice-beyond-basics
+            chapter: Protocol-Oriented Programming
+            topic: protocol composition and testable package seams
             usage: QualityAnchor

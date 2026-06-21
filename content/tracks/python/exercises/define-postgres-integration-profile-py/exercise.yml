@@ -1,0 +1,89 @@
+id: define-postgres-integration-profile-py
+title: DefinePostgresIntegrationProfile
+kind: focused
+workspace:
+  runtime: python-pytest
+  starter: tracks/python/exercises/define-postgres-integration-profile-py/postgres_profile.py
+  entryPoint: postgres_integration_profile
+  visibleTest: |
+    from postgres_profile import postgres_integration_profile
+
+
+    def test_profile_defines_marker_settings_and_commands() -> None:
+        profile = postgres_integration_profile()
+
+        assert profile["marker"] == "postgres"
+        assert profile["required_env"] == ["APP_DATABASE_URL"]
+        assert profile["database_url_scheme"] == "postgresql+psycopg"
+        assert profile["commands"][0] == "uv run alembic upgrade head"
+        assert profile["commands"][1] == "uv run pytest -m postgres"
+
+
+    def test_profile_covers_provider_real_boundaries() -> None:
+        profile = postgres_integration_profile()
+
+        assert set(profile["coverage"]) == {
+            "engine_connectivity",
+            "alembic_upgrade_head",
+            "repository_crud_search",
+            "transaction_rollback",
+            "readiness_on_migrated_database",
+        }
+  hiddenTest: |
+    from postgres_profile import postgres_integration_profile
+
+
+    def test_profile_isolation_and_skip_rules_are_explicit() -> None:
+        profile = postgres_integration_profile()
+
+        assert profile["state_isolation"] in {"schema_per_test_run", "database_per_test_run"}
+        assert profile["missing_service_action"] == "skip with clear reason"
+        assert profile["sqlite_substitute_allowed"] is False
+hints:
+  - id: conceptual
+    level: conceptual
+    title: PostgreSQL must be provider-real
+    body: The profile should prove behavior against PostgreSQL rather than treating SQLite as a substitute.
+  - id: api-approach
+    level: api-approach
+    title: Mark slow integration tests
+    body: Use a clear pytest marker so PostgreSQL tests run intentionally in CI or local development.
+  - id: structural
+    level: structural
+    title: Migrate before testing repositories
+    body: Repository and readiness tests should run only after Alembic has upgraded the test database.
+solution:
+  title: Model solution
+  body: The model solution defines the PostgreSQL integration profile marker, commands, required environment, coverage, isolation, and skip policy.
+  code: |
+    def postgres_integration_profile() -> dict[str, object]:
+        return {
+            "marker": "postgres",
+            "required_env": ["APP_DATABASE_URL"],
+            "database_url_scheme": "postgresql+psycopg",
+            "commands": [
+                "uv run alembic upgrade head",
+                "uv run pytest -m postgres",
+            ],
+            "coverage": [
+                "engine_connectivity",
+                "alembic_upgrade_head",
+                "repository_crud_search",
+                "transaction_rollback",
+                "readiness_on_migrated_database",
+            ],
+            "state_isolation": "schema_per_test_run",
+            "missing_service_action": "skip with clear reason",
+            "sqlite_substitute_allowed": False,
+        }
+commonWrongApproaches:
+  - Treating SQLite as PostgreSQL equivalent.
+  - Running repository tests before migrations.
+  - Sharing dirty database state across runs.
+  - Hiding provider requirements in scripts.
+expectedSolutionCharacteristics:
+  - Defines PostgreSQL pytest marker.
+  - Requires PostgreSQL database URL.
+  - Runs migrations before integration tests.
+  - Covers provider-real persistence behavior.
+  - Specifies database state isolation.

@@ -4,44 +4,58 @@ kind: focused
 workspace:
   runtime: python-pytest
   starter: tracks/python/exercises/configure-alembic-environment-py/alembic_environment.py
-  entryPoint: alembic_environment_plan
+  entryPoint: create_alembic_config
   visibleTest: |
-    from alembic_environment import alembic_environment_plan
+    from alembic.config import Config
+
+    from alembic_environment import (
+        alembic_commands,
+        create_alembic_config,
+        render_env_py,
+    )
 
 
-    def test_environment_plan_defines_files_and_metadata_import() -> None:
-        plan = alembic_environment_plan()
+    def test_alembic_config_points_at_script_location_and_database_url() -> None:
+        config = create_alembic_config(
+            database_url="sqlite:///tmp/notes.db",
+            script_location="migrations",
+        )
 
-        assert "alembic.ini" in plan["files"]
-        assert "migrations/env.py" in plan["files"]
-        assert "migrations/versions" in plan["files"]
-        assert plan["target_metadata"] == "notes_api.models.Base.metadata"
-        assert plan["database_url_source"] == "AppSettings.database_url"
+        assert isinstance(config, Config)
+        assert config.get_main_option("script_location") == "migrations"
+        assert config.get_main_option("sqlalchemy.url") == "sqlite:///tmp/notes.db"
 
 
-    def test_commands_include_revision_upgrade_and_smoke_tests() -> None:
-        plan = alembic_environment_plan()
+    def test_env_py_imports_app_metadata_and_url_source() -> None:
+        env_py = render_env_py()
 
-        assert "uv run alembic revision --autogenerate -m <message>" in plan["commands"]
-        assert "uv run alembic upgrade head" in plan["commands"]
-        assert "uv run pytest tests/test_migrations.py" in plan["commands"]
+        assert "from notes_api.models import Base" in env_py
+        assert "target_metadata = Base.metadata" in env_py
+        assert "config.get_main_option(\"sqlalchemy.url\")" in env_py
+        assert "run_migrations_online" in env_py
+
+
+    def test_commands_include_revision_upgrade_and_smoke_test() -> None:
+        commands = alembic_commands("create notes table")
+
+        assert commands["revision"] == "uv run alembic revision --autogenerate -m 'create notes table'"
+        assert commands["upgrade"] == "uv run alembic upgrade head"
+        assert commands["test"] == "uv run pytest tests/test_migrations.py"
   hiddenTest: |
-    from alembic_environment import alembic_environment_plan
+    from alembic_environment import migration_smoke_tests, revision_review_policy
 
 
     def test_review_policy_rejects_unsafe_autogenerate_behavior() -> None:
-        plan = alembic_environment_plan()
+        policy = revision_review_policy()
 
-        assert plan["uses_create_all_in_production"] is False
-        assert "manual_review_required" in plan["revision_review"]
-        assert "no_unreviewed_drop_table" in plan["revision_review"]
-        assert "data_backfill_plan_checked" in plan["revision_review"]
+        assert policy["autogenerate_is_final"] is False
+        assert policy["uses_create_all_in_production"] is False
+        assert "no_unreviewed_drop_table" in policy["required_checks"]
+        assert "postgresql_portability_checked" in policy["required_checks"]
 
 
-    def test_smoke_tests_cover_fresh_and_existing_databases() -> None:
-        plan = alembic_environment_plan()
-
-        assert plan["smoke_tests"] == [
+    def test_smoke_tests_cover_fresh_existing_and_repository_paths() -> None:
+        assert migration_smoke_tests() == [
             "upgrade_head_on_fresh_database",
             "upgrade_head_preserves_existing_notes",
             "repository_can_read_and_write_after_upgrade",
@@ -61,44 +75,102 @@ hints:
     body: Once migrations exist, production startup should verify schema instead of creating tables casually.
 solution:
   title: Model solution
-  body: The model solution defines the Alembic file layout, metadata import, command sequence, review policy, and smoke tests for the notes API.
+  body: The model solution builds a real Alembic Config object, renders the env.py metadata wiring, and defines review and smoke-test policy.
   code: |
-    def alembic_environment_plan() -> dict[str, object]:
+    from __future__ import annotations
+
+    from alembic.config import Config
+
+
+    def create_alembic_config(database_url: str, script_location: str = "migrations") -> Config:
+        config = Config()
+        config.set_main_option("script_location", script_location)
+        config.set_main_option("sqlalchemy.url", database_url)
+        return config
+
+
+    def render_env_py() -> str:
+        return '''from logging.config import fileConfig
+
+    from alembic import context
+    from sqlalchemy import engine_from_config, pool
+
+    from notes_api.models import Base
+
+    config = context.config
+    if config.config_file_name is not None:
+        fileConfig(config.config_file_name)
+
+    target_metadata = Base.metadata
+
+
+    def run_migrations_offline() -> None:
+        url = config.get_main_option("sqlalchemy.url")
+        context.configure(
+            url=url,
+            target_metadata=target_metadata,
+            literal_binds=True,
+            dialect_opts={"paramstyle": "named"},
+        )
+        with context.begin_transaction():
+            context.run_migrations()
+
+
+    def run_migrations_online() -> None:
+        connectable = engine_from_config(
+            config.get_section(config.config_ini_section, {}),
+            prefix="sqlalchemy.",
+            poolclass=pool.NullPool,
+        )
+        with connectable.connect() as connection:
+            context.configure(connection=connection, target_metadata=target_metadata)
+            with context.begin_transaction():
+                context.run_migrations()
+
+
+    if context.is_offline_mode():
+        run_migrations_offline()
+    else:
+        run_migrations_online()
+    '''
+
+
+    def alembic_commands(message: str) -> dict[str, str]:
         return {
-            "files": [
-                "alembic.ini",
-                "migrations/env.py",
-                "migrations/script.py.mako",
-                "migrations/versions",
-            ],
-            "target_metadata": "notes_api.models.Base.metadata",
-            "database_url_source": "AppSettings.database_url",
-            "commands": [
-                "uv run alembic revision --autogenerate -m <message>",
-                "uv run alembic upgrade head",
-                "uv run pytest tests/test_migrations.py",
-            ],
-            "revision_review": [
+            "revision": f"uv run alembic revision --autogenerate -m '{message}'",
+            "upgrade": "uv run alembic upgrade head",
+            "downgrade": "uv run alembic downgrade -1",
+            "test": "uv run pytest tests/test_migrations.py",
+        }
+
+
+    def revision_review_policy() -> dict[str, object]:
+        return {
+            "autogenerate_is_final": False,
+            "uses_create_all_in_production": False,
+            "required_checks": [
                 "manual_review_required",
                 "no_unreviewed_drop_table",
                 "data_backfill_plan_checked",
                 "downgrade_behavior_documented",
                 "postgresql_portability_checked",
             ],
-            "smoke_tests": [
-                "upgrade_head_on_fresh_database",
-                "upgrade_head_preserves_existing_notes",
-                "repository_can_read_and_write_after_upgrade",
-            ],
-            "uses_create_all_in_production": False,
         }
+
+
+    def migration_smoke_tests() -> list[str]:
+        return [
+            "upgrade_head_on_fresh_database",
+            "upgrade_head_preserves_existing_notes",
+            "repository_can_read_and_write_after_upgrade",
+        ]
 commonWrongApproaches:
   - Pointing Alembic at test-only metadata.
   - Trusting autogenerate without review.
   - Creating production tables during app startup.
   - Skipping upgraded-database migration tests.
 expectedSolutionCharacteristics:
-  - Defines Alembic file layout.
+  - Builds real Alembic config.
   - Imports application metadata explicitly.
   - Names safe migration commands.
   - Requires deliberate revision review.

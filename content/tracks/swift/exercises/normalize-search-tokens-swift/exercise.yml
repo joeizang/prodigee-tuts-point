@@ -1,0 +1,68 @@
+id: normalize-search-tokens-swift
+title: NormalizeSearchTokens
+kind: focused
+workspace:
+  runtime: swiftpm
+  entryPoint: normalizeSearchTokens
+  starter: tracks/swift/exercises/normalize-search-tokens-swift/TextTokenizer.swift
+  visibleTest: |
+    XCTAssertEqual(normalizeSearchTokens(nil), [])
+    XCTAssertEqual(normalizeSearchTokens("  Swift, Vapor-API 101!  "), ["swift", "vapor", "api", "101"])
+  hiddenTest: |
+    XCTAssertEqual(normalizeSearchTokens(""), [])
+    XCTAssertEqual(normalizeSearchTokens("...Swift---SERVER___Side..."), ["swift", "server", "side"])
+    XCTAssertEqual(normalizeSearchTokens("A1 b2 C3"), ["a1", "b2", "c3"])
+    XCTAssertEqual(normalizeSearchTokens("one,,two,,,three"), ["one", "two", "three"])
+hints:
+  - id: conceptual
+    level: conceptual
+    title: Preserve the contract
+    body: The output should contain only completed lowercase ASCII tokens; nil, empty input, whitespace, and repeated separators should not create placeholder tokens.
+  - id: api-approach
+    level: api-approach
+    title: Scan characters
+    body: Iterate through each Character, keep ASCII letters and digits, lowercase uppercase letters, and treat every other character as a separator that may flush the current token.
+  - id: structural
+    level: structural
+    title: Flush carefully
+    body: Write a small flush step that appends current only when it is not empty, clears it after separators, and runs once more after the loop for the final token.
+solution:
+  title: Model solution
+  body: The model solution scans the string once, preserves the tokenizer invariant, and emits deterministic tokens in input order without leaking empty tokens.
+  code: |
+    public func normalizeSearchTokens(_ text: String?) -> [String] {
+        guard let text else {
+            return []
+        }
+
+        var tokens: [String] = []
+        var current = ""
+
+        func flushCurrent() {
+            if !current.isEmpty {
+                tokens.append(current)
+                current.removeAll(keepingCapacity: true)
+            }
+        }
+
+        for character in text {
+            if character >= "a" && character <= "z" {
+                current.append(character)
+            } else if character >= "A" && character <= "Z" {
+                current.append(contentsOf: String(character).lowercased())
+            } else if character >= "0" && character <= "9" {
+                current.append(character)
+            } else {
+                flushCurrent()
+            }
+        }
+
+        flushCurrent()
+        return tokens
+    }
+commonWrongApproaches:
+  - Splitting only on spaces, which leaves punctuation attached to tokens and misses real query separators.
+  - Appending the current token on every separator without checking emptiness, which creates empty tokens for repeated punctuation.
+expectedSolutionCharacteristics:
+  - Handles nil and empty input without placeholder tokens.
+  - Preserves input order while lowercasing ASCII letters and treating punctuation as separators.

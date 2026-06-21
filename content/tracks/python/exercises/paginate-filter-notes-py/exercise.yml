@@ -127,7 +127,11 @@ solution:
             results = sorted(notes, key=lambda note: str(note["title"]))
             if tag is not None:
                 wanted = tag.strip().lower()
-                results = [note for note in results if wanted in note["tags"]]
+                results = [
+                    note
+                    for note in results
+                    if isinstance(note["tags"], list) and wanted in note["tags"]
+                ]
             if q is not None:
                 query = q.strip().lower()
                 results = [

@@ -32,6 +32,26 @@ describe('Dashboard', () => {
             })
           }
 
+          if (url.includes('/api/curriculum/tracks/python')) {
+            return jsonResponse({
+              id: 'python',
+              title: 'Python and FastAPI',
+              slug: 'python',
+              description: 'Beginner-to-proficient Python and FastAPI.',
+              language: 'Python',
+              modules: [],
+              projects: [
+                {
+                  id: 'py-notes-cli',
+                  title: 'py-notes-cli',
+                  slug: 'py-notes-cli',
+                  description: 'Build a small notes command-line tool.',
+                  language: 'Python',
+                },
+              ],
+            })
+          }
+
           if (url.includes('/api/curriculum/tracks/csharp')) {
             return jsonResponse({
               id: 'csharp',
@@ -135,6 +155,18 @@ describe('Dashboard', () => {
                 summary: 'Create the typed request parser.',
               },
             ],
+          })
+        }
+
+        if (url.includes('/api/curriculum/projects/py-notes-cli')) {
+          return jsonResponse({
+            id: 'py-notes-cli',
+            title: 'py-notes-cli',
+            slug: 'py-notes-cli',
+            description: 'Build a small notes command-line tool.',
+            language: 'Python',
+            trackId: 'python',
+            milestones: [],
           })
         }
 
@@ -270,6 +302,31 @@ describe('Dashboard', () => {
       'href',
       '/exercises/parse-command-request-ts',
     )
+  })
+
+  it('falls back to the current Python beginner cluster instead of the old single lesson', async () => {
+    localStorage.setItem('prodigee.selectedTrack.default-profile', 'python')
+    render(
+      <MemoryRouter>
+        <ActiveLearningProvider profile={{ id: 'default-profile', displayName: 'Default Profile' }}>
+          <Dashboard profile={{ id: 'default-profile', displayName: 'Default Profile' }} />
+        </ActiveLearningProvider>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByRole('link', { name: /names, values, and first tests/i })).toHaveAttribute(
+      'href',
+      '/lessons/python-first-names-values-tests',
+    )
+    expect(await screen.findByRole('link', { name: /branches, errors, and contracts/i })).toHaveAttribute(
+      'href',
+      '/lessons/python-branches-errors-tests',
+    )
+    expect(await screen.findByRole('link', { name: /lists, dictionaries, and records/i })).toHaveAttribute(
+      'href',
+      '/lessons/python-lists-dicts-records',
+    )
+    expect(screen.queryByRole('link', { name: /text as data in python/i })).not.toBeInTheDocument()
   })
 })
 

@@ -1,0 +1,95 @@
+id: plan-migration-operations-py
+title: PlanMigrationOperations
+kind: focused
+workspace:
+  runtime: python-pytest
+  starter: tracks/python/exercises/plan-migration-operations-py/migration_operations.py
+  entryPoint: migration_operation_policy
+  visibleTest: |
+    from migration_operations import migration_operation_policy
+
+
+    def test_migration_commands_run_before_server_start() -> None:
+        policy = migration_operation_policy()
+
+        assert policy["commands"] == [
+            "uv run alembic upgrade head",
+            "uv run pytest tests/test_migrations.py",
+            "uv run uvicorn notes_api.main:create_app --factory",
+        ]
+        assert policy["production_schema_owner"] == "alembic"
+        assert policy["app_runs_create_all_in_production"] is False
+
+
+    def test_startup_gate_blocks_old_schema() -> None:
+        policy = migration_operation_policy()
+
+        assert "database_connectivity" in policy["startup_gate"]
+        assert "alembic_head_matches_code" in policy["startup_gate"]
+        assert policy["old_schema_action"] == "fail startup before serving traffic"
+  hiddenTest: |
+    from migration_operations import migration_operation_policy
+
+
+    def test_rollback_and_review_policy_are_explicit() -> None:
+        policy = migration_operation_policy()
+
+        assert policy["rollback_policy"]["automatic_downgrade"] is False
+        assert "forward_fix_preferred" in policy["rollback_policy"]["options"]
+        assert "manual_review_required" in policy["revision_review"]
+        assert "data_loss_checked" in policy["revision_review"]
+hints:
+  - id: conceptual
+    level: conceptual
+    title: Migrations are deployment operations
+    body: The server should start only after Alembic has upgraded the database and smoke tests have passed.
+  - id: api-approach
+    level: api-approach
+    title: Startup verifies, not mutates
+    body: Production startup should check schema state, not create or migrate tables opportunistically.
+  - id: structural
+    level: structural
+    title: Rollback needs a policy
+    body: Downgrade behavior should be reviewed and documented instead of assumed automatically safe.
+solution:
+  title: Model solution
+  body: The model solution returns an operation policy with migration commands, startup gates, schema ownership, review checks, and rollback rules.
+  code: |
+    def migration_operation_policy() -> dict[str, object]:
+        return {
+            "commands": [
+                "uv run alembic upgrade head",
+                "uv run pytest tests/test_migrations.py",
+                "uv run uvicorn notes_api.main:create_app --factory",
+            ],
+            "production_schema_owner": "alembic",
+            "app_runs_create_all_in_production": False,
+            "startup_gate": [
+                "database_connectivity",
+                "alembic_head_matches_code",
+                "required_tables_exist",
+                "readiness_checks_pass",
+            ],
+            "old_schema_action": "fail startup before serving traffic",
+            "revision_review": [
+                "manual_review_required",
+                "data_loss_checked",
+                "downgrade_documented",
+                "postgresql_portability_checked",
+            ],
+            "rollback_policy": {
+                "automatic_downgrade": False,
+                "options": ["forward_fix_preferred", "reviewed_downgrade_when_safe"],
+            },
+        }
+commonWrongApproaches:
+  - Running migrations inside route handlers.
+  - Creating production tables during startup.
+  - Starting the server before migrations finish.
+  - Assuming every downgrade is safe.
+expectedSolutionCharacteristics:
+  - Defines migration-before-startup command order.
+  - Keeps Alembic as schema owner.
+  - Blocks startup on old schema.
+  - Documents manual migration review.
+  - Defines operational rollback policy.

@@ -57,7 +57,10 @@ export function ActiveLearningProvider({
   const { data: primaryProjectDetail } = useApi<ProjectDetail>(
     primaryProject ? `/api/curriculum/projects/${encodeURIComponent(primaryProject.id)}` : null,
   )
-  const primaryMilestone = primaryProjectDetail?.milestones[0] ?? null
+  const primaryMilestones = Array.isArray(primaryProjectDetail?.milestones)
+    ? primaryProjectDetail.milestones
+    : []
+  const primaryMilestone = primaryMilestones[0] ?? null
   const { data: primaryMilestoneDetail } = useApi<MilestoneDetail>(
     primaryProject && primaryMilestone
       ? `/api/curriculum/projects/${encodeURIComponent(primaryProject.id)}/milestones/${encodeURIComponent(primaryMilestone.id)}`

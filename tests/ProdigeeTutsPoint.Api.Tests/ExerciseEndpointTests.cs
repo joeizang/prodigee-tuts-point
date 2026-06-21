@@ -173,6 +173,55 @@ public sealed class ExerciseEndpointTests
     }
 
     [Fact]
+    public async Task WorkspaceEndpointGeneratesVaporSwiftPackageWorkspace()
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+        var profileId = $"swift-vapor-workspace-{Guid.NewGuid():n}";
+
+        var workspace = await client.GetFromJsonAsync<ExerciseWorkspaceTestResponse>(
+            $"/api/exercises/build-vapor-log-level-route-swift/workspace?profileId={profileId}",
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(workspace);
+        Assert.Equal("Swift", workspace.Language);
+        Assert.Equal("swiftpm-vapor", workspace.Runtime);
+        Assert.Contains("Vapor-backed SwiftPM workspace", workspace.LanguageServiceMessage);
+        var packageFile = await File.ReadAllTextAsync(
+            Path.Combine(workspace.WorkspacePath, "Package.swift"),
+            TestContext.Current.CancellationToken);
+        Assert.Contains("https://github.com/vapor/vapor.git", packageFile, StringComparison.Ordinal);
+        Assert.Contains(".product(name: \"Vapor\", package: \"vapor\")", packageFile, StringComparison.Ordinal);
+        Assert.Contains(".product(name: \"XCTVapor\", package: \"vapor\")", packageFile, StringComparison.Ordinal);
+        Assert.Contains(workspace.Files, file =>
+            file.Path == "Sources/Exercise/Exercise.swift"
+            && file.Editable
+            && file.Content is not null
+            && file.Content.Contains("public func routes", StringComparison.Ordinal));
+        Assert.Contains(workspace.Files, file =>
+            file.Path == "Tests/ExerciseVisibleTests/VisibleTests.swift"
+            && file.Role == "visible-test"
+            && file.Content is not null
+            && file.Content.Contains("import Vapor", StringComparison.Ordinal)
+            && file.Content.Contains("import XCTVapor", StringComparison.Ordinal)
+            && file.Content.Contains("try await Application.make(.testing)", StringComparison.Ordinal)
+            && file.Content.Contains("try await app.asyncShutdown()", StringComparison.Ordinal)
+            && file.Content.Contains("app.test(.POST, \"log-levels?limit=2\"", StringComparison.Ordinal));
+        Assert.Contains(workspace.Files, file =>
+            file.Path == "Tests/ExerciseHiddenTests/HiddenTests.swift"
+            && file.Role == "hidden-test"
+            && file.Content is null);
+        var hiddenTestFile = await File.ReadAllTextAsync(
+            Path.Combine(workspace.WorkspacePath, "Tests", "ExerciseHiddenTests", "HiddenTests.swift"),
+            TestContext.Current.CancellationToken);
+        Assert.Contains("import Vapor", hiddenTestFile, StringComparison.Ordinal);
+        Assert.Contains("import XCTVapor", hiddenTestFile, StringComparison.Ordinal);
+        Assert.Contains("try await Application.make(.testing)", hiddenTestFile, StringComparison.Ordinal);
+        Assert.Contains("try await invalidLimitApp.asyncShutdown()", hiddenTestFile, StringComparison.Ordinal);
+        Assert.Contains("try await defaultLimitApp.asyncShutdown()", hiddenTestFile, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task WorkspaceEndpointGeneratesPythonPytestWorkspace()
     {
         await using var factory = new WebApplicationFactory<Program>();
@@ -327,9 +376,16 @@ public sealed class ExerciseEndpointTests
     [InlineData("design-orm-note-mapping-py", "src/orm_mapping.py", "tests/test_orm_mapping_visible.py", "tests/test_orm_mapping_hidden.py", "def note_orm_mapping")]
     [InlineData("plan-alembic-revision-py", "src/alembic_plan.py", "tests/test_alembic_plan_visible.py", "tests/test_alembic_plan_hidden.py", "def build_revision_plan")]
     [InlineData("prepare-postgres-settings-py", "src/postgres_readiness.py", "tests/test_postgres_readiness_visible.py", "tests/test_postgres_readiness_hidden.py", "def parse_database_url")]
-    [InlineData("implement-sqlalchemy-repository-py", "src/sqlalchemy_repository.py", "tests/test_sqlalchemy_repository_visible.py", "tests/test_sqlalchemy_repository_hidden.py", "def build_repository_blueprint")]
-    [InlineData("configure-alembic-environment-py", "src/alembic_environment.py", "tests/test_alembic_environment_visible.py", "tests/test_alembic_environment_hidden.py", "def alembic_environment_plan")]
+    [InlineData("implement-sqlalchemy-repository-py", "src/sqlalchemy_repository.py", "tests/test_sqlalchemy_repository_visible.py", "tests/test_sqlalchemy_repository_hidden.py", "class SqlAlchemyNoteRepository")]
+    [InlineData("configure-alembic-environment-py", "src/alembic_environment.py", "tests/test_alembic_environment_visible.py", "tests/test_alembic_environment_hidden.py", "def create_alembic_config")]
     [InlineData("configure-postgres-engine-py", "src/postgres_engine.py", "tests/test_postgres_engine_visible.py", "tests/test_postgres_engine_hidden.py", "def database_engine_settings")]
+    [InlineData("document-openapi-contract-py", "src/openapi_contract.py", "tests/test_openapi_contract_visible.py", "tests/test_openapi_contract_hidden.py", "def create_app")]
+    [InlineData("standardize-error-contract-py", "src/error_contract.py", "tests/test_error_contract_visible.py", "tests/test_error_contract_hidden.py", "def create_app")]
+    [InlineData("verify-health-startup-py", "src/health_startup.py", "tests/test_health_startup_visible.py", "tests/test_health_startup_hidden.py", "def create_app")]
+    [InlineData("plan-migration-operations-py", "src/migration_operations.py", "tests/test_migration_operations_visible.py", "tests/test_migration_operations_hidden.py", "def migration_operation_policy")]
+    [InlineData("define-postgres-integration-profile-py", "src/postgres_profile.py", "tests/test_postgres_profile_visible.py", "tests/test_postgres_profile_hidden.py", "def postgres_integration_profile")]
+    [InlineData("verify-python-intellisense-deps-py", "src/intellisense_deps.py", "tests/test_intellisense_deps_visible.py", "tests/test_intellisense_deps_hidden.py", "def intellisense_dependency_contract")]
+    [InlineData("compare-async-sqlalchemy-py", "src/async_sqlalchemy_comparison.py", "tests/test_async_sqlalchemy_comparison_visible.py", "tests/test_async_sqlalchemy_comparison_hidden.py", "def sqlalchemy_comparison_matrix")]
     public async Task WorkspaceEndpointGeneratesPythonStorageWorkspaces(
         string exerciseId,
         string sourcePath,
@@ -393,10 +449,134 @@ public sealed class ExerciseEndpointTests
             TestContext.Current.CancellationToken);
 
         Assert.NotNull(result);
-        Assert.Equal("Passed", result.Status);
+        Assert.True(result.Status == "Passed", result.Diagnostics);
         Assert.True(result.VisiblePassed);
         Assert.True(result.HiddenPassed);
         Assert.DoesNotContain("uv is required", result.Diagnostics, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData(
+        "build-note-label-py",
+        "src/note_label.py",
+        "content/tracks/python/exercises/build-note-label-py/exercise.yml")]
+    [InlineData(
+        "require-note-text-py",
+        "src/note_text.py",
+        "content/tracks/python/exercises/require-note-text-py/exercise.yml")]
+    [InlineData(
+        "build-note-draft-py",
+        "src/note_draft.py",
+        "content/tracks/python/exercises/build-note-draft-py/exercise.yml")]
+    [InlineData(
+        "classify-note-priority-py",
+        "src/note_priority.py",
+        "content/tracks/python/exercises/classify-note-priority-py/exercise.yml")]
+    [InlineData(
+        "choose-note-status-py",
+        "src/note_status.py",
+        "content/tracks/python/exercises/choose-note-status-py/exercise.yml")]
+    [InlineData(
+        "count-nonempty-lines-py",
+        "src/note_lines.py",
+        "content/tracks/python/exercises/count-nonempty-lines-py/exercise.yml")]
+    [InlineData(
+        "extract-unique-tags-py",
+        "src/note_tags.py",
+        "content/tracks/python/exercises/extract-unique-tags-py/exercise.yml")]
+    [InlineData(
+        "format-note-summary-py",
+        "src/note_summary.py",
+        "content/tracks/python/exercises/format-note-summary-py/exercise.yml")]
+    [InlineData(
+        "split-note-helpers-py",
+        "src/note_helpers.py",
+        "content/tracks/python/exercises/split-note-helpers-py/exercise.yml")]
+    public async Task RunEndpointExecutesPythonBeginnerFoundationExercisesThroughUv(
+        string exerciseId,
+        string sourcePath,
+        string exerciseDocumentPath)
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+        var profileId = $"python-beginner-foundation-{Guid.NewGuid():n}";
+        var solutionCode = await ReadExerciseSolutionCodeAsync(exerciseDocumentPath);
+
+        var response = await client.PostAsJsonAsync(
+            $"/api/exercises/{exerciseId}/run",
+            new ExerciseRunTestRequest(profileId, [new(sourcePath, solutionCode)]),
+            TestContext.Current.CancellationToken);
+
+        var result = await response.Content.ReadFromJsonAsync<ExerciseRunTestResponse>(
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(result);
+        Assert.True(result.Status == "Passed", result.Diagnostics);
+        Assert.True(result.VisiblePassed);
+        Assert.True(result.HiddenPassed);
+        Assert.DoesNotContain("uv is required", result.Diagnostics, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task RunEndpointBlocksPythonCompletionWhenStaticAnalysisFails()
+    {
+        await using var factory = new WebApplicationFactory<Program>()
+            .WithWebHostBuilder(builder =>
+            {
+                builder.ConfigureTestServices(services =>
+                {
+                    services.RemoveAll<IPythonExerciseRunner>();
+                    services.AddScoped<IPythonExerciseRunner>(_ => new FakePythonExerciseRunner(
+                        new CommandResult(
+                            1,
+                            false,
+                            false,
+                            false,
+                            """
+                            Ruff lint:
+                            src/note_titles.py:2:1: F401 `typing.Any` imported but unused
+                            BasedPyright:
+                            src/note_titles.py:4:12 - error: Type "int" is not assignable to return type "str" (reportReturnType)
+                            """,
+                            string.Empty),
+                        new CommandResult(0, false, false, false, "1 passed", string.Empty),
+                        new CommandResult(0, false, false, false, "1 passed", string.Empty)));
+                });
+            });
+        using var client = factory.CreateClient();
+        var profileId = $"python-static-gate-{Guid.NewGuid():n}";
+
+        var response = await client.PostAsJsonAsync(
+            "/api/exercises/normalize-note-title-py/run",
+            new ExerciseRunTestRequest(profileId, []),
+            TestContext.Current.CancellationToken);
+
+        var result = await response.Content.ReadFromJsonAsync<ExerciseRunTestResponse>(
+            TestContext.Current.CancellationToken);
+        var history = await client.GetFromJsonAsync<IReadOnlyCollection<ExerciseRunHistoryTestResponse>>(
+            $"/api/exercises/normalize-note-title-py/attempts?profileId={profileId}",
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(result);
+        Assert.Equal("FailedStaticAnalysis", result.Status);
+        Assert.True(result.VisiblePassed);
+        Assert.True(result.HiddenPassed);
+        Assert.Contains(result.StaticAnalysis, diagnostic =>
+            diagnostic.RuleId == "reportReturnType"
+            && diagnostic.Severity == "error"
+            && diagnostic.FilePath == "src/note_titles.py"
+            && diagnostic.Line == 4
+            && diagnostic.Column == 12);
+        Assert.Contains(result.StaticAnalysis, diagnostic =>
+            diagnostic.RuleId == "F401"
+            && diagnostic.Severity == "warning"
+            && diagnostic.FilePath == "src/note_titles.py");
+
+        Assert.NotNull(history);
+        var latest = Assert.Single(history);
+        Assert.Equal("FailedStaticAnalysis", latest.Status);
+        Assert.Equal(1, latest.StaticAnalysisErrorCount);
+        Assert.Equal(1, latest.StaticAnalysisWarningCount);
     }
 
     [Fact]
@@ -439,7 +619,7 @@ public sealed class ExerciseEndpointTests
             TestContext.Current.CancellationToken);
 
         Assert.NotNull(result);
-        Assert.Equal("Passed", result.Status);
+        Assert.True(result.Status == "Passed", result.Diagnostics);
         Assert.True(result.VisiblePassed);
         Assert.True(result.HiddenPassed);
         Assert.DoesNotContain("uv is required", result.Diagnostics, StringComparison.OrdinalIgnoreCase);
@@ -497,7 +677,7 @@ public sealed class ExerciseEndpointTests
             TestContext.Current.CancellationToken);
 
         Assert.NotNull(result);
-        Assert.Equal("Passed", result.Status);
+        Assert.True(result.Status == "Passed", result.Diagnostics);
         Assert.True(result.VisiblePassed);
         Assert.True(result.HiddenPassed);
         Assert.DoesNotContain("uv is required", result.Diagnostics, StringComparison.OrdinalIgnoreCase);
@@ -725,11 +905,15 @@ public sealed class ExerciseEndpointTests
                             decoded = json.loads(path.read_text(encoding="utf-8"))
                             if not isinstance(decoded, list):
                                 raise ValueError("notes file must contain a list")
-                            return [
-                                {"title": value["title"], "body": value["body"], "tags": list(value["tags"])}
-                                for value in decoded
-                                if isinstance(value, dict)
-                            ]
+                            notes: list[dict[str, object]] = []
+                            for value in decoded:
+                                if not isinstance(value, dict):
+                                    continue
+                                tags = value.get("tags")
+                                if not isinstance(tags, list):
+                                    continue
+                                notes.append({"title": value["title"], "body": value["body"], "tags": list(tags)})
+                            return notes
 
 
                         def save_notes(path: Path, notes: list[dict[str, object]]) -> None:
@@ -742,7 +926,8 @@ public sealed class ExerciseEndpointTests
                                 return "No notes found."
                             lines: list[str] = []
                             for index, note in enumerate(notes, start=1):
-                                tags = ", ".join(str(tag) for tag in note["tags"])
+                                tag_values = note["tags"]
+                                tags = ", ".join(str(tag) for tag in tag_values) if isinstance(tag_values, list) else ""
                                 tag_text = f" [{tags}]" if tags else ""
                                 lines.append(f"{index}. {note['title']}{tag_text}")
                             return "\n".join(lines)
@@ -752,7 +937,11 @@ public sealed class ExerciseEndpointTests
                             normalized = tag.strip().lower()
                             if not normalized:
                                 raise ValueError("--tag is required")
-                            return [note for note in notes if normalized in note["tags"]]
+                            return [
+                                note
+                                for note in notes
+                                if isinstance(note["tags"], list) and normalized in note["tags"]
+                            ]
 
 
                         def update_note_body(notes: list[dict[str, object]], title: str, body: str) -> bool:
@@ -777,7 +966,7 @@ public sealed class ExerciseEndpointTests
             TestContext.Current.CancellationToken);
 
         Assert.NotNull(result);
-        Assert.Equal("Passed", result.Status);
+        Assert.True(result.Status == "Passed", result.Diagnostics);
         Assert.True(result.VisiblePassed);
         Assert.True(result.HiddenPassed);
         Assert.DoesNotContain("uv is required", result.Diagnostics, StringComparison.OrdinalIgnoreCase);
@@ -800,6 +989,7 @@ public sealed class ExerciseEndpointTests
                         """
                         import json
                         from pathlib import Path
+                        from typing import cast
 
                         from fastapi import FastAPI, HTTPException
                         from pydantic import BaseModel, Field
@@ -843,7 +1033,11 @@ public sealed class ExerciseEndpointTests
                                 normalized = tag.strip().lower()
                                 if not normalized:
                                     raise ValueError("tag is required")
-                                return [note for note in self.list_notes() if normalized in note["tags"]]
+                                return [
+                                    note
+                                    for note in self.list_notes()
+                                    if isinstance(note["tags"], list) and normalized in note["tags"]
+                                ]
 
                             def update_body(self, title: str, body: str) -> dict[str, object]:
                                 normalized_title = normalize_title(title)
@@ -951,9 +1145,10 @@ public sealed class ExerciseEndpointTests
                         def validate_note(value: object) -> dict[str, object]:
                             if not isinstance(value, dict):
                                 raise ValueError("each note must be an object")
-                            title = value.get("title")
-                            body = value.get("body")
-                            tags = value.get("tags")
+                            record = cast(dict[str, object], value)
+                            title = record.get("title")
+                            body = record.get("body")
+                            tags = record.get("tags")
                             if not isinstance(title, str) or not isinstance(body, str):
                                 raise ValueError("note title and body must be text")
                             if not isinstance(tags, list) or not all(isinstance(tag, str) for tag in tags):
@@ -972,7 +1167,7 @@ public sealed class ExerciseEndpointTests
             TestContext.Current.CancellationToken);
 
         Assert.NotNull(result);
-        Assert.Equal("Passed", result.Status);
+        Assert.True(result.Status == "Passed", result.Diagnostics);
         Assert.True(result.VisiblePassed);
         Assert.True(result.HiddenPassed);
         Assert.DoesNotContain("uv is required", result.Diagnostics, StringComparison.OrdinalIgnoreCase);
@@ -1067,6 +1262,34 @@ public sealed class ExerciseEndpointTests
         "configure-postgres-engine-py",
         "src/postgres_engine.py",
         "content/tracks/python/exercises/configure-postgres-engine-py/exercise.yml")]
+    [InlineData(
+        "document-openapi-contract-py",
+        "src/openapi_contract.py",
+        "content/tracks/python/exercises/document-openapi-contract-py/exercise.yml")]
+    [InlineData(
+        "standardize-error-contract-py",
+        "src/error_contract.py",
+        "content/tracks/python/exercises/standardize-error-contract-py/exercise.yml")]
+    [InlineData(
+        "verify-health-startup-py",
+        "src/health_startup.py",
+        "content/tracks/python/exercises/verify-health-startup-py/exercise.yml")]
+    [InlineData(
+        "plan-migration-operations-py",
+        "src/migration_operations.py",
+        "content/tracks/python/exercises/plan-migration-operations-py/exercise.yml")]
+    [InlineData(
+        "define-postgres-integration-profile-py",
+        "src/postgres_profile.py",
+        "content/tracks/python/exercises/define-postgres-integration-profile-py/exercise.yml")]
+    [InlineData(
+        "verify-python-intellisense-deps-py",
+        "src/intellisense_deps.py",
+        "content/tracks/python/exercises/verify-python-intellisense-deps-py/exercise.yml")]
+    [InlineData(
+        "compare-async-sqlalchemy-py",
+        "src/async_sqlalchemy_comparison.py",
+        "content/tracks/python/exercises/compare-async-sqlalchemy-py/exercise.yml")]
     public async Task RunEndpointExecutesPythonFastApiProductionExercisesThroughUv(
         string exerciseId,
         string sourcePath,
@@ -1086,7 +1309,7 @@ public sealed class ExerciseEndpointTests
             TestContext.Current.CancellationToken);
 
         Assert.NotNull(result);
-        Assert.Equal("Passed", result.Status);
+        Assert.True(result.Status == "Passed", result.Diagnostics);
         Assert.True(result.VisiblePassed);
         Assert.True(result.HiddenPassed);
         Assert.DoesNotContain("uv is required", result.Diagnostics, StringComparison.OrdinalIgnoreCase);
@@ -1844,6 +2067,92 @@ public sealed class ExerciseEndpointTests
     }
 
     [Fact]
+    public async Task RunEndpointExecutesSwiftTextkitTokenizationExercise()
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+        var profileId = $"swift-textkit-{Guid.NewGuid():n}";
+
+        var response = await client.PostAsJsonAsync(
+            "/api/exercises/normalize-search-tokens-swift/run",
+            new ExerciseRunTestRequest(
+                profileId,
+                [
+                    new(
+                        "Sources/Exercise/Exercise.swift",
+                        SwiftTextkitTokenizationSolution())
+                ]),
+            TestContext.Current.CancellationToken);
+
+        var result = await response.Content.ReadFromJsonAsync<ExerciseRunTestResponse>(
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(result);
+        Assert.Equal("Passed", result.Status);
+        Assert.True(result.VisiblePassed);
+        Assert.True(result.HiddenPassed);
+        Assert.Empty(result.StaticAnalysis);
+    }
+
+    [Fact]
+    public async Task RunEndpointExecutesSwiftPackagecraftPipelineExercise()
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+        var profileId = $"swift-packagecraft-{Guid.NewGuid():n}";
+
+        var response = await client.PostAsJsonAsync(
+            "/api/exercises/build-token-filter-pipeline-swift/run",
+            new ExerciseRunTestRequest(
+                profileId,
+                [
+                    new(
+                        "Sources/Exercise/Exercise.swift",
+                        SwiftPackagecraftPipelineSolution())
+                ]),
+            TestContext.Current.CancellationToken);
+
+        var result = await response.Content.ReadFromJsonAsync<ExerciseRunTestResponse>(
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(result);
+        Assert.Equal("Passed", result.Status);
+        Assert.True(result.VisiblePassed);
+        Assert.True(result.HiddenPassed);
+        Assert.Empty(result.StaticAnalysis);
+    }
+
+    [Fact]
+    public async Task RunEndpointExecutesSwiftVaporRouteExercise()
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+        var profileId = $"swift-vapor-route-{Guid.NewGuid():n}";
+        var solutionCode = await ReadExerciseSolutionCodeAsync(
+            "content/tracks/swift/exercises/build-vapor-log-level-route-swift/exercise.yml");
+
+        var response = await client.PostAsJsonAsync(
+            "/api/exercises/build-vapor-log-level-route-swift/run",
+            new ExerciseRunTestRequest(
+                profileId,
+                [
+                    new(
+                        "Sources/Exercise/Exercise.swift",
+                        solutionCode)
+                ]),
+            TestContext.Current.CancellationToken);
+
+        var result = await response.Content.ReadFromJsonAsync<ExerciseRunTestResponse>(
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(result);
+        Assert.Equal("Passed", result.Status);
+        Assert.True(result.VisiblePassed);
+        Assert.True(result.HiddenPassed);
+        Assert.Empty(result.StaticAnalysis);
+    }
+
+    [Fact]
     public async Task RunEndpointReturnsTypeScriptStaticAnalysisDiagnostics()
     {
         await using var factory = new WebApplicationFactory<Program>();
@@ -2379,6 +2688,91 @@ public sealed class ExerciseEndpointTests
             : [];
 
         Assert.Empty(leakedRuns);
+    }
+
+    [Fact]
+    public async Task WorkspaceEndpointRemovesStaleOrphanWorkspacesButPreservesActiveAndUnrelatedData()
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+        var activeProfileId = $"active-workspace-cleanup-{Guid.NewGuid():n}";
+        var triggerProfileId = $"trigger-workspace-cleanup-{Guid.NewGuid():n}";
+
+        var activeWorkspace = await client.GetFromJsonAsync<ExerciseWorkspaceTestResponse>(
+            $"/api/exercises/normalize-note-title-py/workspace?profileId={activeProfileId}",
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(activeWorkspace);
+        var workspaceRoot = Directory.GetParent(Directory.GetParent(activeWorkspace.WorkspacePath)!.FullName)!.FullName;
+        var appDataRoot = Directory.GetParent(workspaceRoot)!.FullName;
+        var staleWorkspace = Path.Combine(workspaceRoot, $"stale-profile-{Guid.NewGuid():n}", "normalize-note-title-py");
+        var recentWorkspace = Path.Combine(workspaceRoot, $"recent-profile-{Guid.NewGuid():n}", "normalize-note-title-py");
+        var unrelatedAppDataFile = Path.Combine(appDataRoot, $"keep-{Guid.NewGuid():n}.txt");
+
+        Directory.CreateDirectory(staleWorkspace);
+        await File.WriteAllTextAsync(
+            Path.Combine(staleWorkspace, "stale.txt"),
+            "stale generated workspace",
+            TestContext.Current.CancellationToken);
+        Directory.CreateDirectory(recentWorkspace);
+        await File.WriteAllTextAsync(
+            Path.Combine(recentWorkspace, "recent.txt"),
+            "recent generated workspace",
+            TestContext.Current.CancellationToken);
+        await File.WriteAllTextAsync(
+            unrelatedAppDataFile,
+            "unrelated app data",
+            TestContext.Current.CancellationToken);
+        TouchDirectoryTree(activeWorkspace.WorkspacePath, DateTime.UtcNow.AddDays(-30));
+        TouchDirectoryTree(staleWorkspace, DateTime.UtcNow.AddDays(-30));
+
+        var triggerWorkspace = await client.GetFromJsonAsync<ExerciseWorkspaceTestResponse>(
+            $"/api/exercises/parse-note-tags-py/workspace?profileId={triggerProfileId}",
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(triggerWorkspace);
+        Assert.True(Directory.Exists(activeWorkspace.WorkspacePath));
+        Assert.False(Directory.Exists(staleWorkspace));
+        Assert.True(Directory.Exists(recentWorkspace));
+        Assert.True(File.Exists(unrelatedAppDataFile));
+    }
+
+    [Fact]
+    public async Task WorkspaceEndpointRemovesStaleRunWorkspacesOpportunistically()
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+        var profileId = $"run-root-cleanup-{Guid.NewGuid():n}";
+
+        var workspace = await client.GetFromJsonAsync<ExerciseWorkspaceTestResponse>(
+            $"/api/exercises/normalize-note-title-py/workspace?profileId={profileId}",
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(workspace);
+        var appDataRoot = Directory.GetParent(Directory.GetParent(Directory.GetParent(workspace.WorkspacePath)!.FullName)!.FullName)!.FullName;
+        var runRoot = Path.Combine(appDataRoot, "exercise-runs");
+        var staleRunWorkspace = Path.Combine(runRoot, $"20000101000000000-stale-{Guid.NewGuid():n}");
+        var recentRunWorkspace = Path.Combine(runRoot, $"29990101000000000-recent-{Guid.NewGuid():n}");
+
+        Directory.CreateDirectory(staleRunWorkspace);
+        Directory.CreateDirectory(recentRunWorkspace);
+        await File.WriteAllTextAsync(
+            Path.Combine(staleRunWorkspace, "stale.txt"),
+            "stale run workspace",
+            TestContext.Current.CancellationToken);
+        await File.WriteAllTextAsync(
+            Path.Combine(recentRunWorkspace, "recent.txt"),
+            "recent run workspace",
+            TestContext.Current.CancellationToken);
+        TouchDirectoryTree(staleRunWorkspace, DateTime.UtcNow.AddHours(-3));
+
+        workspace = await client.GetFromJsonAsync<ExerciseWorkspaceTestResponse>(
+            $"/api/exercises/parse-note-tags-py/workspace?profileId={profileId}",
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(workspace);
+        Assert.False(Directory.Exists(staleRunWorkspace));
+        Assert.True(Directory.Exists(recentRunWorkspace));
     }
 
     [Fact]
@@ -3118,6 +3512,106 @@ public sealed class ExerciseEndpointTests
     }
 
     [Fact]
+    public async Task PythonDiagnosticsEndpointResolvesFastApiAndPydanticImports()
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+        var profileId = $"python-fastapi-diagnostics-{Guid.NewGuid():n}";
+        const string content = """
+            from fastapi import FastAPI
+            from pydantic import BaseModel
+
+            class NoteCreate(BaseModel):
+                title: str
+
+            app = FastAPI()
+
+            @app.post("/notes")
+            def create_note(note: NoteCreate) -> dict[str, str]:
+                return {"title": note.title}
+            """;
+
+        var response = await client.PostAsJsonAsync(
+            "/api/exercises/create-notes-api-py/language/diagnostics",
+            new ExerciseLanguageTestRequest(
+                profileId,
+                "src/notes_api.py",
+                content),
+            TestContext.Current.CancellationToken);
+
+        response.EnsureSuccessStatusCode();
+        var result = await response.Content.ReadFromJsonAsync<ExerciseDiagnosticsTestResponse>(
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(result);
+        Assert.DoesNotContain(
+            result.Diagnostics,
+            diagnostic => diagnostic.Message.Contains("Import \"fastapi\" could not be resolved", StringComparison.OrdinalIgnoreCase)
+                || diagnostic.Message.Contains("Import \"pydantic\" could not be resolved", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task PythonCompletionsEndpointReturnsFastApiInstanceMembers()
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+        var profileId = $"python-fastapi-completions-{Guid.NewGuid():n}";
+        const string content = """
+            from fastapi import FastAPI
+
+            app = FastAPI()
+            app.
+            """;
+        var position = PositionOf(content, "app.", "app.".Length);
+
+        var response = await client.PostAsJsonAsync(
+            "/api/exercises/create-notes-api-py/language/completions",
+            new ExerciseCompletionTestRequest(
+                profileId,
+                "src/notes_api.py",
+                content,
+                position.Line,
+                position.Column),
+            TestContext.Current.CancellationToken);
+
+        response.EnsureSuccessStatusCode();
+        var result = await response.Content.ReadFromJsonAsync<ExerciseCompletionsTestResponse>(
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(result);
+        Assert.Contains(result.Items, item => item.Label is "get" or "post");
+        Assert.DoesNotContain(result.Items, item => item.Label == "WordFrequencyAnalyzer");
+    }
+
+    [Fact]
+    public async Task PythonFormatEndpointUsesRuffForFastApiSource()
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+        var profileId = $"python-ruff-format-{Guid.NewGuid():n}";
+
+        var response = await client.PostAsJsonAsync(
+            "/api/exercises/create-notes-api-py/language/format",
+            new ExerciseLanguageTestRequest(
+                profileId,
+                "src/notes_api.py",
+                """
+                from fastapi import FastAPI
+                def create_app()->FastAPI:
+                 return FastAPI()
+                """),
+            TestContext.Current.CancellationToken);
+
+        response.EnsureSuccessStatusCode();
+        var result = await response.Content.ReadFromJsonAsync<ExerciseFormatTestResponse>(
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(result);
+        Assert.Contains("def create_app() -> FastAPI:", result.Content);
+        Assert.Contains("    return FastAPI()", result.Content);
+    }
+
+    [Fact]
     public async Task LanguageServiceReusesCachedProjectSnapshotForRepeatedRequests()
     {
         ExerciseLanguageService.ResetProjectSnapshotCacheForTests();
@@ -3404,6 +3898,22 @@ public sealed class ExerciseEndpointTests
         }
 
         return (line, column);
+    }
+
+    private static void TouchDirectoryTree(string path, DateTime utcTimestamp)
+    {
+        foreach (var file in Directory.GetFiles(path, "*", SearchOption.AllDirectories))
+        {
+            File.SetLastWriteTimeUtc(file, utcTimestamp);
+        }
+
+        foreach (var directory in Directory.GetDirectories(path, "*", SearchOption.AllDirectories)
+                     .OrderByDescending(directory => directory.Length))
+        {
+            Directory.SetLastWriteTimeUtc(directory, utcTimestamp);
+        }
+
+        Directory.SetLastWriteTimeUtc(path, utcTimestamp);
     }
 
     private static async Task<string> GetSwiftExerciseContentAsync(HttpClient client, string profileId)
@@ -3763,6 +4273,91 @@ public sealed class ExerciseEndpointTests
         """;
     }
 
+    private static string SwiftTextkitTokenizationSolution()
+    {
+        return """
+        public func normalizeSearchTokens(_ text: String?) -> [String] {
+            guard let text else {
+                return []
+            }
+
+            var tokens: [String] = []
+            var current = ""
+
+            func flushCurrent() {
+                if !current.isEmpty {
+                    tokens.append(current)
+                    current.removeAll(keepingCapacity: true)
+                }
+            }
+
+            for character in text {
+                if character >= "a" && character <= "z" {
+                    current.append(character)
+                } else if character >= "A" && character <= "Z" {
+                    current.append(contentsOf: String(character).lowercased())
+                } else if character >= "0" && character <= "9" {
+                    current.append(character)
+                } else {
+                    flushCurrent()
+                }
+            }
+
+            flushCurrent()
+            return tokens
+        }
+        """;
+    }
+
+    private static string SwiftPackagecraftPipelineSolution()
+    {
+        return """
+        public protocol TokenFilter {
+            func include(_ token: String) -> Bool
+        }
+
+        public struct MinimumLengthFilter: TokenFilter {
+            public let minimumLength: Int
+
+            public init(minimumLength: Int) {
+                self.minimumLength = minimumLength
+            }
+
+            public func include(_ token: String) -> Bool {
+                token.count >= minimumLength
+            }
+        }
+
+        public struct PrefixFilter: TokenFilter {
+            public let prefix: String
+
+            public init(prefix: String) {
+                self.prefix = prefix
+            }
+
+            public func include(_ token: String) -> Bool {
+                token.hasPrefix(prefix)
+            }
+        }
+
+        public struct TokenFilterPipeline {
+            public let filters: [any TokenFilter]
+
+            public init(filters: [any TokenFilter]) {
+                self.filters = filters
+            }
+
+            public func run(_ tokens: [String]) -> [String] {
+                tokens.filter { token in
+                    filters.allSatisfy { filter in
+                        filter.include(token)
+                    }
+                }
+            }
+        }
+        """;
+    }
+
     private static async Task<ExerciseCompletionsTestResponse> RequestCompletionsAsync(
         HttpClient client,
         string profileId,
@@ -3849,6 +4444,27 @@ public sealed class ExerciseEndpointTests
         }
 
         public Task<CommandResult> RunHiddenTestsAsync(string testProject, CancellationToken cancellationToken)
+        {
+            return Task.FromResult(hidden);
+        }
+    }
+
+    private sealed class FakePythonExerciseRunner(
+        CommandResult analysis,
+        CommandResult visible,
+        CommandResult hidden) : IPythonExerciseRunner
+    {
+        public Task<CommandResult> RunStaticAnalysisAsync(string workspacePath, CancellationToken cancellationToken)
+        {
+            return Task.FromResult(analysis);
+        }
+
+        public Task<CommandResult> RunVisibleTestsAsync(string workspacePath, CancellationToken cancellationToken)
+        {
+            return Task.FromResult(visible);
+        }
+
+        public Task<CommandResult> RunHiddenTestsAsync(string workspacePath, CancellationToken cancellationToken)
         {
             return Task.FromResult(hidden);
         }

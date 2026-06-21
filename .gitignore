@@ -12,4 +12,5 @@ dist/
 *.sqlite-shm
 *.sqlite-wal
 attempt-workspaces/
+# Runtime-generated learner workspaces and local app data.
 src/ProdigeeTutsPoint.Api/App_Data/

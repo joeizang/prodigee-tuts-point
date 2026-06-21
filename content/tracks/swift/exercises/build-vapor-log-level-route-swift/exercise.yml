@@ -1,0 +1,147 @@
+id: build-vapor-log-level-route-swift
+title: BuildVaporLogLevelRoute
+kind: project
+workspace:
+  runtime: swiftpm-vapor
+  entryPoint: routes
+  starter: tracks/swift/exercises/build-vapor-log-level-route-swift/VaporLogLevelRoute.swift
+  visibleTest: |
+    let app = try await Application.make(.testing)
+    try routes(app)
+
+    try await app.test(.POST, "log-levels?limit=2", beforeRequest: { request in
+        try request.content.encode(LogBody(text: """
+        INFO ready
+        error failed
+        ERROR failed again
+        WARN slow
+        """))
+    }, afterResponse: { response async throws in
+        XCTAssertEqual(response.status, .ok)
+        let decoded = try response.content.decode([LevelCountResponse].self)
+        XCTAssertEqual(decoded, [
+            LevelCountResponse(level: "ERROR", count: 2),
+            LevelCountResponse(level: "INFO", count: 1)
+        ])
+    })
+    try await app.asyncShutdown()
+  hiddenTest: |
+    let invalidLimitApp = try await Application.make(.testing)
+    try routes(invalidLimitApp)
+
+    try await invalidLimitApp.test(.POST, "log-levels?limit=0", beforeRequest: { request in
+        try request.content.encode(LogBody(text: "INFO ready"))
+    }, afterResponse: { response async throws in
+        XCTAssertEqual(response.status, .badRequest)
+    })
+    try await invalidLimitApp.asyncShutdown()
+
+    let defaultLimitApp = try await Application.make(.testing)
+    try routes(defaultLimitApp)
+
+    try await defaultLimitApp.test(.POST, "log-levels", beforeRequest: { request in
+        try request.content.encode(LogBody(text: """
+        warn slow
+        INFO ready
+        DEBUG trace
+        ERROR failed
+        ignored line
+        """))
+    }, afterResponse: { response async throws in
+        XCTAssertEqual(response.status, .ok)
+        let decoded = try response.content.decode([LevelCountResponse].self)
+        XCTAssertEqual(decoded, [
+            LevelCountResponse(level: "DEBUG", count: 1),
+            LevelCountResponse(level: "ERROR", count: 1),
+            LevelCountResponse(level: "INFO", count: 1),
+            LevelCountResponse(level: "WARN", count: 1)
+        ])
+    })
+    try await defaultLimitApp.asyncShutdown()
+hints:
+  - id: conceptual
+    level: conceptual
+    title: Route as adapter
+    body: The Vapor handler should translate request content and query values into a small deterministic log-level summary, not become a whole application framework.
+  - id: api-approach
+    level: api-approach
+    title: Decode then validate
+    body: Use `request.content.decode(LogBody.self)` for the JSON body and optional `request.query[Int.self, at:]` access for `limit`, then reject non-positive limits with `Abort(.badRequest)`.
+  - id: structural
+    level: structural
+    title: Sort deterministically
+    body: Count only DEBUG, INFO, WARN, and ERROR, normalize case, then sort by count descending and level ascending before applying the limit.
+solution:
+  title: Model solution
+  body: The model solution registers a real Vapor route, decodes JSON content, validates the optional query limit, counts supported log levels case-insensitively, and returns deterministic Content values.
+  code: |
+    import Vapor
+
+    public struct LogBody: Content, Equatable, Sendable {
+        public let text: String
+
+        public init(text: String) {
+            self.text = text
+        }
+    }
+
+    public struct LevelCountResponse: Content, Equatable, Sendable {
+        public let level: String
+        public let count: Int
+
+        public init(level: String, count: Int) {
+            self.level = level
+            self.count = count
+        }
+    }
+
+    public func routes(_ app: Application) throws {
+        app.post("log-levels") { request async throws -> [LevelCountResponse] in
+            let body = try request.content.decode(LogBody.self)
+            let limit = request.query[Int.self, at: "limit"] ?? 10
+
+            guard limit > 0 else {
+                throw Abort(.badRequest, reason: "limit must be a positive integer")
+            }
+
+            return summarizeLogLevels(body.text, limit: limit)
+        }
+    }
+
+    private func summarizeLogLevels(_ text: String, limit: Int) -> [LevelCountResponse] {
+        let supportedLevels = Set(["DEBUG", "INFO", "WARN", "ERROR"])
+        var counts: [String: Int] = [:]
+
+        for line in text.split(whereSeparator: \.isNewline) {
+            guard let firstWord = line.split(whereSeparator: \.isWhitespace).first else {
+                continue
+            }
+
+            let level = String(firstWord).uppercased()
+            guard supportedLevels.contains(level) else {
+                continue
+            }
+
+            counts[level, default: 0] += 1
+        }
+
+        return counts
+            .map { LevelCountResponse(level: $0.key, count: $0.value) }
+            .sorted { left, right in
+                if left.count == right.count {
+                    return left.level < right.level
+                }
+
+                return left.count > right.count
+            }
+            .prefix(limit)
+            .map { $0 }
+    }
+commonWrongApproaches:
+  - Returning a dictionary directly, which makes response ordering unstable and weakens the route contract.
+  - Treating invalid limits as defaults instead of returning a clear client error.
+  - Testing only the counting helper and never sending a request through Vapor's route pipeline.
+expectedSolutionCharacteristics:
+  - Registers `POST /log-levels` on the supplied `Application`.
+  - Decodes `LogBody`, validates a positive optional `limit`, and throws `Abort(.badRequest)` for invalid limits.
+  - Counts only supported levels case-insensitively and returns sorted `LevelCountResponse` values.

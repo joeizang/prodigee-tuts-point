@@ -32,7 +32,7 @@ Produce a concrete SQLAlchemy repository implementation blueprint that can be co
 
 The dangerous part of adding an ORM is not the first query. It is the slow spread of ORM details across the app. A high-quality implementation keeps SQLAlchemy powerful but contained: rows are rows, service records are service records, and response models are response models. That separation makes tests clearer, future migrations safer, and PostgreSQL adoption less disruptive.
 
-This milestone is dependency-gated because the local environment cannot resolve new PyPI packages without network access. The content still records the exact package set and implementation shape so the next `uv sync` can activate real imports without redesigning the curriculum.
+This milestone now depends on the root uv environment resolving the real ORM packages. The exercises import SQLAlchemy and Alembic directly, so missing dependencies surface immediately as runner failures instead of being hidden behind planning-only contracts.
 
 ## Stretch goals
 

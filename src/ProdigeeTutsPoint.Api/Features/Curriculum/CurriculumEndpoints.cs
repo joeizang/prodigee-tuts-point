@@ -104,6 +104,7 @@ public static class CurriculumEndpoints
             {
                 new NavigationItemResponse("Dashboard", "Dashboard", "/", "Study overview"),
                 new NavigationItemResponse("Tracks", "Tracks", "/tracks", "All curriculum tracks"),
+                new NavigationItemResponse("Lessons", "Lessons", "/lessons", "Lessons for the active track"),
                 new NavigationItemResponse("Review", "Review", "/review", "Review queue"),
                 new NavigationItemResponse("Search", "Search", "/search", "Search curriculum"),
                 new NavigationItemResponse("Sources", "Sources", "/sources", "Source library"),
@@ -448,6 +449,21 @@ public static class CurriculumEndpoints
                 .FirstOrDefaultAsync(ct);
 
             return cluster is null ? Results.NotFound() : Results.Ok(cluster);
+        });
+
+        group.MapGet("/lessons", async (string? trackId, AppDbContext db, CancellationToken ct) =>
+        {
+            var lessons = await db.Lessons
+                .AsNoTracking()
+                .Where(lesson => string.IsNullOrWhiteSpace(trackId) || lesson.TrackId == trackId)
+                .OrderBy(lesson => lesson.Order)
+                .Select(lesson => new LessonSummaryResponse(
+                    lesson.Id,
+                    lesson.Title,
+                    lesson.Summary))
+                .ToListAsync(ct);
+
+            return Results.Ok(lessons);
         });
 
         group.MapGet("/lessons/{lessonId}", async (

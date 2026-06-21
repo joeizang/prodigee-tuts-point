@@ -143,7 +143,10 @@ solution:
             return [{"title": row[0], "body": row[1], "tags": row[2].split(",") if row[2] else []} for row in rows]
 
         def add_note(self, note: dict[str, object]) -> None:
-            tags = ",".join(str(tag) for tag in note["tags"])
+            tags_value = note["tags"]
+            if not isinstance(tags_value, list):
+                raise ValueError("note tags must be a list")
+            tags = ",".join(str(tag) for tag in tags_value)
             with sqlite3.connect(self.path) as connection:
                 connection.execute(
                     "INSERT INTO notes (title, body, tags) VALUES (?, ?, ?)",

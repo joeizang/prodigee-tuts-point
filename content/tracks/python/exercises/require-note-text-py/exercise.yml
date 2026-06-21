@@ -1,0 +1,67 @@
+id: require-note-text-py
+title: RequireNoteText
+kind: focused
+workspace:
+  runtime: python-pytest
+  starter: tracks/python/exercises/require-note-text-py/note_text.py
+  entryPoint: require_note_text
+  visibleTest: |
+    import pytest
+
+    from note_text import require_note_text
+
+
+    def test_returns_trimmed_text() -> None:
+        assert require_note_text("title", "  Learn Python  ") == "Learn Python"
+
+
+    def test_rejects_blank_title() -> None:
+        with pytest.raises(ValueError, match="title"):
+            require_note_text("title", "   ")
+  hiddenTest: |
+    import pytest
+
+    from note_text import require_note_text
+
+
+    def test_rejects_tabs_and_newlines() -> None:
+        with pytest.raises(ValueError, match="body"):
+            require_note_text("body", f" {chr(9)}{chr(10)} ")
+
+
+    def test_error_message_names_the_field() -> None:
+        with pytest.raises(ValueError, match="summary"):
+            require_note_text("summary", "")
+hints:
+  - id: conceptual
+    level: conceptual
+    title: Validate the cleaned value
+    body: Whitespace-only strings are not empty until after you strip them.
+  - id: api-approach
+    level: api-approach
+    title: Raise ValueError
+    body: Returning None makes every caller handle another shape. This boundary should either return trusted text or raise ValueError.
+  - id: structural
+    level: structural
+    title: Mention the field
+    body: Include field_name in the message so callers and tests know exactly which input failed.
+solution:
+  title: Model solution
+  body: The solution trims first, checks the trusted local name, and raises a field-specific ValueError when no text remains.
+  code: |
+    def require_note_text(field_name: str, raw_text: str) -> str:
+        clean_text = raw_text.strip()
+        if not clean_text:
+            raise ValueError(f"{field_name} is required")
+
+        return clean_text
+commonWrongApproaches:
+  - Checking raw_text before stripping.
+  - Returning an empty string for blank input.
+  - Raising a generic Exception.
+  - Omitting the field name from the error message.
+expectedSolutionCharacteristics:
+  - Returns stripped text for valid input.
+  - Raises ValueError for empty text after trimming.
+  - Includes the field name in the error message.
+

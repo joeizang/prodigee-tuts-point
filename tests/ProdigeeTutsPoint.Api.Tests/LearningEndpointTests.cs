@@ -1,6 +1,10 @@
 using System.Net;
 using System.Net.Http.Json;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using ProdigeeTutsPoint.Api.Features.Exercises;
 
 namespace ProdigeeTutsPoint.Api.Tests;
 
@@ -196,6 +200,92 @@ public sealed class LearningEndpointTests
     }
 
     [Fact]
+    public async Task PythonSummaryCountsCompletedMilestonesIndependentlyFromPassedExercises()
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+        var profileId = $"python-summary-{Guid.NewGuid():n}";
+
+        var initialSummary = await client.GetFromJsonAsync<LearnerSummaryTestResponse>(
+            $"/api/learner/summary?profileId={profileId}&trackId=python",
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(initialSummary);
+        Assert.Equal(0, initialSummary.MilestonesCompleted);
+        Assert.True(initialSummary.MilestoneCount > 1);
+
+        var response = await client.PostAsJsonAsync(
+            "/api/exercises/normalize-note-title-py/run",
+            new ExerciseRunTestRequest(
+                profileId,
+                [
+                    new(
+                        "src/note_titles.py",
+                        """
+                        def normalize_title(raw_title: str) -> str:
+                            words = raw_title.split()
+                            if not words:
+                                raise ValueError("title must contain at least one non-space character")
+
+                            return " ".join(words).lower()
+                        """)
+                ]),
+            TestContext.Current.CancellationToken);
+
+        response.EnsureSuccessStatusCode();
+
+        var summary = await client.GetFromJsonAsync<LearnerSummaryTestResponse>(
+            $"/api/learner/summary?profileId={profileId}&trackId=python",
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(summary);
+        Assert.Equal(1, summary.ExercisesPassed);
+        Assert.Equal(1, summary.MilestonesCompleted);
+        Assert.True(summary.MilestoneCount > summary.MilestonesCompleted);
+    }
+
+    [Fact]
+    public async Task PythonSummaryDoesNotAdvanceWhenExerciseFailsStaticAnalysis()
+    {
+        await using var factory = new WebApplicationFactory<Program>()
+            .WithWebHostBuilder(builder =>
+            {
+                builder.ConfigureTestServices(services =>
+                {
+                    services.RemoveAll<IPythonExerciseRunner>();
+                    services.AddScoped<IPythonExerciseRunner>(_ => new FakePythonExerciseRunner(
+                        new CommandResult(
+                            1,
+                            false,
+                            false,
+                            false,
+                            "src/note_titles.py:4:12 - error: Type \"int\" is not assignable to return type \"str\" (reportReturnType)",
+                            string.Empty),
+                        new CommandResult(0, false, false, false, "1 passed", string.Empty),
+                        new CommandResult(0, false, false, false, "1 passed", string.Empty)));
+                });
+            });
+        using var client = factory.CreateClient();
+        var profileId = $"python-static-summary-{Guid.NewGuid():n}";
+
+        var response = await client.PostAsJsonAsync(
+            "/api/exercises/normalize-note-title-py/run",
+            new ExerciseRunTestRequest(profileId, []),
+            TestContext.Current.CancellationToken);
+        response.EnsureSuccessStatusCode();
+
+        var summary = await client.GetFromJsonAsync<LearnerSummaryTestResponse>(
+            $"/api/learner/summary?profileId={profileId}&trackId=python",
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(summary);
+        Assert.Equal(0, summary.ExercisesPassed);
+        Assert.Equal(0, summary.MilestonesCompleted);
+        Assert.True(summary.ExerciseCount > 0);
+        Assert.True(summary.MilestoneCount > 0);
+    }
+
+    [Fact]
     public async Task ReviewCardsCanBeFilteredByTrack()
     {
         await using var factory = new WebApplicationFactory<Program>();
@@ -301,4 +391,31 @@ public sealed class LearningEndpointTests
         int ActiveSeconds,
         DateTimeOffset? StartedAt,
         DateTimeOffset? EndedAt);
+
+    private sealed record ExerciseRunTestRequest(
+        string ProfileId,
+        IReadOnlyCollection<ExerciseFileSaveTestRequest> Files);
+
+    private sealed record ExerciseFileSaveTestRequest(string Path, string Content);
+
+    private sealed class FakePythonExerciseRunner(
+        CommandResult analysis,
+        CommandResult visible,
+        CommandResult hidden) : IPythonExerciseRunner
+    {
+        public Task<CommandResult> RunStaticAnalysisAsync(string workspacePath, CancellationToken cancellationToken)
+        {
+            return Task.FromResult(analysis);
+        }
+
+        public Task<CommandResult> RunVisibleTestsAsync(string workspacePath, CancellationToken cancellationToken)
+        {
+            return Task.FromResult(visible);
+        }
+
+        public Task<CommandResult> RunHiddenTestsAsync(string workspacePath, CancellationToken cancellationToken)
+        {
+            return Task.FromResult(hidden);
+        }
+    }
 }

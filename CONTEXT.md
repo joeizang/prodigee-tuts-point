@@ -48,6 +48,38 @@ _Avoid_: Published curriculum content
 A metadata pointer from curriculum to a book, chapter, page range, or topic that supports deeper study.
 _Avoid_: Book content, copied prose
 
+**Track**:
+A long-running study path with its own concepts, modules, lessons, exercises, projects, source anchors, and mastery evidence.
+_Avoid_: One-off topic page, loose category
+
+**Track Family**:
+A group of related tracks planned together, such as language tracks, server-framework tracks, and engineering-core tracks.
+_Avoid_: Treating framework, language, and engineering-practice material as one undifferentiated course
+
+**Theory Cluster**:
+The set of lessons, source anchors, examples, and review prompts that prepares the learner for a specific project milestone.
+_Avoid_: Unconnected reading list
+
+**Project Ladder**:
+An ordered set of projects in a track that moves the learner from foundations to capstone-level production judgment.
+_Avoid_: Random project list, disconnected portfolio prompts
+
+**Engineering Core**:
+Cross-track software engineering knowledge that applies across languages and frameworks: algorithms, data structures, architecture, refactoring, debugging, performance, testing strategy, security, and production readiness.
+_Avoid_: Syntax-only learning, framework-only learning
+
+**Transfer Evidence**:
+Proof that the learner can apply an Engineering Core concept in more than one language, framework, or project context.
+_Avoid_: Treating one passed exercise as durable cross-track mastery
+
+**Source Anchor**:
+Metadata that points to a book, chapter, documentation section, or topic used as a quality reference.
+_Avoid_: Copied source content
+
+**Full Feature Later**:
+The complete target capability documented beside a scoped v1 implementation so temporary limits do not become accidental product ceilings.
+_Avoid_: Letting MVP constraints silently become the product vision
+
 ## Relationships
 
 - A **Project-Backed Mastery Loop** contains **Theory for Mastery** before and during implementation.
@@ -60,6 +92,12 @@ _Avoid_: Book content, copied prose
 - A **Local Learner Profile** owns progress and preferences without introducing real authentication.
 - A **Personal Study Note** is private learner state, not authored curriculum.
 - A **Source Reference** points to external book coverage; it is not a copy of book text.
+- A **Track Family** organizes related **Tracks** so language, framework, and engineering-core coverage can be planned without collapsing into tutorial sprawl.
+- A **Theory Cluster** belongs to a project milestone and should prepare the learner to build, debug, test, and review that milestone.
+- A **Project Ladder** is the track-level path that orders project-backed mastery loops from foundational work to capstone review.
+- **Engineering Core** concepts must reappear inside language and framework tracks, not only in standalone theory.
+- **Transfer Evidence** is required before an Engineering Core concept should be considered reliable.
+- A **Full Feature Later** note preserves the complete vision when a task intentionally implements only a slice.
 
 ## Example dialogue
 

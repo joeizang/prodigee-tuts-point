@@ -157,9 +157,21 @@ function fallbackTheoryClusterFor(trackId: string): TheoryCluster['items'] {
   if (trackId === 'python') {
     return [
       {
-        lessonId: 'text-as-data-python',
-        title: 'Text as Data in Python',
-        summary: 'Learn names, immutable strings, return values, whitespace contracts, tests, and editor feedback.',
+        lessonId: 'python-first-names-values-tests',
+        title: 'Names, Values, and First Tests',
+        summary: 'Start Python from zero by binding names, returning values, reading pytest failures, and using editor feedback.',
+        sources: [],
+      },
+      {
+        lessonId: 'python-branches-errors-tests',
+        title: 'Branches, Errors, and Contracts',
+        summary: 'Learn if statements, truthiness, ValueError, and pytest exception tests through tiny validation boundaries.',
+        sources: [],
+      },
+      {
+        lessonId: 'python-lists-dicts-records',
+        title: 'Lists, Dictionaries, and Records',
+        summary: 'Build the first note-shaped dictionary while learning lists, dictionaries, copying, and JSON-safe data shapes.',
         sources: [],
       },
     ]

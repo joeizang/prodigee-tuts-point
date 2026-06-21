@@ -47,13 +47,19 @@ export function LinkedList({
   )
 }
 
-export function SourceList({ sources }: { sources: SourceReference[] }) {
+export function SourceList({
+  sources,
+  title = 'Further reading',
+}: {
+  sources: SourceReference[]
+  title?: string
+}) {
   if (sources.length === 0) {
     return null
   }
 
   return (
-    <Panel title="Source Anchors">
+    <Panel title={title}>
       <ul className="plain-list">
         {sources.map((source) => (
           <li key={source.id}>

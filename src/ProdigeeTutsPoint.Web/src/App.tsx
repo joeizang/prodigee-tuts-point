@@ -5,6 +5,7 @@ import { Dashboard } from './pages/Dashboard'
 import { ConceptDetail } from './pages/ConceptDetail'
 import { ExerciseDetail } from './pages/ExerciseDetail'
 import { LessonDetail } from './pages/LessonDetail'
+import { Lessons } from './pages/Lessons'
 import { MilestoneDetail } from './pages/MilestoneDetail'
 import { ProjectDetail } from './pages/ProjectDetail'
 import { Review } from './pages/Review'
@@ -139,6 +140,7 @@ function AppBody({
           <Route path="/" element={<Dashboard profile={profile} />} />
           <Route path="/tracks" element={<Tracks />} />
           <Route path="/tracks/:trackId" element={<TrackDetail />} />
+          <Route path="/lessons" element={<Lessons />} />
           <Route path="/projects/:projectId" element={<ProjectDetail profile={profile} />} />
           <Route
             path="/projects/:projectId/milestones/:milestoneId"
@@ -172,6 +174,7 @@ function AppBody({
 const fallbackNavigationItems: NavigationItem[] = [
   { kind: 'Dashboard', label: 'Dashboard', path: '/', summary: 'Study overview' },
   { kind: 'Tracks', label: 'Tracks', path: '/tracks', summary: 'All curriculum tracks' },
+  { kind: 'Lessons', label: 'Lessons', path: '/lessons', summary: 'Lessons for the active track' },
   { kind: 'Review', label: 'Review', path: '/review', summary: 'Review queue' },
   { kind: 'Search', label: 'Search', path: '/search', summary: 'Search curriculum' },
   { kind: 'Sources', label: 'Sources', path: '/sources', summary: 'Source library' },

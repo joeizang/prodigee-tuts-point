@@ -1,0 +1,65 @@
+id: extract-unique-tags-py
+title: ExtractUniqueTags
+kind: focused
+workspace:
+  runtime: python-pytest
+  starter: tracks/python/exercises/extract-unique-tags-py/note_tags.py
+  entryPoint: extract_unique_tags
+  visibleTest: |
+    from note_tags import extract_unique_tags
+
+
+    def test_lowercases_and_trims_tags() -> None:
+        assert extract_unique_tags([" Python ", "FastAPI"]) == ["python", "fastapi"]
+
+
+    def test_removes_duplicates_after_normalization() -> None:
+        assert extract_unique_tags(["Python", " python ", "PYTHON"]) == ["python"]
+  hiddenTest: |
+    from note_tags import extract_unique_tags
+
+
+    def test_ignores_empty_tags() -> None:
+        assert extract_unique_tags(["", "  ", "api"]) == ["api"]
+
+
+    def test_preserves_first_seen_order() -> None:
+        assert extract_unique_tags(["api", "python", "api", "fastapi"]) == ["api", "python", "fastapi"]
+hints:
+  - id: conceptual
+    level: conceptual
+    title: Normalize before comparing
+    body: Duplicates should be detected after trimming and lowercasing, not before.
+  - id: api-approach
+    level: api-approach
+    title: Track seen tags
+    body: Use a set for membership checks and a list for the ordered result.
+  - id: structural
+    level: structural
+    title: Do not mutate input
+    body: Build and return a new list so callers keep their original raw data unchanged.
+solution:
+  title: Model solution
+  body: The solution uses a set for duplicate detection and a list to preserve deterministic first-seen order.
+  code: |
+    def extract_unique_tags(raw_tags: list[str]) -> list[str]:
+        seen: set[str] = set()
+        result: list[str] = []
+
+        for raw_tag in raw_tags:
+            tag = raw_tag.strip().lower()
+            if not tag or tag in seen:
+                continue
+
+            seen.add(tag)
+            result.append(tag)
+
+        return result
+commonWrongApproaches:
+  - Returning a set instead of a list.
+  - Removing duplicates before normalizing tags.
+  - Mutating the caller-provided list.
+expectedSolutionCharacteristics:
+  - Normalizes tags before comparison.
+  - Preserves the first seen order.
+  - Skips empty normalized tag values.

@@ -1,0 +1,13 @@
+{
+  "include": ["content/tracks/python/exercises"],
+  "exclude": [
+    "**/.venv",
+    "**/__pycache__",
+    "src/ProdigeeTutsPoint.Api/App_Data/exercise-workspaces"
+  ],
+  "pythonVersion": "3.12",
+  "typeCheckingMode": "standard",
+  "reportMissingImports": "warning",
+  "reportUnknownMemberType": "warning",
+  "reportUnknownParameterType": "warning"
+}

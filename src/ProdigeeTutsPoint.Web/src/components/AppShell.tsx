@@ -40,6 +40,7 @@ export function Sidebar({
   const navItems = [
     { label: 'Dashboard', path: '/', icon: TerminalSquare },
     { label: 'Tracks', path: '/tracks', icon: BookOpen },
+    { label: 'Lessons', path: '/lessons', icon: BookOpen },
     { label: 'Projects', path: projectPath, icon: Play },
     { label: 'Review', path: '/review', icon: NotebookPen },
     { label: 'Search', path: '/search', icon: Search },

@@ -43,6 +43,109 @@ public sealed class CurriculumEndpointTests
     }
 
     [Fact]
+    public async Task PythonFirstContactMilestoneReturnsAllBeginnerFoundationLessonsExercisesAndClusterItems()
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+
+        var project = await client.GetFromJsonAsync<ProjectDetailTestResponse>(
+            "/api/curriculum/projects/py-notes-cli",
+            TestContext.Current.CancellationToken);
+        var milestone = await client.GetFromJsonAsync<MilestoneDetailTestResponse>(
+            "/api/curriculum/projects/py-notes-cli/milestones/py-notes-python-first-contact",
+            TestContext.Current.CancellationToken);
+        var cluster = await client.GetFromJsonAsync<TheoryClusterTestResponse>(
+            "/api/curriculum/projects/py-notes-cli/milestones/py-notes-python-first-contact/theory-cluster",
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(project);
+        Assert.Equal("py-notes-python-first-contact", project.Milestones.First().Id);
+
+        Assert.NotNull(milestone);
+        Assert.Equal("Python first contact", milestone.Title);
+        Assert.Equal(3, milestone.Lessons.Count);
+        Assert.Equal(3, milestone.Exercises.Count);
+        Assert.Contains(milestone.Lessons, lesson => lesson.Id == "python-first-names-values-tests");
+        Assert.Contains(milestone.Lessons, lesson => lesson.Id == "python-branches-errors-tests");
+        Assert.Contains(milestone.Lessons, lesson => lesson.Id == "python-lists-dicts-records");
+        Assert.Contains(milestone.Exercises, exercise => exercise.Id == "build-note-label-py" && exercise.Language == "Python");
+        Assert.Contains(milestone.Exercises, exercise => exercise.Id == "require-note-text-py" && exercise.Language == "Python");
+        Assert.Contains(milestone.Exercises, exercise => exercise.Id == "build-note-draft-py" && exercise.Language == "Python");
+        Assert.NotEmpty(milestone.Sources);
+
+        Assert.NotNull(cluster);
+        var clusterItems = cluster.Items.ToList();
+        Assert.Equal(3, clusterItems.Count);
+        Assert.Equal("python-first-names-values-tests", clusterItems[0].LessonId);
+        Assert.Equal("python-branches-errors-tests", clusterItems[1].LessonId);
+        Assert.Equal("python-lists-dicts-records", clusterItems[2].LessonId);
+    }
+
+    [Fact]
+    public async Task PythonControlFlowCollectionsMilestoneReturnsAllWaveTwoLessonsExercisesAndClusterItems()
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+
+        var project = await client.GetFromJsonAsync<ProjectDetailTestResponse>(
+            "/api/curriculum/projects/py-notes-cli",
+            TestContext.Current.CancellationToken);
+        var milestone = await client.GetFromJsonAsync<MilestoneDetailTestResponse>(
+            "/api/curriculum/projects/py-notes-cli/milestones/py-notes-control-flow-collections",
+            TestContext.Current.CancellationToken);
+        var cluster = await client.GetFromJsonAsync<TheoryClusterTestResponse>(
+            "/api/curriculum/projects/py-notes-cli/milestones/py-notes-control-flow-collections/theory-cluster",
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(project);
+        var projectMilestones = project.Milestones.ToList();
+        Assert.Equal("py-notes-control-flow-collections", projectMilestones[1].Id);
+
+        Assert.NotNull(milestone);
+        Assert.Equal("Control flow and collection processing", milestone.Title);
+        Assert.Equal(4, milestone.Lessons.Count);
+        Assert.Equal(6, milestone.Exercises.Count);
+        Assert.Contains(milestone.Lessons, lesson => lesson.Id == "python-numbers-booleans-comparisons");
+        Assert.Contains(milestone.Lessons, lesson => lesson.Id == "python-control-flow-classification");
+        Assert.Contains(milestone.Lessons, lesson => lesson.Id == "python-loops-collection-processing");
+        Assert.Contains(milestone.Lessons, lesson => lesson.Id == "python-modules-pytest-parametrization");
+        Assert.Contains(milestone.Exercises, exercise => exercise.Id == "classify-note-priority-py" && exercise.Language == "Python");
+        Assert.Contains(milestone.Exercises, exercise => exercise.Id == "choose-note-status-py" && exercise.Language == "Python");
+        Assert.Contains(milestone.Exercises, exercise => exercise.Id == "count-nonempty-lines-py" && exercise.Language == "Python");
+        Assert.Contains(milestone.Exercises, exercise => exercise.Id == "extract-unique-tags-py" && exercise.Language == "Python");
+        Assert.Contains(milestone.Exercises, exercise => exercise.Id == "format-note-summary-py" && exercise.Language == "Python");
+        Assert.Contains(milestone.Exercises, exercise => exercise.Id == "split-note-helpers-py" && exercise.Language == "Python");
+        Assert.NotEmpty(milestone.Sources);
+
+        Assert.NotNull(cluster);
+        var clusterItems = cluster.Items.ToList();
+        Assert.Equal(4, clusterItems.Count);
+        Assert.Equal("python-numbers-booleans-comparisons", clusterItems[0].LessonId);
+        Assert.Equal("python-control-flow-classification", clusterItems[1].LessonId);
+        Assert.Equal("python-loops-collection-processing", clusterItems[2].LessonId);
+        Assert.Equal("python-modules-pytest-parametrization", clusterItems[3].LessonId);
+    }
+
+    [Fact]
+    public async Task LessonsEndpointReturnsActiveTrackLessonsInLearningOrder()
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+
+        var lessons = await client.GetFromJsonAsync<List<LessonSummaryTestResponse>>(
+            "/api/curriculum/lessons?trackId=python",
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(lessons);
+        Assert.Equal("python-first-names-values-tests", lessons[0].Id);
+        Assert.Equal("python-branches-errors-tests", lessons[1].Id);
+        Assert.Equal("python-lists-dicts-records", lessons[2].Id);
+        Assert.Equal("python-numbers-booleans-comparisons", lessons[3].Id);
+        Assert.DoesNotContain(lessons, lesson => lesson.Id == "text-as-data-csharp");
+        Assert.DoesNotContain(lessons, lesson => lesson.Id.Contains("swift", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
     public async Task PythonTagParsingMilestoneReturnsLessonsExercisesAndSources()
     {
         await using var factory = new WebApplicationFactory<Program>();
@@ -455,6 +558,48 @@ public sealed class CurriculumEndpointTests
         "postgres-engine-configuration-python",
         "configure-postgres-engine-py",
         "PostgreSQL")]
+    [InlineData(
+        "py-notes-openapi-contract-quality",
+        "OpenAPI contract quality",
+        "openapi-contract-quality-python",
+        "document-openapi-contract-py",
+        "OpenAPI")]
+    [InlineData(
+        "py-notes-error-contract-consistency",
+        "Error contract consistency",
+        "error-contract-consistency-python",
+        "standardize-error-contract-py",
+        "error")]
+    [InlineData(
+        "py-notes-health-startup-readiness",
+        "Health and startup readiness",
+        "health-startup-readiness-python",
+        "verify-health-startup-py",
+        "readiness")]
+    [InlineData(
+        "py-notes-migration-operations",
+        "Migration-before-startup operations",
+        "migration-operations-python",
+        "plan-migration-operations-py",
+        "migration")]
+    [InlineData(
+        "py-notes-postgres-integration-profile",
+        "PostgreSQL integration profile",
+        "postgresql-integration-profile-python",
+        "define-postgres-integration-profile-py",
+        "PostgreSQL")]
+    [InlineData(
+        "py-notes-python-intellisense-deps",
+        "Python IntelliSense dependency verification",
+        "python-intellisense-dependency-verification",
+        "verify-python-intellisense-deps-py",
+        "IntelliSense")]
+    [InlineData(
+        "py-notes-async-sqlalchemy-comparison",
+        "Async SQLAlchemy comparison",
+        "async-sqlalchemy-comparison-python",
+        "compare-async-sqlalchemy-py",
+        "async")]
     public async Task PythonProductionApiMilestonesReturnLessonsExercisesAndSources(
         string milestoneId,
         string expectedTitle,
@@ -636,7 +781,7 @@ public sealed class CurriculumEndpointTests
 
         Assert.NotNull(project);
         Assert.Equal("logprobe-typescript", project.Id);
-        Assert.Equal(7, project.Milestones.Count);
+        Assert.Equal(8, project.Milestones.Count);
         Assert.Contains(project.Milestones, milestone => milestone.Id == "logprobe-file-io");
         Assert.Contains(project.Milestones, milestone => milestone.Id == "logprobe-streaming-scale");
     }
@@ -688,7 +833,7 @@ public sealed class CurriculumEndpointTests
             TestContext.Current.CancellationToken);
 
         Assert.NotNull(project);
-        Assert.Equal(7, project.Milestones.Count);
+        Assert.Equal(8, project.Milestones.Count);
         Assert.Contains(project.Milestones, item => item.Id == "logprobe-http-adapter");
 
         Assert.NotNull(milestone);
@@ -761,7 +906,7 @@ public sealed class CurriculumEndpointTests
 
         Assert.NotNull(project);
         Assert.Equal("logprobe-swift", project.Id);
-        Assert.Equal(7, project.Milestones.Count);
+        Assert.Equal(8, project.Milestones.Count);
         Assert.Contains(project.Milestones, item => item.Id == "swiftpm-command-boundary");
         Assert.Contains(project.Milestones, item => item.Id == "swift-cli-contracts");
         Assert.Contains(project.Milestones, item => item.Id == "swift-file-input-boundaries");
@@ -769,6 +914,7 @@ public sealed class CurriculumEndpointTests
         Assert.Contains(project.Milestones, item => item.Id == "swift-cli-composition");
         Assert.Contains(project.Milestones, item => item.Id == "swift-vapor-request-adapter");
         Assert.Contains(project.Milestones, item => item.Id == "swift-server-hardening");
+        Assert.Contains(project.Milestones, item => item.Id == "swift-vapor-route-tests");
 
         Assert.NotNull(milestone);
         Assert.Equal("SwiftPM command boundary", milestone.Title);
@@ -817,6 +963,11 @@ public sealed class CurriculumEndpointTests
         "Swift server hardening",
         "swift-server-hardening",
         "handle-hardened-logprobe-request-swift")]
+    [InlineData(
+        "swift-vapor-route-tests",
+        "Swift Vapor route tests",
+        "swift-vapor-routing-route-tests",
+        "build-vapor-log-level-route-swift")]
     public async Task SwiftLogprobeMilestonesReturnLessonsExercisesAndSourceBackedTheory(
         string milestoneId,
         string title,
@@ -845,6 +996,80 @@ public sealed class CurriculumEndpointTests
         Assert.NotNull(cluster);
         var clusterItem = Assert.Single(cluster.Items);
         Assert.Equal(lessonId, clusterItem.LessonId);
+        Assert.NotEmpty(clusterItem.Sources);
+    }
+
+    [Fact]
+    public async Task SwiftTextkitMilestoneReturnsLessonsExercisesAndSourceBackedTheory()
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+
+        var project = await client.GetFromJsonAsync<ProjectDetailTestResponse>(
+            "/api/curriculum/projects/textkit-swift",
+            TestContext.Current.CancellationToken);
+        var milestone = await client.GetFromJsonAsync<MilestoneDetailTestResponse>(
+            "/api/curriculum/projects/textkit-swift/milestones/string-contracts-tokenization",
+            TestContext.Current.CancellationToken);
+        var cluster = await client.GetFromJsonAsync<TheoryClusterTestResponse>(
+            "/api/curriculum/projects/textkit-swift/milestones/string-contracts-tokenization/theory-cluster",
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(project);
+        Assert.Equal("textkit-swift", project.Id);
+        var projectMilestone = Assert.Single(project.Milestones);
+        Assert.Equal("string-contracts-tokenization", projectMilestone.Id);
+
+        Assert.NotNull(milestone);
+        Assert.Equal("String contracts and tokenization", milestone.Title);
+        var lesson = Assert.Single(milestone.Lessons);
+        Assert.Equal("swift-string-contracts-and-tokenization", lesson.Id);
+        var exercise = Assert.Single(milestone.Exercises);
+        Assert.Equal("normalize-search-tokens-swift", exercise.Id);
+        Assert.Equal("Swift", exercise.Language);
+        Assert.NotEmpty(milestone.Sources);
+        Assert.Contains("Engineering Core transfer", milestone.Markdown, StringComparison.OrdinalIgnoreCase);
+
+        Assert.NotNull(cluster);
+        var clusterItem = Assert.Single(cluster.Items);
+        Assert.Equal("swift-string-contracts-and-tokenization", clusterItem.LessonId);
+        Assert.NotEmpty(clusterItem.Sources);
+    }
+
+    [Fact]
+    public async Task SwiftPackagecraftMilestoneReturnsLessonsExercisesAndSourceBackedTheory()
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+
+        var project = await client.GetFromJsonAsync<ProjectDetailTestResponse>(
+            "/api/curriculum/projects/packagecraft-swift",
+            TestContext.Current.CancellationToken);
+        var milestone = await client.GetFromJsonAsync<MilestoneDetailTestResponse>(
+            "/api/curriculum/projects/packagecraft-swift/milestones/public-api-protocol-boundaries",
+            TestContext.Current.CancellationToken);
+        var cluster = await client.GetFromJsonAsync<TheoryClusterTestResponse>(
+            "/api/curriculum/projects/packagecraft-swift/milestones/public-api-protocol-boundaries/theory-cluster",
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(project);
+        Assert.Equal("packagecraft-swift", project.Id);
+        var projectMilestone = Assert.Single(project.Milestones);
+        Assert.Equal("public-api-protocol-boundaries", projectMilestone.Id);
+
+        Assert.NotNull(milestone);
+        Assert.Equal("Public API and protocol boundaries", milestone.Title);
+        var lesson = Assert.Single(milestone.Lessons);
+        Assert.Equal("swift-package-api-protocol-boundaries", lesson.Id);
+        var exercise = Assert.Single(milestone.Exercises);
+        Assert.Equal("build-token-filter-pipeline-swift", exercise.Id);
+        Assert.Equal("Swift", exercise.Language);
+        Assert.NotEmpty(milestone.Sources);
+        Assert.Contains("Vapor routes", milestone.Markdown, StringComparison.OrdinalIgnoreCase);
+
+        Assert.NotNull(cluster);
+        var clusterItem = Assert.Single(cluster.Items);
+        Assert.Equal("swift-package-api-protocol-boundaries", clusterItem.LessonId);
         Assert.NotEmpty(clusterItem.Sources);
     }
 
@@ -1041,12 +1266,25 @@ public sealed class CurriculumEndpointTests
         Assert.Contains(pythonBooks, book => book.Id == "pytest-docs");
         Assert.DoesNotContain(pythonBooks, book => book.Id == "csharp-12-in-a-nutshell");
         Assert.All(pythonBooks, book => Assert.NotEmpty(book.References));
+        Assert.Contains(
+            pythonBooks.SelectMany(book => book.References),
+            reference => reference.Topic.Contains("FastAPI", StringComparison.OrdinalIgnoreCase)
+                || reference.Topic.Contains("Python", StringComparison.OrdinalIgnoreCase)
+                || reference.BookId == "pytest-docs");
+        Assert.DoesNotContain(
+            pythonBooks.SelectMany(book => book.References),
+            reference => reference.BookId == "csharp-12-in-a-nutshell"
+                || reference.BookId == "the-swift-programming-language");
 
         Assert.NotNull(swiftBooks);
         Assert.Contains(swiftBooks, book => book.Id == "the-swift-programming-language");
         Assert.Contains(swiftBooks, book => book.Id == "server-side-swift-vapor");
         Assert.DoesNotContain(swiftBooks, book => book.Id == "csharp-12-in-a-nutshell");
         Assert.All(swiftBooks, book => Assert.NotEmpty(book.References));
+        Assert.DoesNotContain(
+            swiftBooks.SelectMany(book => book.References),
+            reference => reference.BookId == "python-official-tutorial"
+                || reference.Topic.Contains("FastAPI", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
